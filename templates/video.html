@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ video.title }} - USPA Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
+            <div class="flex items-center gap-4">
+                <form action="/search" method="GET" class="flex">
+                    <input type="text" name="q" placeholder="Search videos..."
+                        class="px-4 py-2 rounded-l-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-r-lg">
+                        Search
+                    </button>
+                </form>
+                {% if is_admin %}
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Breadcrumb -->
+        <div class="mb-6">
+            <a href="/" class="text-blue-400 hover:underline">Home</a>
+            <span class="text-gray-500 mx-2">/</span>
+            <a href="/category/{{ video.category }}" class="text-blue-400 hover:underline">{{ category.name }}</a>
+            <span class="text-gray-500 mx-2">/</span>
+            <span class="text-gray-300 truncate">{{ video.title }}</span>
+        </div>
+
+        <div class="grid lg:grid-cols-3 gap-8">
+            <!-- Main Video Area -->
+            <div class="lg:col-span-2">
+                <!-- Video Player -->
+                <div class="aspect-video bg-black rounded-lg overflow-hidden mb-4">
+                    {% if video.is_local %}
+                    <video controls class="w-full h-full" poster="{{ video.thumbnail }}" id="videoPlayer">
+                        <source src="{{ video.video_src }}" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    {% else %}
+                    <iframe src="{{ video.embed_url }}"
+                        class="w-full h-full"
+                        frameborder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowfullscreen>
+                    </iframe>
+                    {% endif %}
+                </div>
+
+                {% if video.is_local %}
+                <!-- Playback Controls -->
+                <div class="bg-gray-800 rounded-lg p-4 mb-6">
+                    <div class="flex items-center justify-between flex-wrap gap-4">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gray-400 text-sm">Speed:</span>
+                            <button onclick="setSpeed(0.25)" class="speed-btn px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm" data-speed="0.25">25%</button>
+                            <button onclick="setSpeed(0.5)" class="speed-btn px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm" data-speed="0.5">50%</button>
+                            <button onclick="setSpeed(0.75)" class="speed-btn px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm" data-speed="0.75">75%</button>
+                            <button onclick="setSpeed(1)" class="speed-btn px-3 py-1 rounded bg-blue-600 text-sm" data-speed="1">100%</button>
+                        </div>
+                        <div class="text-gray-500 text-sm">
+                            <span id="currentSpeed">1x</span> playback
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Video Info -->
+                <h1 class="text-2xl font-bold mb-4">{{ video.title }}</h1>
+
+                <div class="flex flex-wrap items-center gap-4 mb-6 text-gray-400">
+                    <span class="bg-blue-600 text-white px-3 py-1 rounded">{{ category.abbrev }}</span>
+                    {% if video.subcategory %}
+                    <span class="bg-gray-700 text-gray-300 px-3 py-1 rounded">{{ video.subcategory }}</span>
+                    {% endif %}
+                    {% if video.duration %}
+                    <span>{{ video.duration }}</span>
+                    {% endif %}
+                    <span>{{ video.views }} views</span>
+                    <span>{{ video.created_at[:10] }}</span>
+                </div>
+
+                {% if video.description %}
+                <div class="bg-gray-800 rounded-lg p-6 mb-6">
+                    <h2 class="font-semibold mb-3">Description</h2>
+                    <p class="text-gray-300 whitespace-pre-line">{{ video.description }}</p>
+                </div>
+                {% endif %}
+
+                {% if video.tags %}
+                <div class="flex flex-wrap gap-2">
+                    {% for tag in video.tags.split(',') %}
+                    <span class="bg-gray-700 text-gray-300 px-3 py-1 rounded-full text-sm">{{ tag.strip() }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Sidebar - Related Videos -->
+            <div>
+                <h2 class="text-xl font-bold mb-4">Related Videos</h2>
+                {% if related_videos %}
+                <div class="space-y-4">
+                    {% for rv in related_videos %}
+                    <a href="/video/{{ rv.id }}" class="flex gap-3 bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition">
+                        <div class="w-40 h-24 bg-gray-700 flex-shrink-0">
+                            {% if rv.thumbnail %}
+                            <img src="{{ rv.thumbnail }}" alt="{{ rv.title }}" class="w-full h-full object-cover">
+                            {% else %}
+                            <div class="w-full h-full flex items-center justify-center text-gray-500">
+                                <svg class="w-8 h-8" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                                </svg>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="p-2 flex-1 min-w-0">
+                            <h3 class="font-medium text-sm text-white line-clamp-2">{{ rv.title }}</h3>
+                            <p class="text-xs text-gray-400 mt-1">{{ rv.views }} views</p>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-8 text-gray-500">
+                    <p>No related videos yet</p>
+                </div>
+                {% endif %}
+
+                <a href="/category/{{ video.category }}" class="block mt-6 text-center bg-gray-700 hover:bg-gray-600 py-3 rounded-lg text-gray-300">
+                    View all {{ category.name }} videos
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-gray-800 mt-12 py-8">
+        <div class="container mx-auto px-4 text-center text-gray-400">
+            <p>USPA Video Library - Competition footage for judges and competitors</p>
+            {% if video.is_local %}
+            <p class="text-sm mt-2 text-gray-500">Keyboard: Space = Play/Pause | Left/Right = Frame by frame | 1-4 = Speed (25%-100%)</p>
+            {% endif %}
+        </div>
+    </footer>
+
+    {% if video.is_local %}
+    <script>
+        const video = document.getElementById('videoPlayer');
+        const frameTime = 1/30; // Assuming 30fps, adjust if needed
+
+        // Playback speed control
+        function setSpeed(speed) {
+            video.playbackRate = speed;
+            document.getElementById('currentSpeed').textContent = speed + 'x';
+
+            // Update button styles
+            document.querySelectorAll('.speed-btn').forEach(btn => {
+                if (parseFloat(btn.dataset.speed) === speed) {
+                    btn.classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                    btn.classList.add('bg-blue-600');
+                } else {
+                    btn.classList.remove('bg-blue-600');
+                    btn.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                }
+            });
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            // Ignore if typing in an input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+            switch(e.code) {
+                case 'Space':
+                    e.preventDefault();
+                    if (video.paused) {
+                        video.play();
+                    } else {
+                        video.pause();
+                    }
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    video.pause();
+                    video.currentTime = Math.max(0, video.currentTime - frameTime);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    video.pause();
+                    video.currentTime = Math.min(video.duration, video.currentTime + frameTime);
+                    break;
+                case 'Digit1':
+                    setSpeed(0.25);
+                    break;
+                case 'Digit2':
+                    setSpeed(0.5);
+                    break;
+                case 'Digit3':
+                    setSpeed(0.75);
+                    break;
+                case 'Digit4':
+                    setSpeed(1);
+                    break;
+            }
+        });
+    </script>
+    {% endif %}
+</body>
+</html>

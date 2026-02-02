@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>USPA Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
+            <div class="flex items-center gap-4">
+                <form action="/search" method="GET" class="flex">
+                    <input type="text" name="q" placeholder="Search videos..."
+                        class="px-4 py-2 rounded-l-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-r-lg">
+                        Search
+                    </button>
+                </form>
+                {% if is_admin %}
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                <a href="/logout" class="text-gray-400 hover:text-white">Logout</a>
+                {% else %}
+                <a href="/login" class="text-gray-400 hover:text-white">Admin Login</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Hero Section -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold mb-4">Skydiving Competition Videos</h1>
+            <p class="text-gray-400 text-lg">Browse competition footage by discipline</p>
+        </div>
+
+        <!-- Categories Grid -->
+        <h2 class="text-2xl font-bold mb-6">Categories</h2>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+            {% for cat_id, cat in categories.items() %}
+            <a href="/category/{{ cat_id }}" class="block bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition transform hover:scale-105">
+                <div class="p-6">
+                    <div class="flex justify-between items-start mb-3">
+                        <span class="bg-blue-600 text-white text-sm font-bold px-3 py-1 rounded">{{ cat.abbrev }}</span>
+                        <span class="text-gray-400 text-sm">{{ category_counts.get(cat_id, 0) }} videos</span>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">{{ cat.name }}</h3>
+                    <p class="text-gray-400 text-sm">{{ cat.description }}</p>
+                    {% if cat.subcategories %}
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        {% for sub in cat.subcategories %}
+                        <span class="bg-gray-700 text-gray-300 text-xs px-2 py-1 rounded">{{ sub.name }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+
+        <!-- Recent Videos -->
+        {% if recent_videos %}
+        <h2 class="text-2xl font-bold mb-6">Recent Videos</h2>
+        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {% for video in recent_videos %}
+            <a href="/video/{{ video.id }}" class="block bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition">
+                <div class="aspect-video bg-gray-700 relative">
+                    {% if video.thumbnail %}
+                    <img src="{{ video.thumbnail }}" alt="{{ video.title }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <div class="w-full h-full flex items-center justify-center text-gray-500">
+                        <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    {% endif %}
+                    {% if video.duration %}
+                    <span class="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded">{{ video.duration }}</span>
+                    {% endif %}
+                </div>
+                <div class="p-4">
+                    <h3 class="font-semibold text-white truncate">{{ video.title }}</h3>
+                    <div class="flex justify-between items-center mt-2 text-sm text-gray-400">
+                        <span>{{ categories.get(video.category, {}).get('abbrev', video.category) }}</span>
+                        <span>{{ video.views }} views</span>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-16 text-gray-500">
+            <svg class="w-24 h-24 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"/>
+            </svg>
+            <p class="text-xl">No videos yet</p>
+            <p class="mt-2">Videos will appear here once added by an administrator.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <footer class="bg-gray-800 mt-12 py-8">
+        <div class="container mx-auto px-4 text-center text-gray-400">
+            <p>USPA Video Library - Competition footage for judges and competitors</p>
+        </div>
+    </footer>
+</body>
+</html>

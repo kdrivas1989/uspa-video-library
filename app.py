@@ -1,0 +1,729 @@
+#!/usr/bin/env python3
+"""USPA Video Library - Video database for skydiving disciplines."""
+
+import os
+import uuid
+import json
+import subprocess
+import shutil
+from datetime import datetime
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, g
+from functools import wraps
+import sqlite3
+
+# Database support - Supabase for production, SQLite for local dev
+try:
+    from supabase import create_client, Client
+    SUPABASE_URL = os.environ.get('SUPABASE_URL')
+    SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
+    if SUPABASE_URL and SUPABASE_KEY:
+        supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        USE_SUPABASE = True
+    else:
+        USE_SUPABASE = False
+        supabase = None
+except ImportError:
+    USE_SUPABASE = False
+    supabase = None
+
+app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'uspa-video-library-secret-key')
+
+# Video storage paths (for local development)
+VIDEOS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'videos')
+os.makedirs(VIDEOS_FOLDER, exist_ok=True)
+
+# Categories
+CATEGORIES = {
+    'al': {
+        'name': 'Accuracy Landing',
+        'abbrev': 'AL',
+        'description': 'Chapter 8 - Accuracy Landing competition videos',
+        'subcategories': []
+    },
+    'cf': {
+        'name': 'Canopy Formation',
+        'abbrev': 'CF',
+        'description': 'Chapter 10 - Canopy Formation competition videos',
+        'subcategories': [
+            {'id': '4way', 'name': '4-Way'},
+            {'id': '2way', 'name': '2-Way'}
+        ]
+    },
+    'cp': {
+        'name': 'Canopy Piloting',
+        'abbrev': 'CP',
+        'description': 'Chapters 12-13 - Canopy Piloting competition videos',
+        'subcategories': [
+            {'id': 'speed', 'name': 'Speed'},
+            {'id': 'distance', 'name': 'Distance'},
+            {'id': 'zone_accuracy', 'name': 'Zone Accuracy'},
+            {'id': 'freestyle', 'name': 'Freestyle'}
+        ]
+    },
+    'ae': {
+        'name': 'Artistic Events',
+        'abbrev': 'AE',
+        'description': 'Chapter 11 - Freestyle and Freefly competition videos',
+        'subcategories': [
+            {'id': 'freestyle', 'name': 'Freestyle'},
+            {'id': 'freefly', 'name': 'Freefly'}
+        ]
+    },
+    'ws': {
+        'name': 'Wingsuit',
+        'abbrev': 'WS',
+        'description': 'Chapter 14 - Wingsuit competition videos',
+        'subcategories': []
+    },
+    'fs': {
+        'name': 'Formation Skydiving',
+        'abbrev': 'FS',
+        'description': 'Chapter 9 - Formation Skydiving competition videos',
+        'subcategories': [
+            {'id': '4way_fs', 'name': '4-Way FS'},
+            {'id': '4way_vfs', 'name': '4-Way VFS'},
+            {'id': '2way_mfs', 'name': '2-Way MFS'},
+            {'id': '8way', 'name': '8-Way'},
+            {'id': '16way', 'name': '16-Way'},
+            {'id': '10way', 'name': '10-Way'}
+        ]
+    }
+}
+
+DATABASE = 'videos.db'
+
+
+def get_sqlite_db():
+    """Get SQLite database connection for local development."""
+    if 'db' not in g:
+        g.db = sqlite3.connect(DATABASE)
+        g.db.row_factory = sqlite3.Row
+    return g.db
+
+
+@app.teardown_appcontext
+def close_db(exception):
+    """Close database connection at end of request."""
+    db = g.pop('db', None)
+    if db is not None:
+        db.close()
+
+
+def init_db():
+    """Initialize the database."""
+    if USE_SUPABASE:
+        try:
+            result = supabase.table('users').select('username').eq('username', 'admin').execute()
+            if not result.data:
+                supabase.table('users').insert({
+                    'username': 'admin',
+                    'password': 'admin123',
+                    'role': 'admin',
+                    'name': 'Administrator'
+                }).execute()
+        except Exception as e:
+            print(f"Supabase init error: {e}")
+    else:
+        conn = sqlite3.connect(DATABASE)
+        cursor = conn.cursor()
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS videos (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                url TEXT NOT NULL,
+                thumbnail TEXT,
+                category TEXT NOT NULL,
+                subcategory TEXT,
+                tags TEXT,
+                duration TEXT,
+                created_at TEXT NOT NULL,
+                views INTEGER DEFAULT 0,
+                video_type TEXT DEFAULT 'url',
+                local_file TEXT
+            )
+        ''')
+
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN video_type TEXT DEFAULT "url"')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN local_file TEXT')
+        except:
+            pass
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                username TEXT PRIMARY KEY,
+                password TEXT NOT NULL,
+                role TEXT NOT NULL,
+                name TEXT NOT NULL
+            )
+        ''')
+
+        cursor.execute('SELECT username FROM users WHERE username = ?', ('admin',))
+        if not cursor.fetchone():
+            cursor.execute(
+                'INSERT INTO users (username, password, role, name) VALUES (?, ?, ?, ?)',
+                ('admin', 'admin123', 'admin', 'Administrator')
+            )
+
+        conn.commit()
+        conn.close()
+
+
+# Database helper functions
+def get_all_videos():
+    """Get all videos from database."""
+    if USE_SUPABASE:
+        result = supabase.table('videos').select('*').order('created_at', desc=True).execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM videos ORDER BY created_at DESC')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_videos_by_category(category, subcategory=None):
+    """Get videos by category and optional subcategory."""
+    if USE_SUPABASE:
+        query = supabase.table('videos').select('*').eq('category', category)
+        if subcategory:
+            query = query.eq('subcategory', subcategory)
+        result = query.order('created_at', desc=True).execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        if subcategory:
+            cursor = db.execute(
+                'SELECT * FROM videos WHERE category = ? AND subcategory = ? ORDER BY created_at DESC',
+                (category, subcategory)
+            )
+        else:
+            cursor = db.execute(
+                'SELECT * FROM videos WHERE category = ? ORDER BY created_at DESC',
+                (category,)
+            )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_video(video_id):
+    """Get a single video by ID."""
+    if USE_SUPABASE:
+        result = supabase.table('videos').select('*').eq('id', video_id).execute()
+        return result.data[0] if result.data else None
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM videos WHERE id = ?', (video_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def save_video(video_data):
+    """Save a video to database."""
+    if USE_SUPABASE:
+        existing = supabase.table('videos').select('id').eq('id', video_data['id']).execute()
+        if existing.data:
+            supabase.table('videos').update(video_data).eq('id', video_data['id']).execute()
+        else:
+            supabase.table('videos').insert(video_data).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('''
+            INSERT OR REPLACE INTO videos (id, title, description, url, thumbnail, category, subcategory, tags, duration, created_at, views, video_type, local_file)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (video_data['id'], video_data['title'], video_data.get('description', ''),
+              video_data.get('url', ''), video_data.get('thumbnail'), video_data['category'],
+              video_data.get('subcategory', ''), video_data.get('tags', ''),
+              video_data.get('duration', ''), video_data['created_at'],
+              video_data.get('views', 0), video_data.get('video_type', 'url'),
+              video_data.get('local_file', '')))
+        db.commit()
+
+
+def delete_video_db(video_id):
+    """Delete a video from database."""
+    if USE_SUPABASE:
+        supabase.table('videos').delete().eq('id', video_id).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('DELETE FROM videos WHERE id = ?', (video_id,))
+        db.commit()
+
+
+def increment_views(video_id):
+    """Increment view count for a video."""
+    if USE_SUPABASE:
+        video = get_video(video_id)
+        if video:
+            supabase.table('videos').update({'views': video['views'] + 1}).eq('id', video_id).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('UPDATE videos SET views = views + 1 WHERE id = ?', (video_id,))
+        db.commit()
+
+
+def get_video_count_by_category(category):
+    """Get video count for a category."""
+    if USE_SUPABASE:
+        result = supabase.table('videos').select('id', count='exact').eq('category', category).execute()
+        return result.count or 0
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT COUNT(*) FROM videos WHERE category = ?', (category,))
+        return cursor.fetchone()[0]
+
+
+def search_videos(query):
+    """Search videos by title, description, or tags."""
+    if USE_SUPABASE:
+        result = supabase.table('videos').select('*').or_(
+            f"title.ilike.%{query}%,description.ilike.%{query}%,tags.ilike.%{query}%"
+        ).order('created_at', desc=True).execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('''
+            SELECT * FROM videos
+            WHERE title LIKE ? OR description LIKE ? OR tags LIKE ?
+            ORDER BY created_at DESC
+        ''', (f'%{query}%', f'%{query}%', f'%{query}%'))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_user(username):
+    """Get user from database."""
+    if USE_SUPABASE:
+        result = supabase.table('users').select('*').eq('username', username).execute()
+        return result.data[0] if result.data else None
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM users WHERE username = ?', (username,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+# Initialize database
+def safe_init_db():
+    try:
+        init_db()
+        print(f"Database initialized ({'Supabase' if USE_SUPABASE else 'SQLite'})")
+    except Exception as e:
+        print(f"Warning: Database initialization failed: {e}")
+
+safe_init_db()
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session or session.get('role') != 'admin':
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+
+def get_video_embed_url(url):
+    """Convert video URL to embeddable format."""
+    if not url:
+        return url
+    if 'youtube.com/watch' in url:
+        video_id = url.split('v=')[1].split('&')[0]
+        return f'https://www.youtube.com/embed/{video_id}'
+    elif 'youtu.be/' in url:
+        video_id = url.split('youtu.be/')[1].split('?')[0]
+        return f'https://www.youtube.com/embed/{video_id}'
+    elif 'vimeo.com/' in url:
+        video_id = url.split('vimeo.com/')[1].split('?')[0]
+        return f'https://player.vimeo.com/video/{video_id}'
+    return url
+
+
+def get_video_thumbnail(url):
+    """Get thumbnail URL from video URL."""
+    if not url:
+        return None
+    if 'youtube.com/watch' in url:
+        video_id = url.split('v=')[1].split('&')[0]
+        return f'https://img.youtube.com/vi/{video_id}/mqdefault.jpg'
+    elif 'youtu.be/' in url:
+        video_id = url.split('youtu.be/')[1].split('?')[0]
+        return f'https://img.youtube.com/vi/{video_id}/mqdefault.jpg'
+    return None
+
+
+def get_video_duration(file_path):
+    """Get video duration using ffprobe."""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
+            capture_output=True, text=True
+        )
+        seconds = float(result.stdout.strip())
+        mins = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{mins}:{secs:02d}"
+    except:
+        return None
+
+
+def generate_thumbnail(video_path, thumbnail_path):
+    """Generate thumbnail from video using ffmpeg."""
+    try:
+        subprocess.run([
+            'ffmpeg', '-y', '-i', video_path,
+            '-ss', '00:00:02', '-vframes', '1',
+            '-vf', 'scale=320:-1',
+            thumbnail_path
+        ], capture_output=True, check=True)
+        return True
+    except:
+        return False
+
+
+def convert_video_to_mp4(input_path, output_path):
+    """Convert video to MP4 using ffmpeg."""
+    try:
+        subprocess.run([
+            'ffmpeg', '-y', '-i', input_path,
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            output_path
+        ], capture_output=True, check=True)
+        return True
+    except Exception as e:
+        print(f"Conversion error: {e}")
+        return False
+
+
+@app.route('/')
+def index():
+    """Home page showing all categories."""
+    category_counts = {}
+    for cat_id in CATEGORIES:
+        category_counts[cat_id] = get_video_count_by_category(cat_id)
+
+    all_videos = get_all_videos()
+    recent_videos = all_videos[:8] if all_videos else []
+
+    return render_template('index.html',
+                         categories=CATEGORIES,
+                         category_counts=category_counts,
+                         recent_videos=recent_videos,
+                         is_admin=session.get('role') == 'admin')
+
+
+@app.route('/category/<cat_id>')
+def category(cat_id):
+    """Show videos in a category."""
+    if cat_id not in CATEGORIES:
+        return "Category not found", 404
+
+    cat = CATEGORIES[cat_id]
+    subcategory = request.args.get('sub')
+
+    videos = get_videos_by_category(cat_id, subcategory)
+
+    return render_template('category.html',
+                         category=cat,
+                         cat_id=cat_id,
+                         videos=videos,
+                         current_sub=subcategory,
+                         is_admin=session.get('role') == 'admin')
+
+
+@app.route('/video/<video_id>')
+def video(video_id):
+    """Show single video page."""
+    video = get_video(video_id)
+
+    if not video:
+        return "Video not found", 404
+
+    # Determine video source
+    if video.get('video_type') == 'local' and video.get('local_file'):
+        video['video_src'] = f'/static/videos/{video["local_file"]}'
+        video['is_local'] = True
+    else:
+        video['embed_url'] = get_video_embed_url(video.get('url', ''))
+        video['is_local'] = False
+
+    # Increment view count
+    increment_views(video_id)
+
+    # Get related videos from same category
+    related = get_videos_by_category(video['category'])
+    related_videos = [v for v in related if v['id'] != video_id][:6]
+
+    cat = CATEGORIES.get(video['category'], {})
+
+    return render_template('video.html',
+                         video=video,
+                         category=cat,
+                         related_videos=related_videos,
+                         is_admin=session.get('role') == 'admin')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """Login page."""
+    error = None
+    if request.method == 'POST':
+        username = request.form.get('username', '').lower()
+        password = request.form.get('password', '')
+
+        user = get_user(username)
+
+        if user and user['password'] == password:
+            session['user'] = username
+            session['role'] = user['role']
+            session['name'] = user['name']
+            return redirect(url_for('admin_dashboard'))
+        else:
+            error = 'Invalid username or password'
+
+    return render_template('login.html', error=error)
+
+
+@app.route('/logout')
+def logout():
+    """Logout."""
+    session.clear()
+    return redirect(url_for('index'))
+
+
+@app.route('/admin')
+@admin_required
+def admin_dashboard():
+    """Admin dashboard."""
+    videos = get_all_videos()
+    total_videos = len(videos)
+    total_views = sum(v.get('views', 0) for v in videos)
+
+    return render_template('admin.html',
+                         videos=videos,
+                         categories=CATEGORIES,
+                         total_videos=total_videos,
+                         total_views=total_views)
+
+
+@app.route('/admin/add-video', methods=['POST'])
+@admin_required
+def add_video():
+    """Add a new video."""
+    data = request.json
+
+    title = data.get('title', '').strip()
+    description = data.get('description', '').strip()
+    url = data.get('url', '').strip()
+    category = data.get('category', '')
+    subcategory = data.get('subcategory', '')
+    tags = data.get('tags', '').strip()
+    duration = data.get('duration', '').strip()
+
+    if not title or not url or not category:
+        return jsonify({'error': 'Title, URL, and category are required'}), 400
+
+    if category not in CATEGORIES:
+        return jsonify({'error': 'Invalid category'}), 400
+
+    video_id = str(uuid.uuid4())[:8]
+    thumbnail = get_video_thumbnail(url)
+
+    save_video({
+        'id': video_id,
+        'title': title,
+        'description': description,
+        'url': url,
+        'thumbnail': thumbnail,
+        'category': category,
+        'subcategory': subcategory,
+        'tags': tags,
+        'duration': duration,
+        'created_at': datetime.now().isoformat(),
+        'views': 0,
+        'video_type': 'url',
+        'local_file': ''
+    })
+
+    return jsonify({'success': True, 'message': 'Video added successfully', 'id': video_id})
+
+
+@app.route('/admin/import-folder', methods=['POST'])
+@admin_required
+def import_folder():
+    """Import videos from a local folder (local development only)."""
+    if USE_SUPABASE:
+        return jsonify({'error': 'Local folder import not available in production. Use YouTube/Vimeo URLs instead.'}), 400
+
+    data = request.json
+    folder_path = data.get('folder_path', '').strip()
+    category = data.get('category', '')
+    subcategory = data.get('subcategory', '')
+    convert = data.get('convert', True)
+
+    if not folder_path or not os.path.isdir(folder_path):
+        return jsonify({'error': 'Invalid folder path'}), 400
+
+    if category not in CATEGORIES:
+        return jsonify({'error': 'Invalid category'}), 400
+
+    video_extensions = ('.mp4', '.mts', '.m2ts', '.mov', '.avi', '.mkv', '.webm')
+    files = [f for f in os.listdir(folder_path) if f.lower().endswith(video_extensions)]
+
+    if not files:
+        return jsonify({'error': 'No video files found in folder'}), 400
+
+    imported = 0
+    errors = []
+
+    for filename in sorted(files):
+        try:
+            input_path = os.path.join(folder_path, filename)
+            video_id = str(uuid.uuid4())[:8]
+
+            needs_conversion = not filename.lower().endswith(('.mp4', '.webm'))
+
+            if needs_conversion and convert:
+                output_filename = f"{video_id}.mp4"
+                output_path = os.path.join(VIDEOS_FOLDER, output_filename)
+
+                if convert_video_to_mp4(input_path, output_path):
+                    local_file = output_filename
+                else:
+                    errors.append(f"Failed to convert {filename}")
+                    continue
+            else:
+                if filename.lower().endswith(('.mp4', '.webm')):
+                    output_filename = f"{video_id}{os.path.splitext(filename)[1]}"
+                    output_path = os.path.join(VIDEOS_FOLDER, output_filename)
+                    shutil.copy2(input_path, output_path)
+                    local_file = output_filename
+                else:
+                    errors.append(f"Cannot use {filename} without conversion")
+                    continue
+
+            thumbnail_filename = f"{video_id}_thumb.jpg"
+            thumbnail_path = os.path.join(VIDEOS_FOLDER, thumbnail_filename)
+            if generate_thumbnail(os.path.join(VIDEOS_FOLDER, local_file), thumbnail_path):
+                thumbnail = f"/static/videos/{thumbnail_filename}"
+            else:
+                thumbnail = None
+
+            duration = get_video_duration(os.path.join(VIDEOS_FOLDER, local_file))
+            title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
+
+            save_video({
+                'id': video_id,
+                'title': title,
+                'description': '',
+                'url': '',
+                'thumbnail': thumbnail,
+                'category': category,
+                'subcategory': subcategory,
+                'tags': '',
+                'duration': duration,
+                'created_at': datetime.now().isoformat(),
+                'views': 0,
+                'video_type': 'local',
+                'local_file': local_file
+            })
+
+            imported += 1
+
+        except Exception as e:
+            errors.append(f"Error with {filename}: {str(e)}")
+
+    message = f"Imported {imported} video(s)"
+    if errors:
+        message += f". Errors: {len(errors)}"
+
+    return jsonify({
+        'success': True,
+        'message': message,
+        'imported': imported,
+        'errors': errors
+    })
+
+
+@app.route('/admin/delete-video/<video_id>', methods=['POST'])
+@admin_required
+def delete_video(video_id):
+    """Delete a video."""
+    video = get_video(video_id)
+
+    if video:
+        if video.get('local_file'):
+            local_path = os.path.join(VIDEOS_FOLDER, video['local_file'])
+            if os.path.exists(local_path):
+                os.remove(local_path)
+        if video.get('thumbnail') and video['thumbnail'].startswith('/static/videos/'):
+            thumb_path = os.path.join(VIDEOS_FOLDER, os.path.basename(video['thumbnail']))
+            if os.path.exists(thumb_path):
+                os.remove(thumb_path)
+
+    delete_video_db(video_id)
+
+    return jsonify({'success': True, 'message': 'Video deleted'})
+
+
+@app.route('/admin/edit-video/<video_id>', methods=['POST'])
+@admin_required
+def edit_video(video_id):
+    """Edit a video."""
+    data = request.json
+
+    video = get_video(video_id)
+    if not video:
+        return jsonify({'error': 'Video not found'}), 404
+
+    video['title'] = data.get('title', video['title']).strip()
+    video['description'] = data.get('description', video.get('description', '')).strip()
+    video['category'] = data.get('category', video['category'])
+    video['subcategory'] = data.get('subcategory', video.get('subcategory', ''))
+    video['tags'] = data.get('tags', video.get('tags', '')).strip()
+
+    save_video(video)
+
+    return jsonify({'success': True, 'message': 'Video updated'})
+
+
+@app.route('/search')
+def search():
+    """Search videos."""
+    query = request.args.get('q', '').strip()
+
+    if not query:
+        return redirect(url_for('index'))
+
+    videos = search_videos(query)
+
+    return render_template('search.html',
+                         query=query,
+                         videos=videos,
+                         categories=CATEGORIES,
+                         is_admin=session.get('role') == 'admin')
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5001))
+    debug = os.environ.get('FLASK_ENV', 'development') == 'development'
+    print("\n=== USPA Video Library ===")
+    print(f"Database: {'Supabase' if USE_SUPABASE else 'SQLite'}")
+    print(f"Open http://localhost:{port} in your browser")
+    print("\nAdmin login: admin / admin123\n")
+    app.run(debug=debug, host='0.0.0.0', port=port)

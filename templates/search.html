@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search: {{ query }} - USPA Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
+            <div class="flex items-center gap-4">
+                <form action="/search" method="GET" class="flex">
+                    <input type="text" name="q" value="{{ query }}" placeholder="Search videos..."
+                        class="px-4 py-2 rounded-l-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 w-64">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-r-lg">
+                        Search
+                    </button>
+                </form>
+                {% if is_admin %}
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Breadcrumb -->
+        <div class="mb-6">
+            <a href="/" class="text-blue-400 hover:underline">Home</a>
+            <span class="text-gray-500 mx-2">/</span>
+            <span class="text-gray-300">Search</span>
+        </div>
+
+        <h1 class="text-2xl font-bold mb-2">Search Results</h1>
+        <p class="text-gray-400 mb-8">{{ videos|length }} result(s) for "{{ query }}"</p>
+
+        {% if videos %}
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {% for video in videos %}
+            <a href="/video/{{ video.id }}" class="block bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition">
+                <div class="aspect-video bg-gray-700 relative">
+                    {% if video.thumbnail %}
+                    <img src="{{ video.thumbnail }}" alt="{{ video.title }}" class="w-full h-full object-cover">
+                    {% else %}
+                    <div class="w-full h-full flex items-center justify-center text-gray-500">
+                        <svg class="w-16 h-16" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                            <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+                        </svg>
+                    </div>
+                    {% endif %}
+                    {% if video.duration %}
+                    <span class="absolute bottom-2 right-2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded">{{ video.duration }}</span>
+                    {% endif %}
+                </div>
+                <div class="p-4">
+                    <h3 class="font-semibold text-white line-clamp-2">{{ video.title }}</h3>
+                    <div class="flex justify-between items-center mt-2 text-sm text-gray-400">
+                        <span>{{ categories.get(video.category, {}).get('abbrev', video.category) }}</span>
+                        <span>{{ video.views }} views</span>
+                    </div>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-16 text-gray-500">
+            <svg class="w-24 h-24 mx-auto mb-4" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clip-rule="evenodd"/>
+            </svg>
+            <p class="text-xl">No videos found for "{{ query }}"</p>
+            <p class="mt-2">Try different keywords or browse categories.</p>
+            <a href="/" class="inline-block mt-4 bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg">Browse Categories</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <footer class="bg-gray-800 mt-12 py-8">
+        <div class="container mx-auto px-4 text-center text-gray-400">
+            <p>USPA Video Library - Competition footage for judges and competitors</p>
+        </div>
+    </footer>
+</body>
+</html>

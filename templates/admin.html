@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - USPA Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-purple-800 p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-white">USPA Video Library - Admin</a>
+            <div class="flex items-center gap-4">
+                <a href="/" class="bg-purple-700 hover:bg-purple-600 px-4 py-2 rounded-lg">View Site</a>
+                <a href="/logout" class="text-purple-200 hover:text-white">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Stats -->
+        <div class="grid md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-gray-800 rounded-lg p-6">
+                <p class="text-4xl font-bold text-blue-400">{{ total_videos }}</p>
+                <p class="text-gray-400">Total Videos</p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6">
+                <p class="text-4xl font-bold text-green-400">{{ total_views }}</p>
+                <p class="text-gray-400">Total Views</p>
+            </div>
+        </div>
+
+        <!-- Import from Folder -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4">Import Videos from Folder</h2>
+            <p class="text-gray-400 text-sm mb-4">Import all videos from a local folder. MTS and other formats will be converted to MP4.</p>
+            <form id="importFolderForm" class="flex flex-wrap gap-4 items-end">
+                <div class="flex-1 min-w-64">
+                    <label class="block text-gray-300 mb-2">Folder Path</label>
+                    <input type="text" id="folderPath"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="/path/to/video/folder">
+                </div>
+                <div class="w-48">
+                    <label class="block text-gray-300 mb-2">Category *</label>
+                    <select id="importCategory" required
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        onchange="updateImportSubcategories()">
+                        <option value="">Select</option>
+                        {% for cat_id, cat in categories.items() %}
+                        <option value="{{ cat_id }}">{{ cat.abbrev }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="importSubcategoryDiv" class="w-48 hidden">
+                    <label class="block text-gray-300 mb-2">Subcategory</label>
+                    <select id="importSubcategory"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">Select</option>
+                    </select>
+                </div>
+                <button type="submit"
+                    class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-semibold transition">
+                    Import Videos
+                </button>
+            </form>
+            <div id="importMessage" class="mt-4 hidden"></div>
+            <div id="importProgress" class="mt-4 hidden">
+                <div class="flex items-center gap-3">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
+                    <span class="text-gray-300">Converting and importing videos... This may take a while.</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-8">
+            <!-- Add Video Form -->
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold mb-6">Add New Video</h2>
+                <form id="addVideoForm" class="space-y-4">
+                    <div>
+                        <label class="block text-gray-300 mb-2">Title *</label>
+                        <input type="text" id="videoTitle" required
+                            class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            placeholder="Video title">
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-2">Video URL * (YouTube or Vimeo)</label>
+                        <input type="url" id="videoUrl" required
+                            class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            placeholder="https://youtube.com/watch?v=...">
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-2">Category *</label>
+                        <select id="videoCategory" required
+                            class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            onchange="updateSubcategories()">
+                            <option value="">Select category</option>
+                            {% for cat_id, cat in categories.items() %}
+                            <option value="{{ cat_id }}">{{ cat.abbrev }} - {{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div id="subcategoryDiv" class="hidden">
+                        <label class="block text-gray-300 mb-2">Subcategory</label>
+                        <select id="videoSubcategory"
+                            class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                            <option value="">Select subcategory</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-2">Description</label>
+                        <textarea id="videoDescription" rows="3"
+                            class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                            placeholder="Video description"></textarea>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-gray-300 mb-2">Duration</label>
+                            <input type="text" id="videoDuration"
+                                class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                placeholder="e.g., 3:45">
+                        </div>
+                        <div>
+                            <label class="block text-gray-300 mb-2">Tags</label>
+                            <input type="text" id="videoTags"
+                                class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                placeholder="tag1, tag2, tag3">
+                        </div>
+                    </div>
+                    <button type="submit"
+                        class="w-full bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-semibold transition">
+                        Add Video
+                    </button>
+                </form>
+                <div id="addMessage" class="mt-4 hidden"></div>
+            </div>
+
+            <!-- Video List -->
+            <div class="bg-gray-800 rounded-lg p-6">
+                <h2 class="text-xl font-bold mb-6">Manage Videos</h2>
+                <div class="space-y-3 max-h-[600px] overflow-y-auto">
+                    {% if videos %}
+                    {% for video in videos %}
+                    <div class="bg-gray-700 rounded-lg p-4" data-video-id="{{ video.id }}">
+                        <div class="flex gap-4">
+                            <div class="w-32 h-20 bg-gray-600 rounded flex-shrink-0 overflow-hidden">
+                                {% if video.thumbnail %}
+                                <img src="{{ video.thumbnail }}" alt="{{ video.title }}" class="w-full h-full object-cover">
+                                {% endif %}
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <h3 class="font-semibold text-white truncate">{{ video.title }}</h3>
+                                <div class="flex items-center gap-2 mt-1 text-sm text-gray-400">
+                                    <span class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs">{{ categories.get(video.category, {}).get('abbrev', video.category) }}</span>
+                                    <span>{{ video.views }} views</span>
+                                </div>
+                                <div class="flex gap-2 mt-3">
+                                    <button onclick="editVideo('{{ video.id }}')"
+                                        class="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
+                                    <button onclick="deleteVideo('{{ video.id }}')"
+                                        class="text-red-400 hover:text-red-300 text-sm">Delete</button>
+                                    <a href="/video/{{ video.id }}" target="_blank"
+                                        class="text-gray-400 hover:text-gray-300 text-sm">View</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <div class="text-center py-8 text-gray-500">
+                        <p>No videos yet. Add your first video!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="fixed inset-0 bg-black bg-opacity-75 hidden items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 class="text-xl font-bold mb-4">Edit Video</h3>
+            <form id="editVideoForm" class="space-y-4">
+                <input type="hidden" id="editVideoId">
+                <div>
+                    <label class="block text-gray-300 mb-2">Title *</label>
+                    <input type="text" id="editTitle" required
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-2">Video URL *</label>
+                    <input type="url" id="editUrl" required
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-2">Category *</label>
+                    <select id="editCategory" required
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        onchange="updateEditSubcategories()">
+                        {% for cat_id, cat in categories.items() %}
+                        <option value="{{ cat_id }}">{{ cat.abbrev }} - {{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="editSubcategoryDiv" class="hidden">
+                    <label class="block text-gray-300 mb-2">Subcategory</label>
+                    <select id="editSubcategory"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">Select subcategory</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-2">Description</label>
+                    <textarea id="editDescription" rows="3"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-gray-300 mb-2">Duration</label>
+                        <input type="text" id="editDuration"
+                            class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                    <div>
+                        <label class="block text-gray-300 mb-2">Tags</label>
+                        <input type="text" id="editTags"
+                            class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeEditModal()"
+                        class="flex-1 bg-gray-600 hover:bg-gray-500 py-3 rounded-lg font-semibold transition">
+                        Cancel
+                    </button>
+                    <button type="submit"
+                        class="flex-1 bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-semibold transition">
+                        Save Changes
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const categories = {{ categories | tojson }};
+
+        // Update import subcategories
+        function updateImportSubcategories() {
+            const catId = document.getElementById('importCategory').value;
+            const subDiv = document.getElementById('importSubcategoryDiv');
+            const subSelect = document.getElementById('importSubcategory');
+
+            const cat = categories[catId];
+            if (cat && cat.subcategories && cat.subcategories.length > 0) {
+                subSelect.innerHTML = '<option value="">Select</option>';
+                cat.subcategories.forEach(sub => {
+                    subSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
+                });
+                subDiv.classList.remove('hidden');
+            } else {
+                subDiv.classList.add('hidden');
+                subSelect.value = '';
+            }
+        }
+
+        // Import from folder
+        document.getElementById('importFolderForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const folderPath = document.getElementById('folderPath').value.trim();
+            const category = document.getElementById('importCategory').value;
+            const subcategory = document.getElementById('importSubcategory').value;
+
+            if (!folderPath || !category) {
+                alert('Please enter folder path and select category');
+                return;
+            }
+
+            const messageDiv = document.getElementById('importMessage');
+            const progressDiv = document.getElementById('importProgress');
+
+            messageDiv.classList.add('hidden');
+            progressDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/import-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folder_path: folderPath, category, subcategory, convert: true })
+                });
+
+                const result = await response.json();
+                progressDiv.classList.add('hidden');
+
+                if (result.error) {
+                    messageDiv.className = 'mt-4 bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded';
+                    messageDiv.textContent = result.error;
+                } else {
+                    messageDiv.className = 'mt-4 bg-green-900 border border-green-700 text-green-200 px-4 py-3 rounded';
+                    let msg = result.message;
+                    if (result.errors && result.errors.length > 0) {
+                        msg += '\nErrors: ' + result.errors.join(', ');
+                    }
+                    messageDiv.textContent = msg;
+                    setTimeout(() => location.reload(), 2000);
+                }
+                messageDiv.classList.remove('hidden');
+
+            } catch (error) {
+                progressDiv.classList.add('hidden');
+                messageDiv.className = 'mt-4 bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded';
+                messageDiv.textContent = 'Error importing: ' + error.message;
+                messageDiv.classList.remove('hidden');
+            }
+        });
+
+        // Update subcategories dropdown based on category selection
+        function updateSubcategories() {
+            const catId = document.getElementById('videoCategory').value;
+            const subDiv = document.getElementById('subcategoryDiv');
+            const subSelect = document.getElementById('videoSubcategory');
+
+            const cat = categories[catId];
+            if (cat && cat.subcategories && cat.subcategories.length > 0) {
+                subSelect.innerHTML = '<option value="">Select subcategory</option>';
+                cat.subcategories.forEach(sub => {
+                    subSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
+                });
+                subDiv.classList.remove('hidden');
+            } else {
+                subDiv.classList.add('hidden');
+                subSelect.value = '';
+            }
+        }
+
+        function updateEditSubcategories() {
+            const catId = document.getElementById('editCategory').value;
+            const subDiv = document.getElementById('editSubcategoryDiv');
+            const subSelect = document.getElementById('editSubcategory');
+
+            const cat = categories[catId];
+            if (cat && cat.subcategories && cat.subcategories.length > 0) {
+                subSelect.innerHTML = '<option value="">Select subcategory</option>';
+                cat.subcategories.forEach(sub => {
+                    subSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
+                });
+                subDiv.classList.remove('hidden');
+            } else {
+                subDiv.classList.add('hidden');
+                subSelect.value = '';
+            }
+        }
+
+        // Add Video
+        document.getElementById('addVideoForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                title: document.getElementById('videoTitle').value,
+                url: document.getElementById('videoUrl').value,
+                category: document.getElementById('videoCategory').value,
+                subcategory: document.getElementById('videoSubcategory').value,
+                description: document.getElementById('videoDescription').value,
+                duration: document.getElementById('videoDuration').value,
+                tags: document.getElementById('videoTags').value
+            };
+
+            const messageDiv = document.getElementById('addMessage');
+
+            try {
+                const response = await fetch('/admin/add-video', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    messageDiv.className = 'mt-4 bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded';
+                    messageDiv.textContent = result.error;
+                } else {
+                    messageDiv.className = 'mt-4 bg-green-900 border border-green-700 text-green-200 px-4 py-3 rounded';
+                    messageDiv.textContent = result.message;
+                    document.getElementById('addVideoForm').reset();
+                    document.getElementById('subcategoryDiv').classList.add('hidden');
+                    setTimeout(() => location.reload(), 1000);
+                }
+                messageDiv.classList.remove('hidden');
+
+            } catch (error) {
+                messageDiv.className = 'mt-4 bg-red-900 border border-red-700 text-red-200 px-4 py-3 rounded';
+                messageDiv.textContent = 'Error adding video: ' + error.message;
+                messageDiv.classList.remove('hidden');
+            }
+        });
+
+        // Delete Video
+        async function deleteVideo(videoId) {
+            if (!confirm('Are you sure you want to delete this video?')) return;
+
+            try {
+                const response = await fetch(`/admin/delete-video/${videoId}`, { method: 'POST' });
+                const result = await response.json();
+
+                if (result.error) {
+                    alert(result.error);
+                } else {
+                    location.reload();
+                }
+            } catch (error) {
+                alert('Error deleting video: ' + error.message);
+            }
+        }
+
+        // Edit Video - placeholder for now
+        function editVideo(videoId) {
+            // For simplicity, redirect to video page or implement edit modal
+            alert('Edit functionality: Use the form to re-add the video with updated details, then delete the old one.');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+            document.getElementById('editModal').classList.remove('flex');
+        }
+    </script>
+</body>
+</html>
