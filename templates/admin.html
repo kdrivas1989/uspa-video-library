@@ -46,16 +46,12 @@
             <p class="text-gray-400 text-sm mb-4">Import all videos from a local folder (MTS converted to MP4) or select a Dropbox folder.</p>
             <form id="importFolderForm" class="flex flex-wrap gap-4 items-end">
                 <div class="flex-1 min-w-64">
-                    <label class="block text-gray-300 mb-2">Folder Path</label>
+                    <label class="block text-gray-300 mb-2">Folder Path (local development only)</label>
                     <div class="flex gap-2">
                         <input type="text" id="folderPath"
                             class="flex-1 px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                             placeholder="/path/to/video/folder"
                             oninput="detectCategoryFromPath(this.value)">
-                        <button type="button" onclick="openFolderBrowser()"
-                            class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded-lg text-sm whitespace-nowrap">
-                            Browse...
-                        </button>
                         {% if dropbox_app_key %}
                         <button type="button" onclick="chooseFolderFromDropbox()"
                             class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg text-sm whitespace-nowrap">
@@ -105,6 +101,56 @@
                     <span class="text-gray-300">Converting and importing videos... This may take a while.</span>
                 </div>
             </div>
+        </div>
+
+        <!-- Direct File Upload -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4">Upload Video Files</h2>
+            <p class="text-gray-400 text-sm mb-4">Drag & drop video files or click to select. MP4, WebM, MOV supported. MTS/AVI/MKV will be converted.</p>
+            <div class="flex flex-wrap gap-4 items-end mb-4">
+                <div class="w-48">
+                    <label class="block text-gray-300 mb-2">Category *</label>
+                    <select id="uploadCategory" required
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        onchange="updateUploadSubcategories()">
+                        <option value="">Select</option>
+                        {% for cat_id, cat in categories.items() %}
+                        <option value="{{ cat_id }}">{{ cat.abbrev }} - {{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="uploadSubcategoryDiv" class="w-48 hidden">
+                    <label class="block text-gray-300 mb-2">Subcategory</label>
+                    <select id="uploadSubcategory"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">Select</option>
+                    </select>
+                </div>
+                <div class="w-64">
+                    <label class="block text-gray-300 mb-2">Event</label>
+                    <input type="text" id="uploadEvent" list="uploadEventList"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="e.g., 2024 USPA Nationals">
+                    <datalist id="uploadEventList">
+                        {% for event in events %}
+                        <option value="{{ event }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+            </div>
+            <div id="dropZone"
+                class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-purple-500 transition"
+                ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
+                onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" multiple accept="video/*" class="hidden" onchange="handleFileSelect(event)">
+                <svg class="w-12 h-12 mx-auto text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <p class="text-gray-400">Drag & drop videos here or click to browse</p>
+                <p class="text-gray-500 text-sm mt-2">MP4, WebM, MOV, MTS, AVI, MKV</p>
+            </div>
+            <div id="uploadProgress" class="mt-4 hidden"></div>
+            <div id="uploadResults" class="mt-4 hidden"></div>
         </div>
 
         {% if dropbox_app_key %}
@@ -242,28 +288,6 @@
         </div>
     </div>
 
-    <!-- Folder Browser Modal -->
-    <div id="folderBrowserModal" class="fixed inset-0 bg-black bg-opacity-75 hidden items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-xl mx-4 max-h-[80vh] flex flex-col">
-            <h3 class="text-xl font-bold mb-2">Select Folder</h3>
-            <p id="currentFolderPath" class="text-gray-400 text-sm mb-4 truncate"></p>
-            <div id="folderList" class="flex-1 overflow-y-auto bg-gray-900 rounded-lg p-2 mb-4 min-h-64">
-                <!-- Folders listed here -->
-            </div>
-            <p id="videoCountInfo" class="text-sm text-gray-400 mb-4"></p>
-            <div class="flex gap-3">
-                <button type="button" onclick="closeFolderBrowser()"
-                    class="flex-1 bg-gray-600 hover:bg-gray-500 py-3 rounded-lg font-semibold transition">
-                    Cancel
-                </button>
-                <button type="button" onclick="selectCurrentFolder()"
-                    class="flex-1 bg-purple-600 hover:bg-purple-700 py-3 rounded-lg font-semibold transition">
-                    Select This Folder
-                </button>
-            </div>
-        </div>
-    </div>
-
     <!-- Bulk Upload Modal -->
     <div id="bulkUploadModal" class="fixed inset-0 bg-black bg-opacity-75 hidden items-center justify-center z-50">
         <div class="bg-gray-800 rounded-lg shadow-xl p-6 w-full max-w-md mx-4">
@@ -394,71 +418,125 @@
         const categories = {{ categories | tojson }};
         let pendingFiles = []; // Store files selected from Dropbox
 
-        // Folder Browser
-        let currentBrowsePath = '';
+        // File Upload
+        function updateUploadSubcategories() {
+            const catId = document.getElementById('uploadCategory').value;
+            const subDiv = document.getElementById('uploadSubcategoryDiv');
+            const subSelect = document.getElementById('uploadSubcategory');
 
-        async function openFolderBrowser() {
-            const startPath = document.getElementById('folderPath').value || '';
-            await browseTo(startPath || '~');
-            document.getElementById('folderBrowserModal').classList.remove('hidden');
-            document.getElementById('folderBrowserModal').classList.add('flex');
-        }
-
-        function closeFolderBrowser() {
-            document.getElementById('folderBrowserModal').classList.add('hidden');
-            document.getElementById('folderBrowserModal').classList.remove('flex');
-        }
-
-        async function browseTo(path) {
-            try {
-                const response = await fetch(`/admin/browse-folders?path=${encodeURIComponent(path)}`);
-                const data = await response.json();
-
-                if (data.error) {
-                    alert(data.error);
-                    return;
-                }
-
-                currentBrowsePath = data.current_path;
-                document.getElementById('currentFolderPath').textContent = data.current_path;
-
-                const listDiv = document.getElementById('folderList');
-                listDiv.innerHTML = '';
-
-                for (const item of data.items) {
-                    const div = document.createElement('div');
-                    div.className = 'flex items-center gap-2 px-3 py-2 hover:bg-gray-700 rounded cursor-pointer';
-                    div.innerHTML = `
-                        <svg class="w-5 h-5 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
-                        </svg>
-                        <span class="flex-1 truncate">${item.name}</span>
-                    `;
-                    div.onclick = () => browseTo(item.path);
-                    listDiv.appendChild(div);
-                }
-
-                if (data.items.length === 0) {
-                    listDiv.innerHTML = '<p class="text-gray-500 text-center py-4">No subfolders</p>';
-                }
-
-                const videoInfo = document.getElementById('videoCountInfo');
-                if (data.video_count > 0) {
-                    videoInfo.textContent = `${data.video_count} video file(s) in this folder`;
-                    videoInfo.className = 'text-sm text-green-400 mb-4';
-                } else {
-                    videoInfo.textContent = 'No video files in this folder';
-                    videoInfo.className = 'text-sm text-gray-500 mb-4';
-                }
-            } catch (error) {
-                alert('Error browsing folders: ' + error.message);
+            const cat = categories[catId];
+            if (cat && cat.subcategories && cat.subcategories.length > 0) {
+                subSelect.innerHTML = '<option value="">Select</option>';
+                cat.subcategories.forEach(sub => {
+                    subSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
+                });
+                subDiv.classList.remove('hidden');
+            } else {
+                subDiv.classList.add('hidden');
+                subSelect.value = '';
             }
         }
 
-        function selectCurrentFolder() {
-            document.getElementById('folderPath').value = currentBrowsePath;
-            detectCategoryFromPath(currentBrowsePath);
-            closeFolderBrowser();
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('border-purple-500', 'bg-gray-700');
+        }
+
+        function handleDragLeave(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('border-purple-500', 'bg-gray-700');
+        }
+
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('border-purple-500', 'bg-gray-700');
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('video/') ||
+                f.name.toLowerCase().match(/\.(mp4|webm|mov|m4v|ogg|ogv|mts|m2ts|avi|mkv)$/));
+            if (files.length > 0) {
+                uploadFiles(files);
+            }
+        }
+
+        function handleFileSelect(e) {
+            const files = Array.from(e.target.files);
+            if (files.length > 0) {
+                uploadFiles(files);
+            }
+        }
+
+        async function uploadFiles(files) {
+            const category = document.getElementById('uploadCategory').value;
+            const subcategory = document.getElementById('uploadSubcategory').value;
+            const event = document.getElementById('uploadEvent').value;
+
+            if (!category) {
+                alert('Please select a category first');
+                return;
+            }
+
+            const progressDiv = document.getElementById('uploadProgress');
+            const resultsDiv = document.getElementById('uploadResults');
+            progressDiv.classList.remove('hidden');
+            resultsDiv.classList.add('hidden');
+
+            let uploaded = 0;
+            let failed = 0;
+            const results = [];
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                progressDiv.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
+                        <span>Uploading ${i + 1}/${files.length}: ${file.name}</span>
+                    </div>
+                `;
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('category', category);
+                formData.append('subcategory', subcategory);
+                formData.append('event', event);
+                formData.append('title', file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+
+                try {
+                    const response = await fetch('/admin/upload-video', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    const result = await response.json();
+
+                    if (result.success) {
+                        uploaded++;
+                        results.push({ name: file.name, success: true, converted: result.converted });
+                    } else {
+                        failed++;
+                        results.push({ name: file.name, success: false, error: result.error });
+                    }
+                } catch (error) {
+                    failed++;
+                    results.push({ name: file.name, success: false, error: error.message });
+                }
+            }
+
+            progressDiv.classList.add('hidden');
+            resultsDiv.classList.remove('hidden');
+            resultsDiv.innerHTML = `
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <p class="font-semibold mb-2">${uploaded} uploaded, ${failed} failed</p>
+                    <div class="max-h-32 overflow-y-auto text-sm">
+                        ${results.map(r => `
+                            <div class="${r.success ? 'text-green-400' : 'text-red-400'}">
+                                ${r.success ? '✓' : '✗'} ${r.name} ${r.converted ? '(converted)' : ''} ${r.error ? '- ' + r.error : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            if (uploaded > 0) {
+                setTimeout(() => location.reload(), 2000);
+            }
         }
 
         // Fix Dropbox URLs

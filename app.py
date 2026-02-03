@@ -8,6 +8,7 @@ import subprocess
 import shutil
 from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for, session, send_from_directory, g
+from werkzeug.utils import secure_filename
 from functools import wraps
 import sqlite3
 
@@ -860,6 +861,108 @@ def add_video():
     })
 
     return jsonify({'success': True, 'message': 'Video added successfully', 'id': video_id})
+
+
+@app.route('/admin/upload-video', methods=['POST'])
+@admin_required
+def upload_video():
+    """Upload a video file directly."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # Get form data
+    title = request.form.get('title', '').strip()
+    category = request.form.get('category', '')
+    subcategory = request.form.get('subcategory', '')
+    event = request.form.get('event', '').strip()
+
+    if not category:
+        return jsonify({'error': 'Category is required'}), 400
+
+    if category not in CATEGORIES:
+        return jsonify({'error': 'Invalid category'}), 400
+
+    # Check file extension
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+    allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv', '.mts', '.m2ts', '.avi', '.mkv')
+
+    if ext not in allowed_extensions:
+        return jsonify({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}), 400
+
+    video_id = str(uuid.uuid4())[:8]
+
+    # Generate title from filename if not provided
+    if not title:
+        title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
+
+    needs_conversion = ext in CONVERSION_FORMATS
+
+    try:
+        if needs_conversion:
+            # Save to temp, convert, then save to videos folder
+            import tempfile
+            temp_path = os.path.join(tempfile.gettempdir(), f"{video_id}_input{ext}")
+            file.save(temp_path)
+
+            output_filename = f"{video_id}.mp4"
+            output_path = os.path.join(VIDEOS_FOLDER, output_filename)
+
+            if convert_video_to_mp4(temp_path, output_path):
+                os.remove(temp_path)
+                local_file = output_filename
+            else:
+                os.remove(temp_path)
+                return jsonify({'error': 'Failed to convert video. Make sure ffmpeg is installed.'}), 400
+        else:
+            # Save directly
+            output_filename = f"{video_id}{ext}"
+            output_path = os.path.join(VIDEOS_FOLDER, output_filename)
+            file.save(output_path)
+            local_file = output_filename
+
+        # Generate thumbnail
+        thumbnail_filename = f"{video_id}_thumb.jpg"
+        thumbnail_path = os.path.join(VIDEOS_FOLDER, thumbnail_filename)
+        if generate_thumbnail(output_path, thumbnail_path):
+            thumbnail = f"/static/videos/{thumbnail_filename}"
+        else:
+            thumbnail = None
+
+        # Get duration
+        duration = get_video_duration(output_path)
+
+        # Save to database
+        save_video({
+            'id': video_id,
+            'title': title,
+            'description': '',
+            'url': '',
+            'thumbnail': thumbnail,
+            'category': category,
+            'subcategory': subcategory,
+            'tags': '',
+            'duration': duration,
+            'created_at': datetime.now().isoformat(),
+            'views': 0,
+            'video_type': 'local',
+            'local_file': local_file,
+            'event': event
+        })
+
+        return jsonify({
+            'success': True,
+            'message': 'Video uploaded successfully',
+            'id': video_id,
+            'converted': needs_conversion
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Upload failed: {str(e)}'}), 500
 
 
 @app.route('/admin/import-folder', methods=['POST'])
