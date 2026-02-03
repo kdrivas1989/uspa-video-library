@@ -721,6 +721,56 @@ def admin_dashboard():
                          dropbox_app_key=DROPBOX_APP_KEY)
 
 
+def download_and_convert_video(url, video_id):
+    """Download video from URL and convert to MP4 if needed."""
+    import urllib.request
+    import tempfile
+
+    # Check if it's a video format that needs conversion
+    url_lower = url.lower()
+    needs_conversion = any(ext in url_lower for ext in ['.mts', '.m2ts', '.avi', '.mkv', '.mov'])
+
+    if not needs_conversion:
+        return None, None, None  # Use URL directly
+
+    try:
+        # Download the file
+        temp_dir = tempfile.gettempdir()
+        ext = '.mts' if '.mts' in url_lower else '.m2ts' if '.m2ts' in url_lower else '.avi' if '.avi' in url_lower else '.mkv' if '.mkv' in url_lower else '.mov'
+        temp_input = os.path.join(temp_dir, f"{video_id}_input{ext}")
+
+        print(f"Downloading {url}...")
+        urllib.request.urlretrieve(url, temp_input)
+
+        # Convert to MP4
+        output_filename = f"{video_id}.mp4"
+        output_path = os.path.join(VIDEOS_FOLDER, output_filename)
+
+        print(f"Converting to MP4...")
+        if convert_video_to_mp4(temp_input, output_path):
+            # Generate thumbnail
+            thumbnail_filename = f"{video_id}_thumb.jpg"
+            thumbnail_path = os.path.join(VIDEOS_FOLDER, thumbnail_filename)
+            if generate_thumbnail(output_path, thumbnail_path):
+                thumbnail = f"/static/videos/{thumbnail_filename}"
+            else:
+                thumbnail = None
+
+            # Get duration
+            duration = get_video_duration(output_path)
+
+            # Clean up temp file
+            os.remove(temp_input)
+
+            return output_filename, thumbnail, duration
+        else:
+            os.remove(temp_input)
+            return None, None, None
+    except Exception as e:
+        print(f"Error downloading/converting: {e}")
+        return None, None, None
+
+
 @app.route('/admin/add-video', methods=['POST'])
 @admin_required
 def add_video():
@@ -743,6 +793,38 @@ def add_video():
         return jsonify({'error': 'Invalid category'}), 400
 
     video_id = str(uuid.uuid4())[:8]
+
+    # Check if video needs conversion (MTS, etc.)
+    url_lower = url.lower()
+    needs_conversion = any(ext in url_lower for ext in ['.mts', '.m2ts', '.avi', '.mkv'])
+
+    if needs_conversion and not USE_SUPABASE:
+        # Local mode - download and convert
+        local_file, thumbnail, vid_duration = download_and_convert_video(url, video_id)
+        if local_file:
+            save_video({
+                'id': video_id,
+                'title': title,
+                'description': description,
+                'url': '',
+                'thumbnail': thumbnail,
+                'category': category,
+                'subcategory': subcategory,
+                'tags': tags,
+                'duration': vid_duration or duration,
+                'created_at': datetime.now().isoformat(),
+                'views': 0,
+                'video_type': 'local',
+                'local_file': local_file,
+                'event': event
+            })
+            return jsonify({'success': True, 'message': 'Video converted and added successfully', 'id': video_id})
+        else:
+            return jsonify({'error': 'Failed to convert video. Make sure ffmpeg is installed.'}), 400
+    elif needs_conversion and USE_SUPABASE:
+        return jsonify({'error': 'MTS/AVI/MKV files need to be converted to MP4 first. Convert locally or upload MP4 files to Dropbox.'}), 400
+
+    # Regular URL video (MP4, YouTube, etc.)
     thumbnail = get_video_thumbnail(url)
 
     save_video({
