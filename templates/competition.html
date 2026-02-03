@@ -47,6 +47,23 @@
             {% endif %}
         </div>
 
+        <!-- Legend -->
+        <div class="flex items-center gap-6 mb-4 text-sm">
+            <span class="text-gray-400">Round Status:</span>
+            <span class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded bg-gray-600 inline-block"></span>
+                <span class="text-gray-400">No video</span>
+            </span>
+            <span class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded bg-yellow-600 inline-block text-center text-xs leading-6">📹</span>
+                <span class="text-gray-400">Video uploaded (needs scoring)</span>
+            </span>
+            <span class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded bg-green-600 inline-block"></span>
+                <span class="text-gray-400">Scored</span>
+            </span>
+        </div>
+
         <!-- Class Tabs -->
         <div class="flex gap-2 mb-6 border-b border-gray-700 pb-2">
             <button onclick="showClass('all')" id="tab-all" class="px-4 py-2 rounded-t-lg bg-blue-600 text-white">
@@ -98,9 +115,10 @@
                             {% for i in range(1, competition.total_rounds + 1) %}
                             {% set round_score = team.scores|selectattr('round_num', 'equalto', i)|first %}
                             <td class="px-2 py-3 text-center">
-                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, {{ round_score.score if round_score else 'null' }}, '{{ round_score.video_id if round_score else '' }}')"
-                                    class="w-10 h-8 rounded text-sm {% if round_score %}bg-green-600 hover:bg-green-700{% else %}bg-gray-600 hover:bg-gray-500{% endif %}">
-                                    {% if round_score %}{{ round_score.score|int }}{% else %}-{% endif %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, {{ round_score.score if round_score and round_score.score is not none else 'null' }}, '{{ round_score.video_id if round_score else '' }}')"
+                                    class="w-10 h-8 rounded text-sm {% if round_score and round_score.score is not none %}bg-green-600 hover:bg-green-700{% elif round_score and round_score.video_id %}bg-yellow-600 hover:bg-yellow-700{% else %}bg-gray-600 hover:bg-gray-500{% endif %}"
+                                    title="{% if round_score and round_score.score is not none %}Scored: {{ round_score.score }}{% elif round_score and round_score.video_id %}Video uploaded - needs scoring{% else %}No video{% endif %}">
+                                    {% if round_score and round_score.score is not none %}{{ round_score.score|int }}{% elif round_score and round_score.video_id %}📹{% else %}-{% endif %}
                                 </button>
                             </td>
                             {% endfor %}
@@ -199,32 +217,46 @@
     </div>
 
     <!-- Round Score Modal (with video upload) -->
-    <div id="roundModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-lg mx-4">
+    <div id="roundModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 overflow-y-auto py-4">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-3xl mx-4 my-auto">
             <h2 class="text-xl font-bold mb-2">Round <span id="roundNum"></span></h2>
             <p class="text-gray-400 mb-4" id="roundTeamName"></p>
             <form onsubmit="saveRoundScore(event)">
                 <input type="hidden" id="roundTeamId">
                 <input type="hidden" id="roundNumber">
+                <input type="hidden" id="existingVideoId">
 
                 <div class="space-y-4">
-                    <!-- Score Entry -->
-                    <div>
-                        <label class="block text-gray-400 text-sm mb-1">Score</label>
-                        <input type="number" id="roundScore" step="0.01" min="0"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="0">
+                    <!-- Video Player (shown when video exists) -->
+                    <div id="videoPlayerSection" class="hidden">
+                        <div class="aspect-video bg-black rounded-lg overflow-hidden mb-2">
+                            <video id="roundVideoPlayer" controls class="w-full h-full">
+                                Your browser does not support video playback.
+                            </video>
+                        </div>
+                        <div class="flex items-center justify-between text-sm">
+                            <span class="text-green-400">📹 Video ready for judging</span>
+                            <a href="#" id="viewVideoFullLink" target="_blank" class="text-blue-400 hover:underline">Open full player →</a>
+                        </div>
                     </div>
 
-                    <!-- Video Upload Section -->
-                    <div class="border-t border-gray-700 pt-4">
-                        <label class="block text-gray-400 text-sm mb-2">Video</label>
-
-                        <!-- Existing Video -->
-                        <div id="existingVideo" class="hidden mb-3 p-3 bg-gray-700 rounded">
-                            <span class="text-green-400">Video uploaded</span>
-                            <a href="#" id="viewVideoLink" target="_blank" class="text-blue-400 ml-2 hover:underline">View</a>
+                    <!-- Score Entry (for judges) -->
+                    <div class="bg-gray-900 rounded-lg p-4">
+                        <label class="block text-gray-400 text-sm mb-2">Score</label>
+                        <div class="flex items-center gap-4">
+                            <input type="number" id="roundScore" step="1" min="0"
+                                class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                placeholder="--">
+                            <div class="text-gray-500 text-sm">
+                                <div>Points scored</div>
+                                <div class="text-xs">(minus omissions)</div>
+                            </div>
                         </div>
+                    </div>
+
+                    <!-- Video Upload Section (for videographers) -->
+                    <div id="videoUploadSection" class="border-t border-gray-700 pt-4">
+                        <label class="block text-gray-400 text-sm mb-2">Upload Video</label>
 
                         <!-- Upload Options -->
                         <div class="grid grid-cols-2 gap-3">
@@ -238,7 +270,7 @@
                                 </button>
                             </div>
 
-                            <!-- Camera Capture -->
+                            <!-- Camera/Device Capture -->
                             <div>
                                 <input type="file" id="roundVideoCapture" accept="video/*" capture="environment" class="hidden" onchange="handleVideoSelect(event)">
                                 <button type="button" onclick="document.getElementById('roundVideoCapture').click()"
@@ -250,24 +282,30 @@
                         </div>
 
                         <!-- Selected File Display -->
-                        <div id="selectedVideoInfo" class="hidden mt-3 p-3 bg-gray-700 rounded">
+                        <div id="selectedVideoInfo" class="hidden mt-3 p-3 bg-gray-700 rounded flex items-center justify-between">
                             <span id="selectedVideoName" class="text-sm"></span>
-                            <button type="button" onclick="clearSelectedVideo()" class="text-red-400 ml-2 text-sm hover:underline">Remove</button>
+                            <button type="button" onclick="clearSelectedVideo()" class="text-red-400 text-sm hover:underline">Remove</button>
                         </div>
 
                         <!-- Upload Progress -->
                         <div id="uploadProgress" class="hidden mt-3">
                             <div class="bg-gray-700 rounded-full h-2">
-                                <div id="uploadBar" class="bg-blue-600 h-2 rounded-full" style="width: 0%"></div>
+                                <div id="uploadBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
                             </div>
                             <p class="text-gray-400 text-sm mt-1" id="uploadStatus">Uploading...</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideRoundModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
-                    <button type="submit" id="saveRoundBtn" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Save</button>
+                <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
+                    <div class="text-sm text-gray-500">
+                        <span id="modalStatusText"></span>
+                    </div>
+                    <div class="flex gap-3">
+                        <button type="button" onclick="hideRoundModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                        <button type="button" onclick="uploadVideoOnly()" id="uploadOnlyBtn" class="hidden px-4 py-2 rounded bg-blue-600 hover:bg-blue-700">Upload Video Only</button>
+                        <button type="submit" id="saveRoundBtn" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Save Score</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -323,25 +361,63 @@
             document.getElementById('roundNumber').value = roundNum;
             document.getElementById('roundNum').textContent = roundNum;
             document.getElementById('roundTeamName').textContent = teamName;
-            document.getElementById('roundScore').value = score || '';
+            document.getElementById('roundScore').value = (score !== null && score !== undefined) ? score : '';
+            document.getElementById('existingVideoId').value = videoId || '';
 
-            // Video status
-            if (videoId) {
-                document.getElementById('existingVideo').classList.remove('hidden');
-                document.getElementById('viewVideoLink').href = '/video/' + videoId;
-            } else {
-                document.getElementById('existingVideo').classList.add('hidden');
-            }
-
+            // Reset state
             selectedVideoFile = null;
             document.getElementById('selectedVideoInfo').classList.add('hidden');
             document.getElementById('uploadProgress').classList.add('hidden');
+            document.getElementById('roundVideoFile').value = '';
+            document.getElementById('roundVideoCapture').value = '';
+
+            // Video player section
+            const videoPlayerSection = document.getElementById('videoPlayerSection');
+            const videoPlayer = document.getElementById('roundVideoPlayer');
+            const uploadOnlyBtn = document.getElementById('uploadOnlyBtn');
+
+            if (videoId) {
+                // Show video player with the uploaded video
+                videoPlayerSection.classList.remove('hidden');
+                // Fetch actual video URL
+                fetch('/admin/get-video-info/' + videoId)
+                    .then(r => r.json())
+                    .then(data => {
+                        if (data.url) {
+                            videoPlayer.src = data.url;
+                        }
+                    })
+                    .catch(err => console.error('Error loading video:', err));
+                document.getElementById('viewVideoFullLink').href = '/video/' + videoId;
+
+                // Update status
+                if (score !== null && score !== undefined) {
+                    document.getElementById('modalStatusText').textContent = '✓ Video uploaded and scored';
+                    document.getElementById('modalStatusText').classList.add('text-green-400');
+                } else {
+                    document.getElementById('modalStatusText').textContent = '⏳ Video uploaded - awaiting score';
+                    document.getElementById('modalStatusText').classList.remove('text-green-400');
+                    document.getElementById('modalStatusText').classList.add('text-yellow-400');
+                }
+
+                uploadOnlyBtn.classList.add('hidden');
+            } else {
+                // No video yet
+                videoPlayerSection.classList.add('hidden');
+                videoPlayer.src = '';
+                document.getElementById('modalStatusText').textContent = 'No video uploaded yet';
+                document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
+                uploadOnlyBtn.classList.add('hidden');
+            }
 
             document.getElementById('roundModal').classList.remove('hidden');
         }
 
         function hideRoundModal() {
             document.getElementById('roundModal').classList.add('hidden');
+            // Stop video playback
+            document.getElementById('roundVideoPlayer').pause();
+            document.getElementById('roundVideoPlayer').src = '';
         }
 
         function handleVideoSelect(event) {
@@ -350,14 +426,83 @@
                 selectedVideoFile = file;
                 document.getElementById('selectedVideoName').textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)';
                 document.getElementById('selectedVideoInfo').classList.remove('hidden');
+                // Show "Upload Video Only" button for videographers
+                document.getElementById('uploadOnlyBtn').classList.remove('hidden');
             }
         }
 
         function clearSelectedVideo() {
             selectedVideoFile = null;
             document.getElementById('selectedVideoInfo').classList.add('hidden');
+            document.getElementById('uploadOnlyBtn').classList.add('hidden');
             document.getElementById('roundVideoFile').value = '';
             document.getElementById('roundVideoCapture').value = '';
+        }
+
+        async function uploadVideoOnly() {
+            if (!selectedVideoFile) {
+                alert('Please select a video first');
+                return;
+            }
+
+            const teamId = document.getElementById('roundTeamId').value;
+            const roundNum = document.getElementById('roundNumber').value;
+            const teamName = document.getElementById('roundTeamName').textContent;
+
+            document.getElementById('uploadProgress').classList.remove('hidden');
+            document.getElementById('uploadOnlyBtn').disabled = true;
+            document.getElementById('saveRoundBtn').disabled = true;
+            document.getElementById('uploadBar').style.width = '30%';
+            document.getElementById('uploadStatus').textContent = 'Uploading video...';
+
+            const formData = new FormData();
+            formData.append('file', selectedVideoFile);
+            formData.append('category', '{{ competition.event_type }}');
+            formData.append('event', '{{ competition.name }}');
+            formData.append('title', teamName + ' - Round ' + roundNum);
+
+            try {
+                document.getElementById('uploadBar').style.width = '60%';
+
+                const uploadResponse = await fetch('/admin/upload-video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const uploadResult = await uploadResponse.json();
+
+                if (uploadResult.success) {
+                    document.getElementById('uploadBar').style.width = '90%';
+                    document.getElementById('uploadStatus').textContent = 'Saving...';
+
+                    // Save score record with video but no score
+                    const response = await fetch('/admin/team/' + teamId + '/score', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            round_num: parseInt(roundNum),
+                            score: null,  // No score yet
+                            video_id: uploadResult.id
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (result.success) {
+                        document.getElementById('uploadBar').style.width = '100%';
+                        document.getElementById('uploadStatus').textContent = 'Video uploaded! Ready for judging.';
+                        setTimeout(() => location.reload(), 1000);
+                    } else {
+                        alert(result.error || 'Failed to save');
+                    }
+                } else {
+                    alert('Video upload failed: ' + uploadResult.error);
+                }
+            } catch (err) {
+                alert('Upload error: ' + err.message);
+            }
+
+            document.getElementById('uploadOnlyBtn').disabled = false;
+            document.getElementById('saveRoundBtn').disabled = false;
         }
 
         async function addTeam(e) {
@@ -418,14 +563,25 @@
 
             const teamId = document.getElementById('roundTeamId').value;
             const roundNum = document.getElementById('roundNumber').value;
-            const score = parseFloat(document.getElementById('roundScore').value) || 0;
+            const scoreInput = document.getElementById('roundScore').value;
+            const existingVideoId = document.getElementById('existingVideoId').value;
 
-            let videoId = '';
+            // Validate score is entered
+            if (scoreInput === '' || scoreInput === null) {
+                alert('Please enter a score');
+                return;
+            }
 
-            // Upload video if selected
+            const score = parseFloat(scoreInput);
+            let videoId = existingVideoId;  // Keep existing video if any
+
+            // Upload new video if selected
             if (selectedVideoFile) {
                 document.getElementById('uploadProgress').classList.remove('hidden');
                 document.getElementById('saveRoundBtn').disabled = true;
+                document.getElementById('uploadOnlyBtn').disabled = true;
+                document.getElementById('uploadBar').style.width = '30%';
+                document.getElementById('uploadStatus').textContent = 'Uploading video...';
 
                 const formData = new FormData();
                 formData.append('file', selectedVideoFile);
@@ -434,6 +590,8 @@
                 formData.append('title', document.getElementById('roundTeamName').textContent + ' - Round ' + roundNum);
 
                 try {
+                    document.getElementById('uploadBar').style.width = '60%';
+
                     const uploadResponse = await fetch('/admin/upload-video', {
                         method: 'POST',
                         body: formData
@@ -443,21 +601,26 @@
                     if (uploadResult.success) {
                         videoId = uploadResult.id;
                         document.getElementById('uploadStatus').textContent = 'Video uploaded!';
-                        document.getElementById('uploadBar').style.width = '100%';
+                        document.getElementById('uploadBar').style.width = '80%';
                     } else {
                         alert('Video upload failed: ' + uploadResult.error);
                         document.getElementById('saveRoundBtn').disabled = false;
+                        document.getElementById('uploadOnlyBtn').disabled = false;
                         return;
                     }
                 } catch (err) {
                     alert('Video upload error: ' + err.message);
                     document.getElementById('saveRoundBtn').disabled = false;
+                    document.getElementById('uploadOnlyBtn').disabled = false;
                     return;
                 }
             }
 
             // Save score
             try {
+                document.getElementById('uploadStatus').textContent = 'Saving score...';
+                document.getElementById('uploadBar').style.width = '90%';
+
                 const response = await fetch('/admin/team/' + teamId + '/score', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -470,7 +633,9 @@
 
                 const result = await response.json();
                 if (result.success) {
-                    location.reload();
+                    document.getElementById('uploadBar').style.width = '100%';
+                    document.getElementById('uploadStatus').textContent = 'Score saved!';
+                    setTimeout(() => location.reload(), 500);
                 } else {
                     alert(result.error || 'Failed to save score');
                 }
@@ -479,6 +644,7 @@
             }
 
             document.getElementById('saveRoundBtn').disabled = false;
+            document.getElementById('uploadOnlyBtn').disabled = false;
         }
 
         async function deleteTeam(teamId) {

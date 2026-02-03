@@ -1675,7 +1675,8 @@ def save_team_score(team_id):
         return jsonify({'error': 'Team not found'}), 404
 
     round_num = int(data.get('round_num', 1))
-    score = float(data.get('score', 0))
+    score_val = data.get('score')
+    score = float(score_val) if score_val is not None else None
     score_data = data.get('score_data', '')
     video_id = data.get('video_id', '')
 
@@ -1685,6 +1686,9 @@ def save_team_score(team_id):
 
     if existing:
         score_id = existing['id']
+        # Preserve existing video_id if not provided
+        if not video_id and existing.get('video_id'):
+            video_id = existing['video_id']
     else:
         score_id = str(uuid.uuid4())[:8]
 
@@ -1700,6 +1704,28 @@ def save_team_score(team_id):
     })
 
     return jsonify({'success': True, 'message': 'Score saved'})
+
+
+@app.route('/admin/get-video-info/<video_id>')
+@admin_required
+def get_video_info(video_id):
+    """Get video file info for embedding."""
+    video = get_video(video_id)
+    if not video:
+        return jsonify({'error': 'Video not found'}), 404
+
+    video_url = ''
+    if video.get('local_file'):
+        video_url = f'/static/videos/{video["local_file"]}'
+    elif video.get('url'):
+        video_url = video['url']
+
+    return jsonify({
+        'id': video_id,
+        'title': video.get('title', ''),
+        'url': video_url,
+        'local_file': video.get('local_file', '')
+    })
 
 
 if __name__ == '__main__':
