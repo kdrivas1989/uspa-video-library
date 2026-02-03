@@ -160,6 +160,18 @@ def init_db():
             cursor.execute('ALTER TABLE videos ADD COLUMN event TEXT')
         except:
             pass
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN team TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN round_num TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN jump_num TEXT')
+        except:
+            pass
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
@@ -239,14 +251,16 @@ def save_video(video_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO videos (id, title, description, url, thumbnail, category, subcategory, tags, duration, created_at, views, video_type, local_file, event)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO videos (id, title, description, url, thumbnail, category, subcategory, tags, duration, created_at, views, video_type, local_file, event, team, round_num, jump_num)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (video_data['id'], video_data['title'], video_data.get('description', ''),
               video_data.get('url', ''), video_data.get('thumbnail'), video_data['category'],
               video_data.get('subcategory', ''), video_data.get('tags', ''),
               video_data.get('duration', ''), video_data['created_at'],
               video_data.get('views', 0), video_data.get('video_type', 'url'),
-              video_data.get('local_file', ''), video_data.get('event', '')))
+              video_data.get('local_file', ''), video_data.get('event', ''),
+              video_data.get('team', ''), video_data.get('round_num', ''),
+              video_data.get('jump_num', '')))
         db.commit()
 
 
@@ -415,6 +429,134 @@ def get_video_duration(file_path):
         return f"{mins}:{secs:02d}"
     except:
         return None
+
+
+import re
+
+def parse_filename_metadata(filename, folder_path=''):
+    """Extract metadata from filename and folder path."""
+    # Remove extension and clean up
+    name = os.path.splitext(filename)[0]
+    name_lower = name.lower()
+    folder_lower = folder_path.lower()
+    combined = f"{folder_lower} {name_lower}"
+
+    metadata = {
+        'category': '',
+        'subcategory': '',
+        'event': '',
+        'team': '',
+        'round': '',
+        'jump': '',
+        'title': ''
+    }
+
+    # Category detection
+    category_patterns = {
+        'cp': [r'\bcp\b', r'canopy.?piloting'],
+        'fs': [r'\bfs\b', r'formation.?skydiving'],
+        'cf': [r'\bcf\b', r'canopy.?formation', r'\bcrw\b'],
+        'ae': [r'\bae\b', r'artistic', r'\bfreestyle\b', r'\bfreefly\b'],
+        'ws': [r'\bws\b', r'wingsuit'],
+        'al': [r'\bal\b', r'accuracy.?landing', r'\baccuracy\b']
+    }
+
+    for cat_id, patterns in category_patterns.items():
+        for pattern in patterns:
+            if re.search(pattern, combined):
+                metadata['category'] = cat_id
+                break
+        if metadata['category']:
+            break
+
+    # Subcategory detection
+    subcategory_patterns = {
+        'cp': {
+            'freestyle': [r'freestyle', r'free.?style'],
+            'speed': [r'\bspeed\b'],
+            'distance': [r'\bdistance\b'],
+            'zone_accuracy': [r'zone', r'zone.?accuracy']
+        },
+        'fs': {
+            '4way_fs': [r'\b4.?way\b(?!.*vfs)', r'4way.?fs'],
+            '4way_vfs': [r'vfs', r'vertical', r'4.?way.?vfs'],
+            '2way_mfs': [r'2.?way', r'mfs'],
+            '8way': [r'\b8.?way\b'],
+            '10way': [r'\b10.?way\b'],
+            '16way': [r'\b16.?way\b']
+        },
+        'cf': {
+            '4way': [r'\b4.?way\b'],
+            '2way': [r'\b2.?way\b']
+        },
+        'ae': {
+            'freestyle': [r'freestyle(?!.*fly)'],
+            'freefly': [r'freefly', r'free.?fly']
+        }
+    }
+
+    if metadata['category'] in subcategory_patterns:
+        for sub_id, patterns in subcategory_patterns[metadata['category']].items():
+            for pattern in patterns:
+                if re.search(pattern, combined):
+                    metadata['subcategory'] = sub_id
+                    break
+            if metadata['subcategory']:
+                break
+
+    # Event detection from folder path
+    folder_parts = folder_path.split(os.sep)
+    for part in folder_parts:
+        part_lower = part.lower()
+        # Look for year + event keywords
+        if re.search(r'20\d{2}', part) or any(kw in part_lower for kw in ['nationals', 'championship', 'world', 'uspa', 'competition']):
+            if len(part) > 5:
+                metadata['event'] = part.replace('_', ' ').replace('-', ' ').strip()
+                break
+
+    # Team/Competitor detection - look for team names or proper nouns
+    # Common patterns: "Team_Name", "TeamName", names after "team"
+    team_match = re.search(r'team[_\s-]?([a-zA-Z0-9]+)', combined, re.IGNORECASE)
+    if team_match:
+        metadata['team'] = team_match.group(1).title()
+    else:
+        # Look for capitalized words that might be team names
+        words = re.findall(r'\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\b', name)
+        # Filter out common non-team words
+        skip_words = ['Round', 'Jump', 'Team', 'Final', 'Semi', 'Freestyle', 'Speed', 'Distance']
+        teams = [w for w in words if w not in skip_words and len(w) > 2]
+        if teams:
+            metadata['team'] = teams[0]
+
+    # Round detection
+    round_match = re.search(r'(?:round|rd|r)[_\s-]?(\d+)', combined, re.IGNORECASE)
+    if round_match:
+        metadata['round'] = round_match.group(1)
+
+    # Jump number detection
+    jump_match = re.search(r'(?:jump|j)[_\s-]?(\d+)', combined, re.IGNORECASE)
+    if jump_match:
+        metadata['jump'] = jump_match.group(1)
+
+    # Build a nice title
+    title_parts = []
+    if metadata['team']:
+        title_parts.append(metadata['team'])
+    if metadata['round']:
+        title_parts.append(f"Round {metadata['round']}")
+    if metadata['jump']:
+        title_parts.append(f"Jump {metadata['jump']}")
+
+    if title_parts:
+        metadata['title'] = ' - '.join(title_parts)
+    else:
+        # Fall back to cleaned filename
+        metadata['title'] = name.replace('_', ' ').replace('-', ' ').strip()
+        # Remove leading zeros from numeric filenames
+        if metadata['title'].isdigit() or re.match(r'^0+\d+$', metadata['title']):
+            metadata['title'] = f"Video {int(metadata['title'])}"
+
+    return metadata
 
 
 def generate_thumbnail(video_path, thumbnail_path):
@@ -628,7 +770,18 @@ def import_folder():
     if not folder_path or not os.path.isdir(folder_path):
         return jsonify({'error': 'Invalid folder path'}), 400
 
-    if category not in CATEGORIES:
+    # User-provided values (can be empty to allow auto-detection per file)
+    user_category = category
+    user_subcategory = subcategory
+    user_event = event
+
+    # If no category provided, try to detect from folder path
+    if not user_category:
+        folder_meta = parse_filename_metadata('', folder_path)
+        if folder_meta['category']:
+            user_category = folder_meta['category']
+
+    if user_category and user_category not in CATEGORIES:
         return jsonify({'error': 'Invalid category'}), 400
 
     video_extensions = ('.mp4', '.mts', '.m2ts', '.mov', '.avi', '.mkv', '.webm')
@@ -644,6 +797,25 @@ def import_folder():
         try:
             input_path = os.path.join(folder_path, filename)
             video_id = str(uuid.uuid4())[:8]
+
+            # Parse metadata from filename
+            file_meta = parse_filename_metadata(filename, folder_path)
+
+            # Use user-provided values if set, otherwise use auto-detected
+            final_category = user_category or file_meta['category'] or 'cp'  # default to cp
+            final_subcategory = user_subcategory or file_meta['subcategory']
+            final_event = user_event or file_meta['event']
+            final_title = file_meta['title']
+
+            # Build tags from detected metadata
+            tags_list = []
+            if file_meta['team']:
+                tags_list.append(file_meta['team'])
+            if file_meta['round']:
+                tags_list.append(f"Round {file_meta['round']}")
+            if file_meta['jump']:
+                tags_list.append(f"Jump {file_meta['jump']}")
+            tags = ', '.join(tags_list)
 
             needs_conversion = not filename.lower().endswith(('.mp4', '.webm'))
 
@@ -674,23 +846,25 @@ def import_folder():
                 thumbnail = None
 
             duration = get_video_duration(os.path.join(VIDEOS_FOLDER, local_file))
-            title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
 
             save_video({
                 'id': video_id,
-                'title': title,
+                'title': final_title,
                 'description': '',
                 'url': '',
                 'thumbnail': thumbnail,
-                'category': category,
-                'subcategory': subcategory,
-                'tags': '',
+                'category': final_category,
+                'subcategory': final_subcategory,
+                'tags': tags,
                 'duration': duration,
                 'created_at': datetime.now().isoformat(),
                 'views': 0,
                 'video_type': 'local',
                 'local_file': local_file,
-                'event': event
+                'event': final_event,
+                'team': file_meta.get('team', ''),
+                'round_num': file_meta.get('round', ''),
+                'jump_num': file_meta.get('jump', '')
             })
 
             imported += 1

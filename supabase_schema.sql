@@ -16,11 +16,17 @@ CREATE TABLE IF NOT EXISTS videos (
     views INTEGER DEFAULT 0,
     video_type TEXT DEFAULT 'url',
     local_file TEXT,
-    event TEXT
+    event TEXT,
+    team TEXT,
+    round_num TEXT,
+    jump_num TEXT
 );
 
--- Add event column if table already exists
+-- Add columns if table already exists
 ALTER TABLE videos ADD COLUMN IF NOT EXISTS event TEXT;
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS team TEXT;
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS round_num TEXT;
+ALTER TABLE videos ADD COLUMN IF NOT EXISTS jump_num TEXT;
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
