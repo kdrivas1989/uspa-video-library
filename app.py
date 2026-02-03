@@ -1568,8 +1568,9 @@ def events_list():
 
 # Competition routes
 @app.route('/competitions')
+@admin_required
 def competitions_list():
-    """Show all competitions."""
+    """Show all competitions (admin only)."""
     try:
         competitions = get_all_competitions()
 
@@ -2037,8 +2038,9 @@ def get_video_info(video_id):
 # ===========================================
 
 @app.route('/videographer/upload-video', methods=['POST'])
+@admin_required
 def videographer_upload_video():
-    """Upload a video file (videographer access - no admin required)."""
+    """Upload a video file (admin only)."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
 
@@ -2135,8 +2137,9 @@ def videographer_upload_video():
 
 
 @app.route('/videographer/upload-flysight', methods=['POST'])
+@admin_required
 def videographer_upload_flysight():
-    """Upload a FlysSight CSV file for Speed Skydiving."""
+    """Upload a FlysSight CSV file for Speed Skydiving (admin only)."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
 
@@ -2200,8 +2203,9 @@ def videographer_upload_flysight():
 
 
 @app.route('/videographer/team/<team_id>/score', methods=['POST'])
+@admin_required
 def videographer_save_team_score(team_id):
-    """Save a score for a team (videographer access - no admin required)."""
+    """Save a score for a team (admin only)."""
     data = request.json
 
     team = get_team(team_id)
@@ -2271,8 +2275,9 @@ def videographer_get_video_info(video_id):
 
 
 @app.route('/videographer')
+@admin_required
 def videographer_upload_page():
-    """Videographer upload page with event/team/round selection."""
+    """Videographer upload page (admin only)."""
     try:
         competitions = get_all_competitions()
         return render_template('videographer.html',
