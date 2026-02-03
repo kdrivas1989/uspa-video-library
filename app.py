@@ -3088,6 +3088,20 @@ def get_training_videos(comp_id):
     return jsonify({'videos': videos, 'count': len(videos)})
 
 
+@app.route('/admin/competition/<comp_id>/teams', methods=['GET'])
+@admin_required
+def get_competition_teams(comp_id):
+    """Get all teams for a competition with their score status."""
+    teams = get_teams_for_competition(comp_id)
+
+    # Add has_scores flag to each team
+    for team in teams:
+        scores = get_team_scores(team['id'])
+        team['has_scores'] = any(s.get('score') is not None for s in scores)
+
+    return jsonify({'success': True, 'teams': teams})
+
+
 @app.route('/admin/competition/<comp_id>/add-team', methods=['POST'])
 @admin_required
 def add_team(comp_id):

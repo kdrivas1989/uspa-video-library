@@ -71,6 +71,9 @@
                         </button>
                     </div>
                 </div>
+                <button onclick="showBulkEditModal()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm">
+                    Bulk Edit
+                </button>
                 {% if not has_scores %}
                 <button onclick="deleteCompetition()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm">
                     Delete
@@ -203,9 +206,6 @@
                                 {% if 'sp' in event_type %}
                                 <th class="px-4 py-3 text-right">Avg Speed</th>
                                 {% endif %}
-                                {% if is_admin %}
-                                <th class="px-4 py-3 text-right">Actions</th>
-                                {% endif %}
                             </tr>
                         </thead>
                         <tbody>
@@ -313,17 +313,6 @@
                                     {% endif %}
                                 </td>
                                 {% endif %}
-                                {% if is_admin %}
-                                <td class="px-4 py-3 text-right space-x-2">
-                                    {% set has_scores = team.scores|selectattr('score', 'ne', none)|list|length > 0 %}
-                                    {% if not has_scores %}
-                                    <button onclick="openEditTeamModal('{{ team.id }}', '{{ team.team_number }}', '{{ team.team_name }}', '{{ team.class }}', '{{ team.members|default("", true) }}', '{{ team.category|default("", true) }}', '{{ team.event|default("", true) }}', '{{ team.photo|default("", true) }}')" class="text-blue-400 hover:text-gray-700 text-sm">Edit</button>
-                                    <button onclick="deleteTeam('{{ team.id }}')" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
-                                    {% else %}
-                                    <span class="text-gray-400 text-xs">-</span>
-                                    {% endif %}
-                                </td>
-                                {% endif %}
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -380,9 +369,6 @@
                             <th class="px-4 py-3 text-right">Total</th>
                             {% if competition.event_type.startswith('sp') %}
                             <th class="px-4 py-3 text-right">Avg Speed</th>
-                            {% endif %}
-                            {% if is_admin %}
-                            <th class="px-4 py-3 text-right">Actions</th>
                             {% endif %}
                         </tr>
                     </thead>
@@ -488,17 +474,6 @@
                                 {{ "%.2f"|format(team.total_score / completed_scores|length) }} km/h
                                 {% else %}
                                 -
-                                {% endif %}
-                            </td>
-                            {% endif %}
-                            {% if is_admin %}
-                            <td class="px-4 py-3 text-right space-x-2">
-                                {% set has_scores = team.scores|selectattr('score', 'ne', none)|list|length > 0 %}
-                                {% if not has_scores %}
-                                <button onclick="openEditTeamModal('{{ team.id }}', '{{ team.team_number }}', '{{ team.team_name }}', '{{ team.class }}', '{{ team.members|default("", true) }}', '{{ team.category|default("", true) }}', '{{ team.event|default("", true) }}', '{{ team.photo|default("", true) }}')" class="text-blue-400 hover:text-gray-700 text-sm">Edit</button>
-                                <button onclick="deleteTeam('{{ team.id }}')" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
-                                {% else %}
-                                <span class="text-gray-400 text-xs">-</span>
                                 {% endif %}
                             </td>
                             {% endif %}
@@ -694,6 +669,35 @@
                     <button type="submit" class="px-4 py-2 rounded bg-green-600 hover:bg-gray-300">Add Competitor</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Bulk Edit Modal -->
+    <div id="bulkEditModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-4">
+        <div class="bg-white rounded-lg p-6 w-full max-w-4xl mx-4 my-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Bulk Edit Competitors</h2>
+                <button onclick="hideBulkEditModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <div class="overflow-x-auto max-h-[60vh] overflow-y-auto">
+                <table class="w-full text-sm">
+                    <thead class="bg-gray-100 sticky top-0">
+                        <tr>
+                            <th class="px-3 py-2 text-left">#</th>
+                            <th class="px-3 py-2 text-left">Name</th>
+                            <th class="px-3 py-2 text-left">Country</th>
+                            <th class="px-3 py-2 text-left">Class</th>
+                            <th class="px-3 py-2 text-center">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bulkEditTableBody">
+                        <!-- Populated by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="mt-4 flex justify-end gap-2">
+                <button onclick="hideBulkEditModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Close</button>
+            </div>
         </div>
     </div>
 
@@ -1589,6 +1593,43 @@
             selectedAddTeamPhotoFile = null;
             document.getElementById('addTeamPhoto').value = '';
             document.getElementById('addTeamPhotoPreview').innerHTML = '<span class="text-gray-500 text-xs">No photo</span>';
+        }
+
+        function showBulkEditModal() {
+            // Fetch all competitors and populate table
+            fetch('/admin/competition/{{ competition.id }}/teams')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        const tbody = document.getElementById('bulkEditTableBody');
+                        tbody.innerHTML = '';
+                        data.teams.forEach(team => {
+                            const hasScores = team.has_scores || false;
+                            const row = document.createElement('tr');
+                            row.className = 'border-t border-gray-200';
+                            row.innerHTML = `
+                                <td class="px-3 py-2">${team.team_number || ''}</td>
+                                <td class="px-3 py-2 font-medium">${team.team_name || ''}</td>
+                                <td class="px-3 py-2">${team.members || ''}</td>
+                                <td class="px-3 py-2">${team.class || ''}</td>
+                                <td class="px-3 py-2 text-center">
+                                    ${!hasScores ? `
+                                        <button onclick="openEditTeamModal('${team.id}', '${team.team_number || ''}', '${team.team_name || ''}', '${team.class || ''}', '${(team.members || '').replace(/'/g, "\\'")}', '${team.category || ''}', '${team.event || ''}', '${team.photo || ''}')" class="text-blue-600 hover:text-blue-800 text-sm mr-2">Edit</button>
+                                        <button onclick="deleteTeam('${team.id}')" class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                                    ` : '<span class="text-gray-400 text-xs">Has scores</span>'}
+                                </td>
+                            `;
+                            tbody.appendChild(row);
+                        });
+                    }
+                })
+                .catch(err => console.error('Error loading teams:', err));
+
+            document.getElementById('bulkEditModal').classList.remove('hidden');
+        }
+
+        function hideBulkEditModal() {
+            document.getElementById('bulkEditModal').classList.add('hidden');
         }
 
         function showAddCompetitorModal() {
