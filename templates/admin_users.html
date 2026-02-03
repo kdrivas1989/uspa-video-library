@@ -96,11 +96,9 @@
                             class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="John Doe">
                     </div>
-                    <div>
-                        <label class="block text-gray-400 text-sm mb-1">Password</label>
-                        <input type="password" id="newPassword" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="********">
+                    <div class="bg-blue-900/30 border border-blue-700 rounded p-3">
+                        <p class="text-blue-300 text-sm">Default password: <span class="font-mono font-bold">password</span></p>
+                        <p class="text-blue-400 text-xs mt-1">User will be required to change it on first login</p>
                     </div>
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Role</label>
@@ -176,7 +174,6 @@
             document.getElementById('createModal').classList.remove('hidden');
             document.getElementById('newUsername').value = '';
             document.getElementById('newName').value = '';
-            document.getElementById('newPassword').value = '';
             document.getElementById('newRole').value = 'judge';
         }
 
@@ -203,7 +200,6 @@
             const data = {
                 username: document.getElementById('newUsername').value,
                 name: document.getElementById('newName').value,
-                password: document.getElementById('newPassword').value,
                 role: document.getElementById('newRole').value
             };
 

@@ -297,15 +297,22 @@ def init_db():
                 username TEXT PRIMARY KEY,
                 password TEXT NOT NULL,
                 role TEXT NOT NULL,
-                name TEXT NOT NULL
+                name TEXT NOT NULL,
+                must_change_password INTEGER DEFAULT 0
             )
         ''')
+
+        # Add must_change_password column if it doesn't exist
+        try:
+            cursor.execute('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0')
+        except:
+            pass
 
         cursor.execute('SELECT username FROM users WHERE username = ?', ('admin',))
         if not cursor.fetchone():
             cursor.execute(
-                'INSERT INTO users (username, password, role, name) VALUES (?, ?, ?, ?)',
-                ('admin', 'admin123', 'admin', 'Administrator')
+                'INSERT INTO users (username, password, role, name, must_change_password) VALUES (?, ?, ?, ?, ?)',
+                ('admin', 'admin123', 'admin', 'Administrator', 0)
             )
 
         conn.commit()
@@ -485,6 +492,7 @@ def get_all_users():
 
 def save_user(user_data):
     """Save or update a user."""
+    must_change = user_data.get('must_change_password', 0)
     if USE_SUPABASE:
         existing = supabase.table('users').select('username').eq('username', user_data['username']).execute()
         if existing.data:
@@ -494,9 +502,9 @@ def save_user(user_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO users (username, password, role, name)
-            VALUES (?, ?, ?, ?)
-        ''', (user_data['username'], user_data['password'], user_data['role'], user_data['name']))
+            INSERT OR REPLACE INTO users (username, password, role, name, must_change_password)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user_data['username'], user_data['password'], user_data['role'], user_data['name'], must_change))
         db.commit()
 
 
@@ -1026,14 +1034,53 @@ def login():
         user = get_user(username)
 
         if user and user['password'] == password:
+            session['username'] = username
             session['user'] = username
             session['role'] = user['role']
             session['name'] = user['name']
+
+            # Check if user must change password
+            if user.get('must_change_password'):
+                return redirect(url_for('change_password'))
+
             return redirect(url_for('admin_dashboard'))
         else:
             error = 'Invalid username or password'
 
     return render_template('login.html', error=error)
+
+
+@app.route('/change-password', methods=['GET', 'POST'])
+def change_password():
+    """Force password change page."""
+    if not session.get('username'):
+        return redirect(url_for('login'))
+
+    error = None
+    if request.method == 'POST':
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        if len(new_password) < 6:
+            error = 'Password must be at least 6 characters'
+        elif new_password != confirm_password:
+            error = 'Passwords do not match'
+        elif new_password == 'password':
+            error = 'Please choose a different password'
+        else:
+            # Update password and clear must_change_password flag
+            user = get_user(session['username'])
+            if user:
+                save_user({
+                    'username': user['username'],
+                    'password': new_password,
+                    'role': user['role'],
+                    'name': user['name'],
+                    'must_change_password': 0
+                })
+                return redirect(url_for('index'))
+
+    return render_template('change_password.html', error=error)
 
 
 @app.route('/logout')
@@ -1082,15 +1129,14 @@ def admin_users():
 @app.route('/admin/user/create', methods=['POST'])
 @admin_required
 def admin_create_user():
-    """Create a new user."""
+    """Create a new user with default password."""
     data = request.json
     username = data.get('username', '').strip().lower()
-    password = data.get('password', '').strip()
     name = data.get('name', '').strip()
     role = data.get('role', 'judge')
 
-    if not username or not password or not name:
-        return jsonify({'error': 'Username, password, and name are required'}), 400
+    if not username or not name:
+        return jsonify({'error': 'Username and name are required'}), 400
 
     if role not in ROLES:
         return jsonify({'error': 'Invalid role'}), 400
@@ -1100,14 +1146,16 @@ def admin_create_user():
     if existing:
         return jsonify({'error': 'Username already exists'}), 400
 
+    # All new users get default password and must change on first login
     save_user({
         'username': username,
-        'password': password,
+        'password': 'password',
         'role': role,
-        'name': name
+        'name': name,
+        'must_change_password': 1
     })
 
-    return jsonify({'success': True, 'message': 'User created'})
+    return jsonify({'success': True, 'message': 'User created with default password'})
 
 
 @app.route('/admin/user/<username>/update', methods=['POST'])
