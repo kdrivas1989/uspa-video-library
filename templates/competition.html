@@ -190,10 +190,10 @@
                                 <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 2">D2</th>
                                 <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 3">D3</th>
                                 <th class="px-2 py-3 text-center text-sm bg-green-700 font-bold" title="Distance Total">D</th>
-                                <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 1">S1</th>
-                                <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 2">S2</th>
-                                <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 3">S3</th>
-                                <th class="px-2 py-3 text-center text-sm bg-red-700 font-bold" title="Speed Total">S</th>
+                                <th class="px-2 py-3 text-center text-sm bg-yellow-900" title="Speed Round 1">S1</th>
+                                <th class="px-2 py-3 text-center text-sm bg-yellow-900" title="Speed Round 2">S2</th>
+                                <th class="px-2 py-3 text-center text-sm bg-yellow-900" title="Speed Round 3">S3</th>
+                                <th class="px-2 py-3 text-center text-sm bg-yellow-700 font-bold" title="Speed Total">S</th>
                                 {% else %}
                                 {% for i in range(1, event_round_count + 1) %}
                                 <th class="px-2 py-3 text-center text-sm">R{{ i }}</th>
@@ -290,7 +290,7 @@
                                 {% endif %}
                                 {% if event_type == 'cp_dsz' and i == 9 %}
                                 <!-- S Subtotal after round 9 -->
-                                <td class="px-2 py-3 text-center bg-red-900/30 font-bold">
+                                <td class="px-2 py-3 text-center bg-yellow-900/30 font-bold">
                                     {% set ns = namespace(total=0) %}
                                     {% for r in range(7, 10) %}
                                         {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
@@ -298,7 +298,7 @@
                                             {% set ns.total = ns.total + rs.weighted_score %}
                                         {% endif %}
                                     {% endfor %}
-                                    <span class="text-red-300">{{ "%.1f"|format(ns.total) }}</span>
+                                    <span class="text-yellow-300">{{ "%.1f"|format(ns.total) }}</span>
                                 </td>
                                 {% endif %}
                                 {% endfor %}
@@ -363,10 +363,10 @@
                             <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 2">D2</th>
                             <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 3">D3</th>
                             <th class="px-2 py-3 text-center text-sm bg-green-700 font-bold" title="Distance Total">D</th>
-                            <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 1">S1</th>
-                            <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 2">S2</th>
-                            <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 3">S3</th>
-                            <th class="px-2 py-3 text-center text-sm bg-red-700 font-bold" title="Speed Total">S</th>
+                            <th class="px-2 py-3 text-center text-sm bg-yellow-900" title="Speed Round 1">S1</th>
+                            <th class="px-2 py-3 text-center text-sm bg-yellow-900" title="Speed Round 2">S2</th>
+                            <th class="px-2 py-3 text-center text-sm bg-yellow-900" title="Speed Round 3">S3</th>
+                            <th class="px-2 py-3 text-center text-sm bg-yellow-700 font-bold" title="Speed Total">S</th>
                             {% else %}
                             {% for i in range(1, single_event_rounds + 1) %}
                             <th class="px-2 py-3 text-center text-sm">R{{ i }}</th>
@@ -463,7 +463,7 @@
                             {% endif %}
                             {% if competition.event_type == 'cp_dsz' and i == 9 %}
                             <!-- S Subtotal after round 9 -->
-                            <td class="px-2 py-3 text-center bg-red-900/30 font-bold">
+                            <td class="px-2 py-3 text-center bg-yellow-900/30 font-bold">
                                 {% set ns = namespace(total=0) %}
                                 {% for r in range(7, 10) %}
                                     {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
@@ -471,7 +471,7 @@
                                         {% set ns.total = ns.total + rs.weighted_score %}
                                     {% endif %}
                                 {% endfor %}
-                                <span class="text-red-300">{{ "%.1f"|format(ns.total) }}</span>
+                                <span class="text-yellow-300">{{ "%.1f"|format(ns.total) }}</span>
                             </td>
                             {% endif %}
                             {% endfor %}
@@ -1102,29 +1102,29 @@
 
                         <!-- CP Speed Section (Rounds 7-9) -->
                         <div id="cpSpeedSection" class="hidden">
-                            <h3 class="text-lg font-semibold text-red-400 mb-4">Speed Scoring</h3>
+                            <h3 class="text-lg font-semibold text-yellow-400 mb-4">Speed Scoring</h3>
 
                             <!-- Gates for Speed -->
                             <div class="mb-4">
                                 <label class="block text-gray-400 text-sm mb-2">Gates (uncheck if missed)</label>
                                 <div class="flex flex-col gap-2">
-                                    <label class="flex items-center gap-3 bg-red-700 px-4 py-2 rounded cursor-pointer hover:bg-red-600">
+                                    <label class="flex items-center gap-3 bg-yellow-700 px-4 py-2 rounded cursor-pointer hover:bg-yellow-600">
                                         <input type="checkbox" id="cpSpeedG1" class="w-5 h-5" checked onchange="calculateCpScore()">
                                         <span>G1</span>
                                     </label>
-                                    <label class="flex items-center gap-3 bg-red-700 px-4 py-2 rounded cursor-pointer hover:bg-red-600">
+                                    <label class="flex items-center gap-3 bg-yellow-700 px-4 py-2 rounded cursor-pointer hover:bg-yellow-600">
                                         <input type="checkbox" id="cpSpeedG2" class="w-5 h-5" checked onchange="calculateCpScore()">
                                         <span>G2</span>
                                     </label>
-                                    <label class="flex items-center gap-3 bg-red-700 px-4 py-2 rounded cursor-pointer hover:bg-red-600">
+                                    <label class="flex items-center gap-3 bg-yellow-700 px-4 py-2 rounded cursor-pointer hover:bg-yellow-600">
                                         <input type="checkbox" id="cpSpeedG3" class="w-5 h-5" checked onchange="calculateCpScore()">
                                         <span>G3</span>
                                     </label>
-                                    <label class="flex items-center gap-3 bg-red-700 px-4 py-2 rounded cursor-pointer hover:bg-red-600">
+                                    <label class="flex items-center gap-3 bg-yellow-700 px-4 py-2 rounded cursor-pointer hover:bg-yellow-600">
                                         <input type="checkbox" id="cpSpeedG4" class="w-5 h-5" checked onchange="calculateCpScore()">
                                         <span>G4</span>
                                     </label>
-                                    <label class="flex items-center gap-3 bg-red-700 px-4 py-2 rounded cursor-pointer hover:bg-red-600">
+                                    <label class="flex items-center gap-3 bg-yellow-700 px-4 py-2 rounded cursor-pointer hover:bg-yellow-600">
                                         <input type="checkbox" id="cpSpeedG5" class="w-5 h-5" checked onchange="calculateCpScore()">
                                         <span>G5</span>
                                     </label>
@@ -1136,7 +1136,7 @@
                                 <label class="block text-gray-400 text-sm mb-2">Time (seconds)</label>
                                 <div class="flex items-center gap-2">
                                     <input type="number" id="cpSpeedTime" step="0.001" min="0" max="99.999"
-                                        class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-2xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+                                        class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-2xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-yellow-500"
                                         placeholder="0.000" onchange="calculateCpScore()" oninput="calculateCpScore()">
                                     <span class="text-gray-400 text-lg">s</span>
                                 </div>
@@ -1145,7 +1145,7 @@
                             <!-- Speed Score Display -->
                             <div class="bg-gray-800 rounded p-3 text-center mb-4">
                                 <span class="text-gray-400 text-sm">Time: </span>
-                                <span id="cpSpeedDisplay" class="text-2xl font-mono text-red-400">0.000</span>
+                                <span id="cpSpeedDisplay" class="text-2xl font-mono text-yellow-400">0.000</span>
                                 <span class="text-gray-400"> s</span>
                             </div>
                         </div>
