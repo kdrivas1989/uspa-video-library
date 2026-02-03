@@ -185,12 +185,15 @@
                                 <th class="px-2 py-3 text-center text-sm bg-blue-900" title="Zone Accuracy Round 1">ZA1</th>
                                 <th class="px-2 py-3 text-center text-sm bg-blue-900" title="Zone Accuracy Round 2">ZA2</th>
                                 <th class="px-2 py-3 text-center text-sm bg-blue-900" title="Zone Accuracy Round 3">ZA3</th>
+                                <th class="px-2 py-3 text-center text-sm bg-blue-700 font-bold" title="Zone Accuracy Total">ZA</th>
                                 <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 1">D1</th>
                                 <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 2">D2</th>
                                 <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 3">D3</th>
+                                <th class="px-2 py-3 text-center text-sm bg-green-700 font-bold" title="Distance Total">D</th>
                                 <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 1">S1</th>
                                 <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 2">S2</th>
                                 <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 3">S3</th>
+                                <th class="px-2 py-3 text-center text-sm bg-red-700 font-bold" title="Speed Total">S</th>
                                 {% else %}
                                 {% for i in range(1, event_round_count + 1) %}
                                 <th class="px-2 py-3 text-center text-sm">R{{ i }}</th>
@@ -249,7 +252,7 @@
                                     title="{% if is_cp_penalty %}{{ round_score.score_data }} - Penalty{% elif event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}Raw: {{ round_score.score }} | Weighted: {{ round_score.weighted_score|round(2) }}{% elif round_score.exit_time_penalty %}⏱️ -20% Penalty | {% endif %}{% if round_score.training_flag %}🎓 Training | {% endif %}{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.score_data %} ({{ round_score.score_data }}){% endif %}{% if round_score.scored_by %} by {{ round_score.scored_by }}{% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
                                     {% if round_score.exit_time_penalty %}<span class="absolute -top-1 -left-1 text-xs">⏱️</span>{% endif %}
                                     {% if round_score.training_flag %}<span class="absolute -top-1 -right-1 text-xs">🎓</span>{% endif %}
-                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-yellow-300">{{ round_score.weighted_score|round(1) }}</span><span class="text-white/60">{{ round_score.score|int }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
+                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="flex flex-col leading-tight"><span class="text-yellow-300">{{ round_score.weighted_score|round(1) }}</span><span class="text-white/50 text-[10px]">{{ round_score.score|round(2) }}</span></span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
                                 </button>
                                 {% else %}
                                 <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, null, '', '{{ team.event|default("", true) }}', null, 0)"
@@ -259,6 +262,45 @@
                                 </button>
                                 {% endif %}
                                 </td>
+                                {% if event_type == 'cp_dsz' and i == 3 %}
+                                <!-- ZA Subtotal after round 3 -->
+                                <td class="px-2 py-3 text-center bg-blue-900/30 font-bold">
+                                    {% set ns = namespace(total=0) %}
+                                    {% for r in range(1, 4) %}
+                                        {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
+                                        {% if rs and rs.weighted_score is defined and rs.weighted_score is not none %}
+                                            {% set ns.total = ns.total + rs.weighted_score %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    <span class="text-blue-300">{{ "%.1f"|format(ns.total) }}</span>
+                                </td>
+                                {% endif %}
+                                {% if event_type == 'cp_dsz' and i == 6 %}
+                                <!-- D Subtotal after round 6 -->
+                                <td class="px-2 py-3 text-center bg-green-900/30 font-bold">
+                                    {% set ns = namespace(total=0) %}
+                                    {% for r in range(4, 7) %}
+                                        {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
+                                        {% if rs and rs.weighted_score is defined and rs.weighted_score is not none %}
+                                            {% set ns.total = ns.total + rs.weighted_score %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    <span class="text-green-300">{{ "%.1f"|format(ns.total) }}</span>
+                                </td>
+                                {% endif %}
+                                {% if event_type == 'cp_dsz' and i == 9 %}
+                                <!-- S Subtotal after round 9 -->
+                                <td class="px-2 py-3 text-center bg-red-900/30 font-bold">
+                                    {% set ns = namespace(total=0) %}
+                                    {% for r in range(7, 10) %}
+                                        {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
+                                        {% if rs and rs.weighted_score is defined and rs.weighted_score is not none %}
+                                            {% set ns.total = ns.total + rs.weighted_score %}
+                                        {% endif %}
+                                    {% endfor %}
+                                    <span class="text-red-300">{{ "%.1f"|format(ns.total) }}</span>
+                                </td>
+                                {% endif %}
                                 {% endfor %}
                                 <td class="px-4 py-3 text-right font-bold text-green-400">{% if event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
                                 {% if 'sp' in event_type %}
@@ -316,12 +358,15 @@
                             <th class="px-2 py-3 text-center text-sm bg-blue-900" title="Zone Accuracy Round 1">ZA1</th>
                             <th class="px-2 py-3 text-center text-sm bg-blue-900" title="Zone Accuracy Round 2">ZA2</th>
                             <th class="px-2 py-3 text-center text-sm bg-blue-900" title="Zone Accuracy Round 3">ZA3</th>
+                            <th class="px-2 py-3 text-center text-sm bg-blue-700 font-bold" title="Zone Accuracy Total">ZA</th>
                             <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 1">D1</th>
                             <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 2">D2</th>
                             <th class="px-2 py-3 text-center text-sm bg-green-900" title="Distance Round 3">D3</th>
+                            <th class="px-2 py-3 text-center text-sm bg-green-700 font-bold" title="Distance Total">D</th>
                             <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 1">S1</th>
                             <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 2">S2</th>
                             <th class="px-2 py-3 text-center text-sm bg-red-900" title="Speed Round 3">S3</th>
+                            <th class="px-2 py-3 text-center text-sm bg-red-700 font-bold" title="Speed Total">S</th>
                             {% else %}
                             {% for i in range(1, single_event_rounds + 1) %}
                             <th class="px-2 py-3 text-center text-sm">R{{ i }}</th>
@@ -380,7 +425,7 @@
                                     title="{% if is_cp_penalty %}{{ round_score.score_data }} - Penalty{% elif competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}Raw: {{ round_score.score }} | Weighted: {{ round_score.weighted_score|round(2) }}{% elif round_score.exit_time_penalty %}⏱️ -20% Penalty | {% endif %}{% if round_score.training_flag %}🎓 Training | {% endif %}{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.score_data %} ({{ round_score.score_data }}){% endif %}{% if round_score.scored_by %} by {{ round_score.scored_by }}{% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
                                     {% if round_score.exit_time_penalty %}<span class="absolute -top-1 -left-1 text-xs">⏱️</span>{% endif %}
                                     {% if round_score.training_flag %}<span class="absolute -top-1 -right-1 text-xs">🎓</span>{% endif %}
-                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-yellow-300">{{ round_score.weighted_score|round(1) }}</span><span class="text-white/60">{{ round_score.score|int }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
+                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="flex flex-col leading-tight"><span class="text-yellow-300">{{ round_score.weighted_score|round(1) }}</span><span class="text-white/50 text-[10px]">{{ round_score.score|round(2) }}</span></span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
                                 </button>
                                 {% else %}
                                 <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, null, '', '{{ team.category|default("", true) }}', null, 0)"
@@ -390,6 +435,45 @@
                                 </button>
                                 {% endif %}
                             </td>
+                            {% if competition.event_type == 'cp_dsz' and i == 3 %}
+                            <!-- ZA Subtotal after round 3 -->
+                            <td class="px-2 py-3 text-center bg-blue-900/30 font-bold">
+                                {% set ns = namespace(total=0) %}
+                                {% for r in range(1, 4) %}
+                                    {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
+                                    {% if rs and rs.weighted_score is defined and rs.weighted_score is not none %}
+                                        {% set ns.total = ns.total + rs.weighted_score %}
+                                    {% endif %}
+                                {% endfor %}
+                                <span class="text-blue-300">{{ "%.1f"|format(ns.total) }}</span>
+                            </td>
+                            {% endif %}
+                            {% if competition.event_type == 'cp_dsz' and i == 6 %}
+                            <!-- D Subtotal after round 6 -->
+                            <td class="px-2 py-3 text-center bg-green-900/30 font-bold">
+                                {% set ns = namespace(total=0) %}
+                                {% for r in range(4, 7) %}
+                                    {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
+                                    {% if rs and rs.weighted_score is defined and rs.weighted_score is not none %}
+                                        {% set ns.total = ns.total + rs.weighted_score %}
+                                    {% endif %}
+                                {% endfor %}
+                                <span class="text-green-300">{{ "%.1f"|format(ns.total) }}</span>
+                            </td>
+                            {% endif %}
+                            {% if competition.event_type == 'cp_dsz' and i == 9 %}
+                            <!-- S Subtotal after round 9 -->
+                            <td class="px-2 py-3 text-center bg-red-900/30 font-bold">
+                                {% set ns = namespace(total=0) %}
+                                {% for r in range(7, 10) %}
+                                    {% set rs = team.scores|selectattr('round_num', 'equalto', r)|first %}
+                                    {% if rs and rs.weighted_score is defined and rs.weighted_score is not none %}
+                                        {% set ns.total = ns.total + rs.weighted_score %}
+                                    {% endif %}
+                                {% endfor %}
+                                <span class="text-red-300">{{ "%.1f"|format(ns.total) }}</span>
+                            </td>
+                            {% endif %}
                             {% endfor %}
                             <td class="px-4 py-3 text-right font-bold text-green-400">{% if competition.event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
                             {% if competition.event_type.startswith('sp') %}
