@@ -917,22 +917,26 @@ def get_video_details(video_id):
 def fix_dropbox_urls():
     """Fix Dropbox URLs to use raw=1 instead of dl=1 for streaming."""
     fixed = 0
-    if USE_SUPABASE:
-        # Get all videos with dl=1 in URL
-        result = supabase.table('videos').select('id, url').like('url', '%dl=1%').execute()
-        for video in result.data:
-            new_url = video['url'].replace('dl=1', 'raw=1')
-            supabase.table('videos').update({'url': new_url}).eq('id', video['id']).execute()
-            fixed += 1
-    else:
-        db = get_sqlite_db()
-        cursor = db.execute("SELECT id, url FROM videos WHERE url LIKE '%dl=1%'")
-        videos = cursor.fetchall()
-        for video in videos:
-            new_url = video['url'].replace('dl=1', 'raw=1')
-            db.execute("UPDATE videos SET url = ? WHERE id = ?", (new_url, video['id']))
-            fixed += 1
-        db.commit()
+    try:
+        if USE_SUPABASE:
+            # Get all videos and filter for dl=1 in URL
+            result = supabase.table('videos').select('id, url').execute()
+            for video in result.data:
+                if video.get('url') and 'dl=1' in video['url']:
+                    new_url = video['url'].replace('dl=1', 'raw=1')
+                    supabase.table('videos').update({'url': new_url}).eq('id', video['id']).execute()
+                    fixed += 1
+        else:
+            db = get_sqlite_db()
+            cursor = db.execute("SELECT id, url FROM videos WHERE url LIKE '%dl=1%'")
+            videos = cursor.fetchall()
+            for video in videos:
+                new_url = video['url'].replace('dl=1', 'raw=1')
+                db.execute("UPDATE videos SET url = ? WHERE id = ?", (new_url, video['id']))
+                fixed += 1
+            db.commit()
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
     return jsonify({'success': True, 'message': f'Fixed {fixed} Dropbox video URLs'})
 
