@@ -6,15 +6,15 @@
     <title>{{ competition.name }} - USPA Video Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-900 text-white min-h-screen">
-    <nav class="bg-gray-800 p-4 sticky top-0 z-10">
+<body class="bg-gray-100 text-gray-900 min-h-screen">
+    <nav class="bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
         <div class="container mx-auto flex justify-between items-center">
-            <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
+            <a href="/" class="text-2xl font-bold text-blue-600">USPA Video Library</a>
             <div class="flex items-center gap-4">
-                <a href="/competitions" class="text-gray-400 hover:text-white">Competitions</a>
-                <a href="/videographer" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Videographer Upload</a>
+                <a href="/competitions" class="text-gray-600 hover:text-gray-900">Competitions</a>
+                <a href="/videographer" class="bg-yellow-500 hover:bg-yellow-600 text-white px-4 py-2 rounded-lg">Videographer Upload</a>
                 {% if is_admin %}
-                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">Admin</a>
                 {% endif %}
             </div>
         </div>
@@ -32,7 +32,7 @@
                     </button>
                     {% endif %}
                 </div>
-                <div class="text-gray-400 flex flex-wrap gap-4 items-center">
+                <div class="text-gray-600 flex flex-wrap gap-4 items-center">
                     {% if is_multi_event %}
                     <span class="flex flex-wrap gap-1">
                         Events:
@@ -62,11 +62,11 @@
                         Import CSV
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
                     </button>
-                    <div id="importDropdown" class="hidden absolute left-0 mt-1 w-48 bg-gray-700 rounded-lg shadow-lg z-20">
-                        <button onclick="showImportModal('teams')" class="block w-full text-left px-4 py-2 hover:bg-gray-600 rounded-t-lg">
+                    <div id="importDropdown" class="hidden absolute left-0 mt-1 w-48 bg-gray-200 rounded-lg shadow-lg z-20">
+                        <button onclick="showImportModal('teams')" class="block w-full text-left px-4 py-2 hover:bg-gray-300 rounded-t-lg">
                             Import Teams
                         </button>
-                        <button onclick="showImportModal('competitors')" class="block w-full text-left px-4 py-2 hover:bg-gray-600 rounded-b-lg">
+                        <button onclick="showImportModal('competitors')" class="block w-full text-left px-4 py-2 hover:bg-gray-300 rounded-b-lg">
                             Import Competitors
                         </button>
                     </div>
@@ -90,34 +90,34 @@
 
         <!-- Legend -->
         <div class="flex items-center gap-6 mb-4 text-sm flex-wrap">
-            <span class="text-gray-400">Round Status:</span>
+            <span class="text-gray-600">Round Status:</span>
             <span class="flex items-center gap-2">
-                <span class="w-6 h-6 rounded bg-gray-600 inline-block"></span>
-                <span class="text-gray-400">No video</span>
+                <span class="w-6 h-6 rounded bg-gray-300 inline-block"></span>
+                <span class="text-gray-600">No video</span>
             </span>
             <span class="flex items-center gap-2">
                 <span class="w-6 h-6 rounded bg-yellow-600 inline-block text-center text-xs leading-6">📹</span>
-                <span class="text-gray-400">Video uploaded (needs scoring)</span>
+                <span class="text-gray-600">Video uploaded (needs scoring)</span>
             </span>
             <span class="flex items-center gap-2">
                 <span class="w-6 h-6 rounded bg-green-600 inline-block"></span>
-                <span class="text-gray-400">Scored</span>
+                <span class="text-gray-600">Scored</span>
             </span>
             <span class="flex items-center gap-2">
                 <span class="w-6 h-6 rounded bg-purple-600 inline-block text-center text-xs leading-6">🎓</span>
-                <span class="text-gray-400">Flagged for training</span>
+                <span class="text-gray-600">Flagged for training</span>
             </span>
         </div>
 
         {% if is_multi_event %}
         <!-- Event Tabs (for multi-event competitions) -->
-        <div class="flex gap-2 mb-4 border-b border-gray-700 pb-2 flex-wrap items-center">
+        <div class="flex gap-2 mb-4 border-b border-gray-200 pb-2 flex-wrap items-center">
             <button onclick="showEvent('all')" id="event-tab-all" class="px-4 py-2 rounded-t-lg bg-blue-600 text-white">
                 All Events
             </button>
             {% for et in event_types %}
             <div class="relative inline-flex">
-                <button onclick="showEvent('{{ et }}')" id="event-tab-{{ et }}" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+                <button onclick="showEvent('{{ et }}')" id="event-tab-{{ et }}" class="px-4 py-2 rounded-t-lg bg-gray-200 hover:bg-gray-300">
                     {{ et|event_name }}
                 </button>
                 {% set event_has_teams = teams_by_event.get(et, {}).values()|sum(start=[]) %}
@@ -139,20 +139,20 @@
         {% endif %}
 
         <!-- Class Tabs -->
-        <div class="flex gap-2 mb-6 border-b border-gray-700 pb-2">
+        <div class="flex gap-2 mb-6 border-b border-gray-200 pb-2">
             <button onclick="showClass('all')" id="tab-all" class="px-4 py-2 rounded-t-lg bg-blue-600 text-white">
                 All Teams
             </button>
-            <button onclick="showClass('beginner')" id="tab-beginner" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+            <button onclick="showClass('beginner')" id="tab-beginner" class="px-4 py-2 rounded-t-lg bg-gray-200 hover:bg-gray-300">
                 Beginner
             </button>
-            <button onclick="showClass('intermediate')" id="tab-intermediate" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+            <button onclick="showClass('intermediate')" id="tab-intermediate" class="px-4 py-2 rounded-t-lg bg-gray-200 hover:bg-gray-300">
                 Intermediate
             </button>
-            <button onclick="showClass('advanced')" id="tab-advanced" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+            <button onclick="showClass('advanced')" id="tab-advanced" class="px-4 py-2 rounded-t-lg bg-gray-200 hover:bg-gray-300">
                 Advanced
             </button>
-            <button onclick="showClass('open')" id="tab-open" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+            <button onclick="showClass('open')" id="tab-open" class="px-4 py-2 rounded-t-lg bg-gray-200 hover:bg-gray-300">
                 Open
             </button>
         </div>
@@ -166,10 +166,10 @@
             <div id="event-{{ event_type }}-class-{{ class_name }}" class="class-section mb-6" data-class="{{ class_name }}">
                 <h3 class="text-lg font-bold mb-3 capitalize text-gray-300">{{ class_name }} Class</h3>
                 {% if teams %}
-                <div class="bg-gray-800 rounded-lg overflow-hidden">
+                <div class="bg-white rounded-lg overflow-hidden">
                     <table class="w-full">
                         {% set is_individual = (event_type.startswith('cp') and event_type != 'cp_team') or event_type.startswith('al') or event_type.startswith('sp') or event_type.startswith('ws_performance') %}
-                        <thead class="bg-gray-700">
+                        <thead class="bg-gray-200">
                             <tr>
                                 <th class="px-4 py-3 text-left">Rank</th>
                                 <th class="px-2 py-3 text-center">Photo</th>
@@ -210,7 +210,7 @@
                         </thead>
                         <tbody>
                             {% for team in teams %}
-                            <tr class="border-t border-gray-700 hover:bg-gray-750">
+                            <tr class="border-t border-gray-200 hover:bg-gray-750">
                                 <td class="px-4 py-3 font-bold text-yellow-400">{{ loop.index }}</td>
                                 <td class="px-2 py-3 text-center">
                                     {% if team.photo %}
@@ -219,7 +219,7 @@
                                         onclick="openPhotoModal('{{ team.id }}', '{{ team.photo }}', '{{ team.team_name }}', '{{ team.members|default("", true)|e }}')"
                                         title="Click to view photo">
                                     {% else %}
-                                    <div class="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center mx-auto text-gray-400 text-xs cursor-pointer hover:bg-gray-500 hover:ring-2 hover:ring-blue-500"
+                                    <div class="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center mx-auto text-gray-600 text-xs cursor-pointer hover:bg-gray-400 hover:ring-2 hover:ring-blue-500"
                                         onclick="triggerPhotoUpload('{{ team.id }}', '{{ team.team_name }}')"
                                         title="Click to add photo">
                                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -230,7 +230,7 @@
                                 {% if is_individual %}
                                 <td class="px-4 py-3 font-medium">
                                     {{ team.team_name }}
-                                    {% if team.members %}<span class="text-gray-400 text-sm ml-2">({{ team.members }})</span>{% endif %}
+                                    {% if team.members %}<span class="text-gray-600 text-sm ml-2">({{ team.members }})</span>{% endif %}
                                 </td>
                                 {% else %}
                                 <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
@@ -252,11 +252,11 @@
                                     title="{% if is_cp_penalty %}{{ round_score.score_data }} - Penalty{% elif event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}Raw: {{ round_score.score }} | Weighted: {{ round_score.weighted_score|round(2) }}{% elif round_score.exit_time_penalty %}⏱️ -20% Penalty | {% endif %}{% if round_score.training_flag %}🎓 Training | {% endif %}{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.score_data %} ({{ round_score.score_data }}){% endif %}{% if round_score.scored_by %} by {{ round_score.scored_by }}{% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
                                     {% if round_score.exit_time_penalty %}<span class="absolute -top-1 -left-1 text-xs">⏱️</span>{% endif %}
                                     {% if round_score.training_flag %}<span class="absolute -top-1 -right-1 text-xs">🎓</span>{% endif %}
-                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-white/60">{{ round_score.score|round(2) }}</span><span class="text-yellow-300 ml-1">{{ round_score.weighted_score|round(1) }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
+                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-gray-700">{{ round_score.score|round(2) }}</span><span class="text-yellow-300 ml-1">{{ round_score.weighted_score|round(1) }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
                                 </button>
                                 {% else %}
                                 <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, null, '', '{{ team.event|default("", true) }}', null, 0)"
-                                    class="w-10 h-8 rounded text-sm bg-gray-600 hover:bg-gray-500"
+                                    class="w-10 h-8 rounded text-sm bg-gray-300 hover:bg-gray-400"
                                     title="No video - Click to upload">
                                     -
                                 </button>
@@ -325,7 +325,7 @@
                     </table>
                 </div>
                 {% else %}
-                <div class="text-gray-500 text-center py-4 bg-gray-800 rounded-lg text-sm">
+                <div class="text-gray-500 text-center py-4 bg-white rounded-lg text-sm">
                     No teams in this class
                 </div>
                 {% endif %}
@@ -339,10 +339,10 @@
         <div id="class-{{ class_name }}" class="class-section mb-8">
             <h2 class="text-xl font-bold mb-4 capitalize">{{ class_name }} Class</h2>
             {% if teams %}
-            <div class="bg-gray-800 rounded-lg overflow-hidden">
+            <div class="bg-white rounded-lg overflow-hidden">
                 <table class="w-full">
                     {% set is_individual = (competition.event_type.startswith('cp') and competition.event_type != 'cp_team') or competition.event_type.startswith('al') or competition.event_type.startswith('sp') or competition.event_type.startswith('ws_performance') %}
-                    <thead class="bg-gray-700">
+                    <thead class="bg-gray-200">
                         <tr>
                             <th class="px-4 py-3 text-left">Rank</th>
                             <th class="px-2 py-3 text-center">Photo</th>
@@ -383,7 +383,7 @@
                     </thead>
                     <tbody>
                         {% for team in teams %}
-                        <tr class="border-t border-gray-700 hover:bg-gray-750">
+                        <tr class="border-t border-gray-200 hover:bg-gray-750">
                             <td class="px-4 py-3 font-bold text-yellow-400">{{ loop.index }}</td>
                             <td class="px-2 py-3 text-center">
                                 {% if team.photo %}
@@ -392,7 +392,7 @@
                                     onclick="openPhotoModal('{{ team.id }}', '{{ team.photo }}', '{{ team.team_name }}', '{{ team.members|default("", true)|e }}')"
                                     title="Click to view photo">
                                 {% else %}
-                                <div class="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center mx-auto text-gray-400 text-xs cursor-pointer hover:bg-gray-500 hover:ring-2 hover:ring-blue-500"
+                                <div class="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center mx-auto text-gray-600 text-xs cursor-pointer hover:bg-gray-400 hover:ring-2 hover:ring-blue-500"
                                     onclick="triggerPhotoUpload('{{ team.id }}', '{{ team.team_name }}')"
                                     title="Click to add photo">
                                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
@@ -403,7 +403,7 @@
                             {% if is_individual %}
                             <td class="px-4 py-3 font-medium">
                                 {{ team.team_name }}
-                                {% if team.members %}<span class="text-gray-400 text-sm ml-2">({{ team.members }})</span>{% endif %}
+                                {% if team.members %}<span class="text-gray-600 text-sm ml-2">({{ team.members }})</span>{% endif %}
                             </td>
                             {% else %}
                             <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
@@ -425,11 +425,11 @@
                                     title="{% if is_cp_penalty %}{{ round_score.score_data }} - Penalty{% elif competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}Raw: {{ round_score.score }} | Weighted: {{ round_score.weighted_score|round(2) }}{% elif round_score.exit_time_penalty %}⏱️ -20% Penalty | {% endif %}{% if round_score.training_flag %}🎓 Training | {% endif %}{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.score_data %} ({{ round_score.score_data }}){% endif %}{% if round_score.scored_by %} by {{ round_score.scored_by }}{% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
                                     {% if round_score.exit_time_penalty %}<span class="absolute -top-1 -left-1 text-xs">⏱️</span>{% endif %}
                                     {% if round_score.training_flag %}<span class="absolute -top-1 -right-1 text-xs">🎓</span>{% endif %}
-                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-white/60">{{ round_score.score|round(2) }}</span><span class="text-yellow-300 ml-1">{{ round_score.weighted_score|round(1) }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
+                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-gray-700">{{ round_score.score|round(2) }}</span><span class="text-yellow-300 ml-1">{{ round_score.weighted_score|round(1) }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
                                 </button>
                                 {% else %}
                                 <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, null, '', '{{ team.category|default("", true) }}', null, 0)"
-                                    class="w-10 h-8 rounded text-sm bg-gray-600 hover:bg-gray-500"
+                                    class="w-10 h-8 rounded text-sm bg-gray-300 hover:bg-gray-400"
                                     title="No video - Click to upload">
                                     -
                                 </button>
@@ -498,7 +498,7 @@
                 </table>
             </div>
             {% else %}
-            <div class="text-gray-500 text-center py-8 bg-gray-800 rounded-lg">
+            <div class="text-gray-500 text-center py-8 bg-white rounded-lg">
                 No teams in this class
             </div>
             {% endif %}
@@ -508,16 +508,16 @@
     </div>
 
     <!-- Add Team/Competitor Modal -->
-    <div id="addTeamModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+    <div id="addTeamModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h2 class="text-xl font-bold mb-4">Add {% if is_individual_competition %}Competitor{% else %}Team{% endif %}</h2>
             <form onsubmit="addTeam(event)">
                 <div class="space-y-4">
                     <!-- 1. Event (first question) -->
                     {% if is_multi_event %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Event</label>
-                        <select id="teamEvent" class="w-full px-4 py-2 rounded bg-gray-700 text-white" required>
+                        <label class="block text-gray-600 text-sm mb-1">Event</label>
+                        <select id="teamEvent" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300" required>
                             {% for et in event_types %}
                             <option value="{{ et }}">{{ et|event_name }}</option>
                             {% endfor %}
@@ -525,8 +525,8 @@
                     </div>
                     {% else %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Category</label>
-                        <select id="teamCategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                        <label class="block text-gray-600 text-sm mb-1">Category</label>
+                        <select id="teamCategory" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300">
                             <option value="">-- Select Category --</option>
                             {% for cat_id, cat in categories.items() %}
                             {% if cat.subcategories %}
@@ -545,8 +545,8 @@
 
                     <!-- 2. Class (second question) -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Class</label>
-                        <select id="teamClass" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                        <label class="block text-gray-600 text-sm mb-1">Class</label>
+                        <select id="teamClass" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300">
                             {% if is_individual_competition and (competition.event_type.startswith('al') or competition.event_type.startswith('sp')) %}
                             <option value="open" selected>Open</option>
                             {% else %}
@@ -560,33 +560,33 @@
 
                     <!-- 3. Number -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">{% if is_individual_competition %}Competitor{% else %}Team{% endif %} Number</label>
+                        <label class="block text-gray-600 text-sm mb-1">{% if is_individual_competition %}Competitor{% else %}Team{% endif %} Number</label>
                         <input type="text" id="teamNumber" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="101">
                     </div>
 
                     <!-- 4. Name -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">{% if is_individual_competition %}Competitor Name{% else %}Team Name{% endif %}</label>
+                        <label class="block text-gray-600 text-sm mb-1">{% if is_individual_competition %}Competitor Name{% else %}Team Name{% endif %}</label>
                         <input type="text" id="teamName" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="{% if is_individual_competition %}John Smith{% else %}Skydivers United{% endif %}">
                     </div>
 
                     <!-- 5. Members / Country -->
                     {% if not is_individual_competition %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Team Members</label>
+                        <label class="block text-gray-600 text-sm mb-1">Team Members</label>
                         <input type="text" id="teamMembers"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="John, Jane, Bob, Alice">
                     </div>
                     {% else %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Country / Affiliation</label>
+                        <label class="block text-gray-600 text-sm mb-1">Country / Affiliation</label>
                         <input type="text" id="teamMembers"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="USA">
                     </div>
                     {% endif %}
@@ -594,24 +594,24 @@
                     <!-- Event Name (only for single-event) -->
                     {% if not is_multi_event %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Event Name</label>
+                        <label class="block text-gray-600 text-sm mb-1">Event Name</label>
                         <input type="text" id="teamEventName"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="2024 USPA Nationals">
                     </div>
                     {% endif %}
 
                     <!-- Photo Upload -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">{% if is_individual_competition %}Competitor{% else %}Team{% endif %} Photo</label>
+                        <label class="block text-gray-600 text-sm mb-1">{% if is_individual_competition %}Competitor{% else %}Team{% endif %} Photo</label>
                         <div class="flex items-center gap-3">
-                            <div id="addTeamPhotoPreview" class="w-16 h-16 rounded bg-gray-700 flex items-center justify-center overflow-hidden">
+                            <div id="addTeamPhotoPreview" class="w-16 h-16 rounded bg-gray-200 flex items-center justify-center overflow-hidden">
                                 <span class="text-gray-500 text-xs">No photo</span>
                             </div>
                             <div class="flex-1">
                                 <input type="file" id="addTeamPhoto" accept="image/*" class="hidden" onchange="previewAddTeamPhoto(event)">
                                 <button type="button" onclick="document.getElementById('addTeamPhoto').click()"
-                                    class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm w-full">
+                                    class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-sm w-full">
                                     Choose Photo
                                 </button>
                             </div>
@@ -619,7 +619,7 @@
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideAddTeamModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="button" onclick="hideAddTeamModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                     <button type="submit" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Add {% if is_individual_competition %}Competitor{% else %}Team{% endif %}</button>
                 </div>
             </form>
@@ -627,16 +627,16 @@
     </div>
 
     <!-- Add Competitor Modal (for individual events) -->
-    <div id="addCompetitorModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+    <div id="addCompetitorModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h2 class="text-xl font-bold mb-4">Add Competitor</h2>
             <form onsubmit="addCompetitor(event)">
                 <div class="space-y-4">
                     <!-- Event -->
                     {% if is_multi_event %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Event</label>
-                        <select id="competitorEvent" class="w-full px-4 py-2 rounded bg-gray-700 text-white" required>
+                        <label class="block text-gray-600 text-sm mb-1">Event</label>
+                        <select id="competitorEvent" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300" required>
                             {% for et in event_types %}
                             <option value="{{ et }}">{{ et|event_name }}</option>
                             {% endfor %}
@@ -646,8 +646,8 @@
 
                     <!-- Class -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Class</label>
-                        <select id="competitorClass" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                        <label class="block text-gray-600 text-sm mb-1">Class</label>
+                        <select id="competitorClass" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300">
                             <option value="open" selected>Open</option>
                             <option value="advanced">Advanced</option>
                             <option value="intermediate">Intermediate</option>
@@ -657,30 +657,30 @@
 
                     <!-- Number -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Competitor Number</label>
+                        <label class="block text-gray-600 text-sm mb-1">Competitor Number</label>
                         <input type="text" id="competitorNumber" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="1">
                     </div>
 
                     <!-- Name -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Competitor Name</label>
+                        <label class="block text-gray-600 text-sm mb-1">Competitor Name</label>
                         <input type="text" id="competitorName" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="John Smith">
                     </div>
 
                     <!-- Country -->
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Country / Affiliation</label>
+                        <label class="block text-gray-600 text-sm mb-1">Country / Affiliation</label>
                         <input type="text" id="competitorCountry"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="USA">
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideAddCompetitorModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="button" onclick="hideAddCompetitorModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                     <button type="submit" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Add Competitor</button>
                 </div>
             </form>
@@ -688,25 +688,25 @@
     </div>
 
     <!-- Edit Team Modal -->
-    <div id="editTeamModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+    <div id="editTeamModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h2 class="text-xl font-bold mb-4">Edit Team</h2>
             <form onsubmit="updateTeam(event)">
                 <input type="hidden" id="editTeamId">
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Team Number</label>
+                        <label class="block text-gray-600 text-sm mb-1">Team Number</label>
                         <input type="text" id="editTeamNumber" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Team Name</label>
+                        <label class="block text-gray-600 text-sm mb-1">Team Name</label>
                         <input type="text" id="editTeamName" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Class</label>
-                        <select id="editTeamClass" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                        <label class="block text-gray-600 text-sm mb-1">Class</label>
+                        <select id="editTeamClass" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300">
                             <option value="beginner">Beginner</option>
                             <option value="intermediate">Intermediate</option>
                             <option value="advanced">Advanced</option>
@@ -715,8 +715,8 @@
                     </div>
                     {% if is_multi_event %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Event</label>
-                        <select id="editTeamEvent" class="w-full px-4 py-2 rounded bg-gray-700 text-white" required>
+                        <label class="block text-gray-600 text-sm mb-1">Event</label>
+                        <select id="editTeamEvent" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300" required>
                             {% for et in event_types %}
                             <option value="{{ et }}">{{ et|event_name }}</option>
                             {% endfor %}
@@ -724,8 +724,8 @@
                     </div>
                     {% else %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Category</label>
-                        <select id="editTeamCategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                        <label class="block text-gray-600 text-sm mb-1">Category</label>
+                        <select id="editTeamCategory" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300">
                             <option value="">-- Select Category --</option>
                             {% for cat_id, cat in categories.items() %}
                             {% if cat.subcategories %}
@@ -741,28 +741,28 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Event Name</label>
+                        <label class="block text-gray-600 text-sm mb-1">Event Name</label>
                         <input type="text" id="editTeamEventName"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="2024 USPA Nationals">
                     </div>
                     {% endif %}
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Team Members</label>
+                        <label class="block text-gray-600 text-sm mb-1">Team Members</label>
                         <input type="text" id="editTeamMembers"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="John, Jane, Bob, Alice">
                     </div>
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Team Photo</label>
+                        <label class="block text-gray-600 text-sm mb-1">Team Photo</label>
                         <div class="flex items-center gap-3">
-                            <div id="editTeamPhotoPreview" class="w-16 h-16 rounded bg-gray-700 flex items-center justify-center overflow-hidden">
+                            <div id="editTeamPhotoPreview" class="w-16 h-16 rounded bg-gray-200 flex items-center justify-center overflow-hidden">
                                 <span class="text-gray-500 text-xs">No photo</span>
                             </div>
                             <div class="flex-1">
                                 <input type="file" id="editTeamPhoto" accept="image/*" class="hidden" onchange="previewTeamPhoto(event)">
                                 <button type="button" onclick="document.getElementById('editTeamPhoto').click()"
-                                    class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm w-full">
+                                    class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-sm w-full">
                                     Choose Photo
                                 </button>
                             </div>
@@ -770,7 +770,7 @@
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideEditTeamModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="button" onclick="hideEditTeamModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                     <button type="submit" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700">Save Changes</button>
                 </div>
             </form>
@@ -786,34 +786,34 @@
         <div class="max-w-2xl mx-4 text-center" onclick="event.stopPropagation()">
             <img id="photoModalImage" src="" alt="" class="max-h-[70vh] rounded-lg shadow-2xl mx-auto">
             <h3 id="photoModalName" class="text-2xl font-bold mt-4"></h3>
-            <p id="photoModalMembers" class="text-gray-400 mt-2"></p>
+            <p id="photoModalMembers" class="text-gray-600 mt-2"></p>
             <div class="mt-4 flex justify-center gap-3">
                 {% if is_admin %}
                 <button onclick="changePhotoFromModal()" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500">Change Photo</button>
                 {% endif %}
-                <button onclick="hidePhotoModal()" class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">Close</button>
+                <button onclick="hidePhotoModal()" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Close</button>
             </div>
             <input type="hidden" id="photoModalTeamId">
         </div>
     </div>
 
     <!-- Import CSV Modal -->
-    <div id="importModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+    <div id="importModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h2 class="text-xl font-bold mb-4" id="importModalTitle">Import from CSV</h2>
             <form onsubmit="importCSV(event)">
                 <input type="hidden" id="importType" value="teams">
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-gray-400 text-sm mb-2">CSV File</label>
+                        <label class="block text-gray-600 text-sm mb-2">CSV File</label>
                         <input type="file" id="csvFile" accept=".csv" required
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                            class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300">
 
                         <!-- Teams import info -->
-                        <div id="teamsImportInfo" class="mt-2 p-3 bg-gray-700 rounded text-xs">
-                            <p class="text-gray-400 mb-2">Required columns:</p>
+                        <div id="teamsImportInfo" class="mt-2 p-3 bg-gray-200 rounded text-xs">
+                            <p class="text-gray-600 mb-2">Required columns:</p>
                             <code class="text-green-400">name, class, event</code>
-                            <p class="text-gray-400 mt-2 mb-1">Optional columns:</p>
+                            <p class="text-gray-600 mt-2 mb-1">Optional columns:</p>
                             <code class="text-yellow-400">team_number, members</code>
                             <p class="text-gray-500 mt-2">members = comma-separated team member names</p>
                             <div class="mt-3 pt-2 border-t border-gray-600">
@@ -824,10 +824,10 @@
                         </div>
 
                         <!-- Competitors import info -->
-                        <div id="competitorsImportInfo" class="hidden mt-2 p-3 bg-gray-700 rounded text-xs">
-                            <p class="text-gray-400 mb-2">Required columns:</p>
+                        <div id="competitorsImportInfo" class="hidden mt-2 p-3 bg-gray-200 rounded text-xs">
+                            <p class="text-gray-600 mb-2">Required columns:</p>
                             <code class="text-green-400">name, class, event</code>
-                            <p class="text-gray-400 mt-2 mb-1">Optional columns:</p>
+                            <p class="text-gray-600 mt-2 mb-1">Optional columns:</p>
                             <code class="text-yellow-400">number, country</code>
                             <p class="text-gray-500 mt-2">For individual competitors (CP, SP, AL, WS Performance)</p>
                             <div class="mt-3 pt-2 border-t border-gray-600">
@@ -839,7 +839,7 @@
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideImportModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="button" onclick="hideImportModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                     <button type="submit" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700">Import</button>
                 </div>
             </form>
@@ -847,35 +847,35 @@
     </div>
 
     <!-- Renumber Modal -->
-    <div id="renumberModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+    <div id="renumberModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h2 class="text-xl font-bold mb-4">Renumber {% if is_individual_competition %}Competitors{% else %}Teams{% endif %}</h2>
-            <p class="text-gray-400 text-sm mb-4">Set the starting number for each class. Entries will be numbered sequentially within each class.</p>
+            <p class="text-gray-600 text-sm mb-4">Set the starting number for each class. Entries will be numbered sequentially within each class.</p>
             <form onsubmit="renumberAll(event)">
                 <div class="space-y-3">
-                    <div class="flex items-center justify-between bg-gray-700 px-4 py-3 rounded">
+                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
                         <label class="text-white font-medium">Open</label>
                         <input type="number" id="renumberOpen" value="1" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-600 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="flex items-center justify-between bg-gray-700 px-4 py-3 rounded">
+                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
                         <label class="text-white font-medium">Advanced</label>
                         <input type="number" id="renumberAdvanced" value="101" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-600 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="flex items-center justify-between bg-gray-700 px-4 py-3 rounded">
+                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
                         <label class="text-white font-medium">Intermediate</label>
                         <input type="number" id="renumberIntermediate" value="201" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-600 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="flex items-center justify-between bg-gray-700 px-4 py-3 rounded">
+                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
                         <label class="text-white font-medium">Beginner</label>
                         <input type="number" id="renumberBeginner" value="301" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-600 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideRenumberModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="button" onclick="hideRenumberModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                     <button type="submit" class="px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-700">Renumber</button>
                 </div>
             </form>
@@ -883,14 +883,14 @@
     </div>
 
     <!-- Add Event Modal -->
-    <div id="addEventModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+    <div id="addEventModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
             <h2 class="text-xl font-bold mb-4">Add Events to Competition</h2>
             <form onsubmit="addEventsToCompetition(event)">
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-gray-400 text-sm mb-2">Select Event Types</label>
-                        <div class="bg-gray-700 rounded p-3 max-h-48 overflow-y-auto space-y-1">
+                        <label class="block text-gray-600 text-sm mb-2">Select Event Types</label>
+                        <div class="bg-gray-200 rounded p-3 max-h-48 overflow-y-auto space-y-1">
                             {% for cat_id, cat in categories.items() %}
                             {% if cat_id != 'uncategorized' %}
                             {% if cat.subcategories %}
@@ -901,10 +901,10 @@
                             {% endif %}
                             {% endfor %}
                             {% if has_available %}
-                            <div class="text-gray-400 text-xs font-medium mt-2 mb-1">{{ cat.name }} ({{ cat.abbrev }})</div>
+                            <div class="text-gray-600 text-xs font-medium mt-2 mb-1">{{ cat.name }} ({{ cat.abbrev }})</div>
                             {% for sub in cat.subcategories %}
                             {% if (cat_id ~ '_' ~ sub.id) not in event_types %}
-                            <label class="flex items-center gap-2 px-2 py-1 hover:bg-gray-600 rounded cursor-pointer">
+                            <label class="flex items-center gap-2 px-2 py-1 hover:bg-gray-300 rounded cursor-pointer">
                                 <input type="checkbox" name="newEventTypes" value="{{ cat_id }}_{{ sub.id }}" class="new-event-checkbox">
                                 <span class="text-sm">{{ sub.name }}</span>
                             </label>
@@ -913,7 +913,7 @@
                             {% endif %}
                             {% else %}
                             {% if cat_id not in event_types %}
-                            <label class="flex items-center gap-2 px-2 py-1 hover:bg-gray-600 rounded cursor-pointer">
+                            <label class="flex items-center gap-2 px-2 py-1 hover:bg-gray-300 rounded cursor-pointer">
                                 <input type="checkbox" name="newEventTypes" value="{{ cat_id }}" class="new-event-checkbox">
                                 <span class="text-sm">{{ cat.name }} ({{ cat.abbrev }})</span>
                             </label>
@@ -926,13 +926,13 @@
                     </div>
                     <!-- Rounds per Event (dynamically populated) -->
                     <div id="newEventRoundsSection" class="hidden">
-                        <label class="block text-gray-400 text-sm mb-2">Rounds per Event</label>
-                        <div id="newEventRoundsList" class="space-y-2 bg-gray-700 rounded p-3 max-h-48 overflow-y-auto">
+                        <label class="block text-gray-600 text-sm mb-2">Rounds per Event</label>
+                        <div id="newEventRoundsList" class="space-y-2 bg-gray-200 rounded p-3 max-h-48 overflow-y-auto">
                         </div>
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideAddEventModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="button" onclick="hideAddEventModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                     <button type="submit" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Add Events</button>
                 </div>
             </form>
@@ -940,10 +940,10 @@
     </div>
 
     <!-- Round Score Modal (with video upload) -->
-    <div id="roundModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 overflow-y-auto py-4">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-3xl mx-4 my-auto">
+    <div id="roundModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-4">
+        <div class="bg-white rounded-lg p-6 w-full max-w-3xl mx-4 my-auto">
             <h2 class="text-xl font-bold mb-2" id="roundModalTitle">Round <span id="roundNum"></span></h2>
-            <p class="text-gray-400 mb-4" id="roundTeamName"></p>
+            <p class="text-gray-600 mb-4" id="roundTeamName"></p>
             <form onsubmit="saveRoundScore(event)">
                 <input type="hidden" id="roundTeamId">
                 <input type="hidden" id="roundNumber">
@@ -970,7 +970,7 @@
                         {% if is_admin %}
                         <div id="removeVideoConfirm" class="hidden mt-3 p-3 bg-red-900/30 border border-red-700 rounded-lg">
                             <p class="text-sm text-gray-300 mb-3">Remove this video from the round? This will allow a new video to be uploaded.</p>
-                            <label class="flex items-center gap-2 text-sm text-gray-400 mb-3 cursor-pointer">
+                            <label class="flex items-center gap-2 text-sm text-gray-600 mb-3 cursor-pointer">
                                 <input type="checkbox" id="deleteVideoFile" class="w-4 h-4">
                                 <span>Also delete the video file permanently</span>
                             </label>
@@ -978,7 +978,7 @@
                                 <button type="button" onclick="removeVideoFromRound()" class="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-sm">
                                     Remove Video
                                 </button>
-                                <button type="button" onclick="hideRemoveVideoConfirm()" class="px-3 py-1.5 rounded bg-gray-600 hover:bg-gray-500 text-sm">
+                                <button type="button" onclick="hideRemoveVideoConfirm()" class="px-3 py-1.5 rounded bg-gray-300 hover:bg-gray-400 text-sm">
                                     Cancel
                                 </button>
                             </div>
@@ -989,11 +989,11 @@
                     <!-- Score Entry (for judges only) -->
                     {% if is_admin %}
                     <!-- Standard Score Entry (non-CP events) -->
-                    <div id="standardScoreSection" class="bg-gray-900 rounded-lg p-4">
-                        <label class="block text-gray-400 text-sm mb-2">Score</label>
+                    <div id="standardScoreSection" class="bg-gray-50 rounded-lg p-4">
+                        <label class="block text-gray-600 text-sm mb-2">Score</label>
                         <div class="flex items-center gap-4">
                             <input type="number" id="roundScore" step="1" min="0"
-                                class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                class="flex-1 px-4 py-3 rounded bg-white text-gray-900 border border-gray-300 text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 placeholder="--">
                             <div class="text-gray-500 text-sm">
                                 <div>Points scored</div>
@@ -1003,14 +1003,14 @@
                     </div>
 
                     <!-- CP Scoring Section (Canopy Piloting) -->
-                    <div id="cpScoreSection" class="hidden bg-gray-900 rounded-lg p-4">
+                    <div id="cpScoreSection" class="hidden bg-gray-50 rounded-lg p-4">
                         <!-- Zone Accuracy Section (Rounds 1-3) -->
                         <div id="cpZoneSection">
                             <h3 class="text-lg font-semibold text-blue-400 mb-4">Zone Accuracy Scoring</h3>
 
                             <!-- Water Gates (vertical, checked by default) -->
                             <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">Water Gates (uncheck if missed)</label>
+                                <label class="block text-gray-600 text-sm mb-2">Water Gates (uncheck if missed)</label>
                                 <div class="flex flex-col gap-2">
                                     <label class="flex items-center gap-3 bg-blue-700 px-4 py-2 rounded cursor-pointer hover:bg-blue-600">
                                         <input type="checkbox" id="cpGateEntry" class="w-5 h-5" checked onchange="calculateCpScore()">
@@ -1037,8 +1037,8 @@
 
                             <!-- Landing Zone -->
                             <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">Landing Zone</label>
-                                <select id="cpLandingZone" class="w-full px-4 py-2 rounded bg-gray-700 text-white" onchange="calculateCpScore()">
+                                <label class="block text-gray-600 text-sm mb-2">Landing Zone</label>
+                                <select id="cpLandingZone" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300" onchange="calculateCpScore()">
                                     <option value="0">Outside landing area (0 pts)</option>
                                     <option value="3">Z1 (3 pts)</option>
                                     <option value="11">Z2 (11 pts)</option>
@@ -1055,10 +1055,10 @@
                             </div>
 
                             <!-- Zone Score Display -->
-                            <div class="bg-gray-800 rounded p-3 text-center mb-4">
-                                <span class="text-gray-400 text-sm">Total Score: </span>
+                            <div class="bg-white rounded p-3 text-center mb-4">
+                                <span class="text-gray-600 text-sm">Total Score: </span>
                                 <span id="cpZoneTotal" class="text-2xl font-mono text-green-400">100</span>
-                                <span class="text-gray-400"> pts</span>
+                                <span class="text-gray-600"> pts</span>
                             </div>
                         </div>
 
@@ -1068,7 +1068,7 @@
 
                             <!-- Gates for Distance -->
                             <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">Gates (uncheck if missed)</label>
+                                <label class="block text-gray-600 text-sm mb-2">Gates (uncheck if missed)</label>
                                 <div class="flex flex-col gap-2">
                                     <label class="flex items-center gap-3 bg-blue-700 px-4 py-2 rounded cursor-pointer hover:bg-blue-600">
                                         <input type="checkbox" id="cpDistEntry" class="w-5 h-5" checked onchange="calculateCpScore()">
@@ -1083,20 +1083,20 @@
 
                             <!-- Distance Input -->
                             <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">Distance (meters)</label>
+                                <label class="block text-gray-600 text-sm mb-2">Distance (meters)</label>
                                 <div class="flex items-center gap-2">
                                     <input type="number" id="cpDistanceMeters" step="0.01" min="0" max="999.99"
-                                        class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-2xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-green-500"
+                                        class="flex-1 px-4 py-3 rounded bg-white text-gray-900 border border-gray-300 text-2xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-green-500"
                                         placeholder="0.00" onchange="calculateCpScore()" oninput="calculateCpScore()">
-                                    <span class="text-gray-400 text-lg">m</span>
+                                    <span class="text-gray-600 text-lg">m</span>
                                 </div>
                             </div>
 
                             <!-- Distance Score Display -->
-                            <div class="bg-gray-800 rounded p-3 text-center mb-4">
-                                <span class="text-gray-400 text-sm">Distance: </span>
+                            <div class="bg-white rounded p-3 text-center mb-4">
+                                <span class="text-gray-600 text-sm">Distance: </span>
                                 <span id="cpDistanceDisplay" class="text-2xl font-mono text-green-400">0.00</span>
-                                <span class="text-gray-400"> m</span>
+                                <span class="text-gray-600"> m</span>
                             </div>
                         </div>
 
@@ -1106,7 +1106,7 @@
 
                             <!-- Gates for Speed -->
                             <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">Gates (uncheck if missed)</label>
+                                <label class="block text-gray-600 text-sm mb-2">Gates (uncheck if missed)</label>
                                 <div class="flex flex-col gap-2">
                                     <label class="flex items-center gap-3 bg-yellow-700 px-4 py-2 rounded cursor-pointer hover:bg-yellow-600">
                                         <input type="checkbox" id="cpSpeedG1" class="w-5 h-5" checked onchange="calculateCpScore()">
@@ -1133,28 +1133,28 @@
 
                             <!-- Time Input -->
                             <div class="mb-4">
-                                <label class="block text-gray-400 text-sm mb-2">Time (seconds)</label>
+                                <label class="block text-gray-600 text-sm mb-2">Time (seconds)</label>
                                 <div class="flex items-center gap-2">
                                     <input type="number" id="cpSpeedTime" step="0.001" min="0" max="99.999"
-                                        class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-2xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                        class="flex-1 px-4 py-3 rounded bg-white text-gray-900 border border-gray-300 text-2xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-yellow-500"
                                         placeholder="0.000" onchange="calculateCpScore()" oninput="calculateCpScore()">
-                                    <span class="text-gray-400 text-lg">s</span>
+                                    <span class="text-gray-600 text-lg">s</span>
                                 </div>
                             </div>
 
                             <!-- Speed Score Display -->
-                            <div class="bg-gray-800 rounded p-3 text-center mb-4">
-                                <span class="text-gray-400 text-sm">Time: </span>
+                            <div class="bg-white rounded p-3 text-center mb-4">
+                                <span class="text-gray-600 text-sm">Time: </span>
                                 <span id="cpSpeedDisplay" class="text-2xl font-mono text-yellow-400">0.000</span>
-                                <span class="text-gray-400"> s</span>
+                                <span class="text-gray-600"> s</span>
                             </div>
                         </div>
 
                         <!-- CP Penalties Section -->
-                        <div class="pt-4 border-t border-gray-700">
+                        <div class="pt-4 border-t border-gray-200">
                             <div class="flex justify-between items-center mb-2">
-                                <label class="text-gray-400 text-sm">Penalties / Special Results (optional)</label>
-                                <button type="button" onclick="clearCpPenalty()" class="text-xs text-gray-500 hover:text-white px-2 py-1 rounded bg-gray-700 hover:bg-gray-600">Clear</button>
+                                <label class="text-gray-600 text-sm">Penalties / Special Results (optional)</label>
+                                <button type="button" onclick="clearCpPenalty()" class="text-xs text-gray-500 hover:text-white px-2 py-1 rounded bg-gray-200 hover:bg-gray-300">Clear</button>
                             </div>
                             <div class="grid grid-cols-3 gap-2 mb-3">
                                 <label class="flex items-center gap-2 bg-blue-900/50 px-3 py-2 rounded cursor-pointer hover:bg-blue-900">
@@ -1192,32 +1192,32 @@
                     </div>
 
                     <!-- CF Scoring Section (Canopy Formation events) -->
-                    <div id="cfScoreSection" class="hidden bg-gray-900 rounded-lg p-4">
+                    <div id="cfScoreSection" class="hidden bg-gray-50 rounded-lg p-4">
                         <!-- CF Event Type Selector -->
                         <div class="mb-4">
-                            <label class="block text-gray-400 text-sm mb-2">CF Event Type</label>
+                            <label class="block text-gray-600 text-sm mb-2">CF Event Type</label>
                             <div class="grid grid-cols-2 gap-2">
                                 <button type="button" onclick="setCfEventType('4way')" id="cfEvent4Way"
                                     class="px-3 py-2 rounded bg-blue-600 text-sm font-medium cf-event-btn">
                                     4-Way Sequential (-1 per omission)
                                 </button>
                                 <button type="button" onclick="setCfEventType('2way')" id="cfEvent2Way"
-                                    class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm font-medium cf-event-btn">
+                                    class="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-sm font-medium cf-event-btn">
                                     2-Way Sequential (-2 per omission)
                                 </button>
                             </div>
                         </div>
 
-                        <div id="cfRulesText" class="text-sm text-gray-400 mb-4">
+                        <div id="cfRulesText" class="text-sm text-gray-600 mb-4">
                             4-Way: 1 point per correct formation. Omissions = no point + 1 penalty.
                         </div>
 
                         <!-- Formations Completed -->
                         <div class="mb-4">
-                            <label class="block text-gray-400 text-sm mb-2">Formations Completed</label>
+                            <label class="block text-gray-600 text-sm mb-2">Formations Completed</label>
                             <div class="flex items-center gap-4">
                                 <input type="number" id="cfFormations" min="0" max="50" value="0"
-                                    class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    class="flex-1 px-4 py-3 rounded bg-white text-gray-900 border border-gray-300 text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     onchange="calculateCfScore()" oninput="calculateCfScore()">
                                 <div class="text-gray-500 text-sm">
                                     <div>Correct formations</div>
@@ -1228,10 +1228,10 @@
 
                         <!-- Omissions -->
                         <div class="mb-4">
-                            <label class="block text-gray-400 text-sm mb-2">Omissions</label>
+                            <label class="block text-gray-600 text-sm mb-2">Omissions</label>
                             <div class="flex items-center gap-4">
                                 <input type="number" id="cfOmissions" min="0" max="20" value="0"
-                                    class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-red-500"
+                                    class="flex-1 px-4 py-3 rounded bg-white text-gray-900 border border-gray-300 text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-red-500"
                                     onchange="calculateCfScore()" oninput="calculateCfScore()">
                                 <div class="text-gray-500 text-sm" id="cfOmissionHelp">
                                     <div>-1 point each</div>
@@ -1246,24 +1246,24 @@
                                 <input type="checkbox" id="cfNvPenalty" class="w-5 h-5" onchange="calculateCfScore()">
                                 <div>
                                     <span class="font-medium text-red-400">NV Penalty (Not Valid)</span>
-                                    <div class="text-xs text-gray-400">Score becomes 0 for this round</div>
+                                    <div class="text-xs text-gray-600">Score becomes 0 for this round</div>
                                 </div>
                             </label>
                         </div>
 
                         <!-- CF Score Calculation Display -->
-                        <div class="bg-gray-800 rounded p-4 mt-4">
+                        <div class="bg-white rounded p-4 mt-4">
                             <div class="grid grid-cols-3 gap-4 text-center">
                                 <div>
-                                    <div class="text-gray-400 text-xs mb-1">Formations</div>
+                                    <div class="text-gray-600 text-xs mb-1">Formations</div>
                                     <span id="cfFormationsDisplay" class="text-2xl font-mono text-green-400">0</span>
                                 </div>
                                 <div>
-                                    <div class="text-gray-400 text-xs mb-1">Omission Penalty</div>
+                                    <div class="text-gray-600 text-xs mb-1">Omission Penalty</div>
                                     <span id="cfOmissionPenalty" class="text-2xl font-mono text-red-400">-0</span>
                                 </div>
                                 <div>
-                                    <div class="text-gray-400 text-xs mb-1">Final Score</div>
+                                    <div class="text-gray-600 text-xs mb-1">Final Score</div>
                                     <span id="cfFinalScore" class="text-2xl font-mono text-blue-400 font-bold">0</span>
                                 </div>
                             </div>
@@ -1277,11 +1277,11 @@
                     {% endif %}
 
                     <!-- Video Upload Section (for videographers - not for Speed Skydiving) -->
-                    <div id="videoUploadSection" class="border-t border-gray-700 pt-4">
-                        <label class="block text-gray-400 text-sm mb-2">Upload Video</label>
+                    <div id="videoUploadSection" class="border-t border-gray-200 pt-4">
+                        <label class="block text-gray-600 text-sm mb-2">Upload Video</label>
 
                         <!-- Video Already Exists Message -->
-                        <div id="videoAlreadyExistsMsg" class="hidden p-3 bg-gray-700 rounded text-center text-sm text-gray-400">
+                        <div id="videoAlreadyExistsMsg" class="hidden p-3 bg-gray-200 rounded text-center text-sm text-gray-600">
                             Video already uploaded for this round.
                         </div>
 
@@ -1294,7 +1294,7 @@
                                     <div>
                                         <input type="file" id="roundVideoFile" accept="video/*" class="hidden" onchange="handleVideoSelect(event)">
                                         <button type="button" onclick="document.getElementById('roundVideoFile').click()"
-                                            class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                            class="w-full px-4 py-3 rounded bg-gray-200 hover:bg-gray-300 text-sm">
                                             <span class="block text-lg mb-1">📁</span>
                                             Select File
                                         </button>
@@ -1304,7 +1304,7 @@
                                     <div>
                                         <input type="file" id="roundVideoCapture" accept="video/*" capture="environment" class="hidden" onchange="handleVideoSelect(event)">
                                         <button type="button" onclick="document.getElementById('roundVideoCapture').click()"
-                                            class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                            class="w-full px-4 py-3 rounded bg-gray-200 hover:bg-gray-300 text-sm">
                                             <span class="block text-lg mb-1">📹</span>
                                             From Camera
                                         </button>
@@ -1315,7 +1315,7 @@
                             <!-- Step 2: Set Start Point (shown after file selected) -->
                             <div id="startPointControls" class="hidden">
                                 <div class="flex items-center justify-between mb-2">
-                                    <span id="selectedVideoName" class="text-sm text-gray-400"></span>
+                                    <span id="selectedVideoName" class="text-sm text-gray-600"></span>
                                     <button type="button" onclick="clearSelectedVideo()" class="text-red-400 text-sm hover:underline">Change</button>
                                 </div>
 
@@ -1327,8 +1327,8 @@
                                 </div>
 
                                 <!-- Start Point Controls -->
-                                <div class="bg-gray-900 rounded p-3 mb-3">
-                                    <p class="text-gray-400 text-xs mb-2">Scrub to the start of working time and click "Set Start Point"</p>
+                                <div class="bg-gray-50 rounded p-3 mb-3">
+                                    <p class="text-gray-600 text-xs mb-2">Scrub to the start of working time and click "Set Start Point"</p>
                                     <div class="flex items-center gap-2">
                                         <button type="button" onclick="setVideoStartPoint()"
                                             class="flex-1 px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-sm font-medium">
@@ -1347,38 +1347,38 @@
 
                             <!-- Upload Progress -->
                             <div id="uploadProgress" class="hidden mt-3">
-                                <div class="bg-gray-700 rounded-full h-2">
+                                <div class="bg-gray-200 rounded-full h-2">
                                     <div id="uploadBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
                                 </div>
-                                <p class="text-gray-400 text-sm mt-1" id="uploadStatus">Uploading...</p>
+                                <p class="text-gray-600 text-sm mt-1" id="uploadStatus">Uploading...</p>
                             </div>
                         </div>
                     </div>
 
                     <!-- FlySight CSV Upload Section (for Speed Skydiving only) -->
-                    <div id="flysightUploadSection" class="hidden border-t border-gray-700 pt-4">
-                        <label class="block text-gray-400 text-sm mb-2">Upload FlySight CSV</label>
+                    <div id="flysightUploadSection" class="hidden border-t border-gray-200 pt-4">
+                        <label class="block text-gray-600 text-sm mb-2">Upload FlySight CSV</label>
                         <p class="text-gray-500 text-xs mb-3">Upload the FlySight CSV file to automatically calculate speed.</p>
 
                         <div>
                             <input type="file" id="flysightFile" accept=".csv" class="hidden" onchange="handleFlysightSelect(event)">
                             <button type="button" onclick="document.getElementById('flysightFile').click()"
-                                class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                class="w-full px-4 py-3 rounded bg-gray-200 hover:bg-gray-300 text-sm">
                                 <span class="block text-lg mb-1">📊</span>
                                 Select FlySight CSV
                             </button>
                         </div>
 
                         <!-- Selected CSV Display -->
-                        <div id="selectedFlysightInfo" class="hidden mt-3 p-3 bg-gray-700 rounded">
+                        <div id="selectedFlysightInfo" class="hidden mt-3 p-3 bg-gray-200 rounded">
                             <div class="flex items-center justify-between mb-2">
                                 <span id="selectedFlysightName" class="text-sm"></span>
                                 <button type="button" onclick="clearFlysightFile()" class="text-red-400 text-sm hover:underline">Remove</button>
                             </div>
-                            <div id="flysightResult" class="hidden mt-2 p-3 bg-gray-900 rounded">
+                            <div id="flysightResult" class="hidden mt-2 p-3 bg-gray-50 rounded">
                                 <div class="text-center">
                                     <span class="text-3xl font-mono text-green-400" id="flysightSpeed">--</span>
-                                    <span class="text-gray-400 ml-1">km/h</span>
+                                    <span class="text-gray-600 ml-1">km/h</span>
                                 </div>
                                 <p class="text-gray-500 text-xs text-center mt-1">Max vertical speed detected</p>
                             </div>
@@ -1386,15 +1386,15 @@
 
                         <!-- Upload Progress -->
                         <div id="flysightProgress" class="hidden mt-3">
-                            <div class="bg-gray-700 rounded-full h-2">
+                            <div class="bg-gray-200 rounded-full h-2">
                                 <div id="flysightBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
                             </div>
-                            <p class="text-gray-400 text-sm mt-1" id="flysightStatus">Processing...</p>
+                            <p class="text-gray-600 text-sm mt-1" id="flysightStatus">Processing...</p>
                         </div>
                     </div>
                 </div>
 
-                <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-700">
+                <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-200">
                     <div class="flex items-center gap-3">
                         {% if is_admin %}
                         <button type="button" onclick="awardRejump()" id="rejumpBtn" class="px-3 py-2 rounded bg-orange-600 hover:bg-orange-700 text-sm">
@@ -1412,7 +1412,7 @@
                         <span id="modalStatusText" class="text-sm text-gray-500"></span>
                     </div>
                     <div class="flex gap-3">
-                        <button type="button" onclick="hideRoundModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                        <button type="button" onclick="hideRoundModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                         <button type="button" onclick="uploadVideoOnly()" id="uploadOnlyBtn" class="hidden px-4 py-2 rounded bg-blue-600 hover:bg-blue-700">Upload Video Only</button>
                         {% if is_admin %}
                         <button type="submit" id="saveRoundBtn" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Save Score</button>
@@ -1424,16 +1424,16 @@
     </div>
 
     <!-- Training Videos Panel -->
-    <div id="trainingPanel" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50 overflow-y-auto py-4">
-        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-2xl mx-4 my-auto">
+    <div id="trainingPanel" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 overflow-y-auto py-4">
+        <div class="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 my-auto">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold flex items-center gap-2">
                     <span>🎓</span> Training Videos
                 </h2>
-                <button onclick="hideTrainingPanel()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                <button onclick="hideTrainingPanel()" class="text-gray-600 hover:text-white text-2xl">&times;</button>
             </div>
 
-            <p class="text-gray-400 text-sm mb-4">Videos flagged for training material. Use the checkbox in the round modal to flag/unflag videos.</p>
+            <p class="text-gray-600 text-sm mb-4">Videos flagged for training material. Use the checkbox in the round modal to flag/unflag videos.</p>
 
             <!-- Export Buttons -->
             <div class="flex gap-3 mb-4">
@@ -1443,17 +1443,17 @@
                 <a href="/competition/{{ competition.id }}/training-download" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm flex items-center gap-2">
                     <span>📦</span> Download Videos (ZIP)
                 </a>
-                <button onclick="loadTrainingVideos()" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm">
+                <button onclick="loadTrainingVideos()" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded text-sm">
                     Refresh
                 </button>
             </div>
 
             <!-- Training Videos List -->
-            <div id="trainingVideosList" class="bg-gray-900 rounded-lg p-4 max-h-96 overflow-y-auto">
+            <div id="trainingVideosList" class="bg-gray-50 rounded-lg p-4 max-h-96 overflow-y-auto">
                 <p class="text-gray-500 text-center">Loading...</p>
             </div>
 
-            <div class="mt-4 text-gray-400 text-sm">
+            <div class="mt-4 text-gray-600 text-sm">
                 <span id="trainingCount">0</span> videos flagged for training
             </div>
         </div>
@@ -1472,9 +1472,9 @@
             // Update event tabs
             document.querySelectorAll('[id^="event-tab-"]').forEach(tab => {
                 tab.classList.remove('bg-blue-600', 'text-white');
-                tab.classList.add('bg-gray-700');
+                tab.classList.add('bg-gray-200');
             });
-            document.getElementById('event-tab-' + eventType).classList.remove('bg-gray-700');
+            document.getElementById('event-tab-' + eventType).classList.remove('bg-gray-200');
             document.getElementById('event-tab-' + eventType).classList.add('bg-blue-600', 'text-white');
 
             // Show/hide event sections
@@ -1500,10 +1500,10 @@
             document.querySelectorAll('[id^="tab-"]').forEach(tab => {
                 if (!tab.id.startsWith('event-tab-')) {
                     tab.classList.remove('bg-blue-600', 'text-white');
-                    tab.classList.add('bg-gray-700');
+                    tab.classList.add('bg-gray-200');
                 }
             });
-            document.getElementById('tab-' + className).classList.remove('bg-gray-700');
+            document.getElementById('tab-' + className).classList.remove('bg-gray-200');
             document.getElementById('tab-' + className).classList.add('bg-blue-600', 'text-white');
 
             // Show/hide class sections
@@ -2074,16 +2074,16 @@
             // Update button styles
             document.querySelectorAll('.cf-event-btn').forEach(btn => {
                 btn.classList.remove('bg-blue-600');
-                btn.classList.add('bg-gray-700', 'hover:bg-gray-600');
+                btn.classList.add('bg-gray-200', 'hover:bg-gray-300');
             });
 
             if (eventType === '4way') {
-                document.getElementById('cfEvent4Way').classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                document.getElementById('cfEvent4Way').classList.remove('bg-gray-200', 'hover:bg-gray-300');
                 document.getElementById('cfEvent4Way').classList.add('bg-blue-600');
                 document.getElementById('cfRulesText').textContent = '4-Way: 1 point per correct formation. Omissions = no point + 1 penalty.';
                 document.getElementById('cfOmissionHelp').innerHTML = '<div>-1 point each</div><div class="text-xs">(inter+2nd in block = 1)</div>';
             } else {
-                document.getElementById('cfEvent2Way').classList.remove('bg-gray-700', 'hover:bg-gray-600');
+                document.getElementById('cfEvent2Way').classList.remove('bg-gray-200', 'hover:bg-gray-300');
                 document.getElementById('cfEvent2Way').classList.add('bg-blue-600');
                 document.getElementById('cfRulesText').textContent = '2-Way: 1 point per correct formation. Omissions = no point + 2 penalty.';
                 document.getElementById('cfOmissionHelp').innerHTML = '<div>-2 points each</div><div class="text-xs">per omission</div>';
@@ -2501,13 +2501,13 @@
 
                 if (result.videos && result.videos.length > 0) {
                     listEl.innerHTML = result.videos.map(v => `
-                        <div class="flex items-center justify-between py-2 border-b border-gray-700 last:border-0">
+                        <div class="flex items-center justify-between py-2 border-b border-gray-200 last:border-0">
                             <div>
                                 <span class="font-medium">${v.team_name}</span>
-                                <span class="text-gray-400 text-sm ml-2">Round ${v.round_num}</span>
+                                <span class="text-gray-600 text-sm ml-2">Round ${v.round_num}</span>
                                 ${v.score !== null ? `<span class="text-green-400 text-sm ml-2">Score: ${v.score}</span>` : ''}
                             </div>
-                            <div class="text-gray-400 text-sm">
+                            <div class="text-gray-600 text-sm">
                                 ${v.video_file || v.video_id || 'No video'}
                             </div>
                         </div>
@@ -3151,7 +3151,7 @@
                     <div class="flex items-center justify-between gap-3 py-1">
                         <span class="text-sm text-gray-300">${displayName}</span>
                         <input type="number" data-event="${eventId}" value="${defaultRoundCount}" min="1" max="20"
-                            class="w-20 px-2 py-1 rounded bg-gray-600 text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-20 px-2 py-1 rounded bg-gray-300 text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 `;
             }).join('');
