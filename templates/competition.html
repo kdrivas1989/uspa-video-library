@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ competition.name }} - USPA Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
+            <div class="flex items-center gap-4">
+                <a href="/competitions" class="text-gray-400 hover:text-white">Competitions</a>
+                {% if is_admin %}
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <!-- Header -->
+        <div class="flex justify-between items-start mb-8">
+            <div>
+                <h1 class="text-3xl font-bold mb-2">{{ competition.name }}</h1>
+                <div class="text-gray-400 flex gap-4">
+                    <span>Event: {{ competition.event_type|upper }}</span>
+                    <span>Rounds: {{ competition.total_rounds }}</span>
+                    <span class="{% if competition.status == 'active' %}text-green-400{% else %}text-gray-500{% endif %}">
+                        {{ competition.status }}
+                    </span>
+                </div>
+            </div>
+            {% if is_admin %}
+            <div class="flex gap-2">
+                <button onclick="showAddTeamModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm">
+                    + Add Team
+                </button>
+                <button onclick="showImportModal()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm">
+                    Import CSV
+                </button>
+                <button onclick="deleteCompetition()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm">
+                    Delete
+                </button>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Class Tabs -->
+        <div class="flex gap-2 mb-6 border-b border-gray-700 pb-2">
+            <button onclick="showClass('all')" id="tab-all" class="px-4 py-2 rounded-t-lg bg-blue-600 text-white">
+                All Teams
+            </button>
+            <button onclick="showClass('beginner')" id="tab-beginner" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+                Beginner
+            </button>
+            <button onclick="showClass('intermediate')" id="tab-intermediate" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+                Intermediate
+            </button>
+            <button onclick="showClass('advanced')" id="tab-advanced" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+                Advanced
+            </button>
+            <button onclick="showClass('open')" id="tab-open" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+                Open
+            </button>
+        </div>
+
+        <!-- Teams Tables by Class -->
+        {% for class_name, teams in teams_by_class.items() %}
+        <div id="class-{{ class_name }}" class="class-section mb-8">
+            <h2 class="text-xl font-bold mb-4 capitalize">{{ class_name }} Class</h2>
+            {% if teams %}
+            <div class="bg-gray-800 rounded-lg overflow-hidden">
+                <table class="w-full">
+                    <thead class="bg-gray-700">
+                        <tr>
+                            <th class="px-4 py-3 text-left">Rank</th>
+                            <th class="px-4 py-3 text-left">#</th>
+                            <th class="px-4 py-3 text-left">Team Name</th>
+                            <th class="px-4 py-3 text-left">Members</th>
+                            {% for i in range(1, competition.total_rounds + 1) %}
+                            <th class="px-2 py-3 text-center text-sm">R{{ i }}</th>
+                            {% endfor %}
+                            <th class="px-4 py-3 text-right">Total</th>
+                            {% if is_admin %}
+                            <th class="px-4 py-3 text-right">Actions</th>
+                            {% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for team in teams %}
+                        <tr class="border-t border-gray-700 hover:bg-gray-750">
+                            <td class="px-4 py-3 font-bold text-yellow-400">{{ loop.index }}</td>
+                            <td class="px-4 py-3">{{ team.team_number }}</td>
+                            <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
+                            <td class="px-4 py-3 text-gray-400 text-sm">{{ team.members or '-' }}</td>
+                            {% for i in range(1, competition.total_rounds + 1) %}
+                            {% set round_score = team.scores|selectattr('round_num', 'equalto', i)|first %}
+                            <td class="px-2 py-3 text-center">
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, {{ round_score.score if round_score else 'null' }}, '{{ round_score.video_id if round_score else '' }}')"
+                                    class="w-10 h-8 rounded text-sm {% if round_score %}bg-green-600 hover:bg-green-700{% else %}bg-gray-600 hover:bg-gray-500{% endif %}">
+                                    {% if round_score %}{{ round_score.score|int }}{% else %}-{% endif %}
+                                </button>
+                            </td>
+                            {% endfor %}
+                            <td class="px-4 py-3 text-right font-bold text-green-400">{{ team.total_score|int }}</td>
+                            {% if is_admin %}
+                            <td class="px-4 py-3 text-right">
+                                <button onclick="deleteTeam('{{ team.id }}')" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-gray-500 text-center py-8 bg-gray-800 rounded-lg">
+                No teams in this class
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Add Team Modal -->
+    <div id="addTeamModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h2 class="text-xl font-bold mb-4">Add Team</h2>
+            <form onsubmit="addTeam(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Team Number</label>
+                        <input type="text" id="teamNumber" required
+                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="101">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Team Name</label>
+                        <input type="text" id="teamName" required
+                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Skydivers United">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Class</label>
+                        <select id="teamClass" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                            <option value="beginner">Beginner</option>
+                            <option value="intermediate">Intermediate</option>
+                            <option value="advanced">Advanced</option>
+                            <option value="open" selected>Open</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Team Members</label>
+                        <input type="text" id="teamMembers"
+                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="John, Jane, Bob, Alice">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideAddTeamModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Add Team</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Import CSV Modal -->
+    <div id="importModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h2 class="text-xl font-bold mb-4">Import Teams from CSV</h2>
+            <form onsubmit="importTeams(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Default Class</label>
+                        <select id="importClass" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                            <option value="beginner">Beginner</option>
+                            <option value="intermediate">Intermediate</option>
+                            <option value="advanced">Advanced</option>
+                            <option value="open" selected>Open</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-2">CSV File</label>
+                        <input type="file" id="csvFile" accept=".csv" required
+                            class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                        <p class="text-gray-500 text-xs mt-2">
+                            CSV columns: team_number, team_name, members, class (optional)
+                        </p>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideImportModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700">Import</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Round Score Modal (with video upload) -->
+    <div id="roundModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-lg mx-4">
+            <h2 class="text-xl font-bold mb-2">Round <span id="roundNum"></span></h2>
+            <p class="text-gray-400 mb-4" id="roundTeamName"></p>
+            <form onsubmit="saveRoundScore(event)">
+                <input type="hidden" id="roundTeamId">
+                <input type="hidden" id="roundNumber">
+
+                <div class="space-y-4">
+                    <!-- Score Entry -->
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Score</label>
+                        <input type="number" id="roundScore" step="0.01" min="0"
+                            class="w-full px-4 py-2 rounded bg-gray-700 text-white text-2xl font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="0">
+                    </div>
+
+                    <!-- Video Upload Section -->
+                    <div class="border-t border-gray-700 pt-4">
+                        <label class="block text-gray-400 text-sm mb-2">Video</label>
+
+                        <!-- Existing Video -->
+                        <div id="existingVideo" class="hidden mb-3 p-3 bg-gray-700 rounded">
+                            <span class="text-green-400">Video uploaded</span>
+                            <a href="#" id="viewVideoLink" target="_blank" class="text-blue-400 ml-2 hover:underline">View</a>
+                        </div>
+
+                        <!-- Upload Options -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <!-- File Upload -->
+                            <div>
+                                <input type="file" id="roundVideoFile" accept="video/*" class="hidden" onchange="handleVideoSelect(event)">
+                                <button type="button" onclick="document.getElementById('roundVideoFile').click()"
+                                    class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                    <span class="block text-lg mb-1">📁</span>
+                                    Upload File
+                                </button>
+                            </div>
+
+                            <!-- Camera Capture -->
+                            <div>
+                                <input type="file" id="roundVideoCapture" accept="video/*" capture="environment" class="hidden" onchange="handleVideoSelect(event)">
+                                <button type="button" onclick="document.getElementById('roundVideoCapture').click()"
+                                    class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                    <span class="block text-lg mb-1">📹</span>
+                                    From Camera
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Selected File Display -->
+                        <div id="selectedVideoInfo" class="hidden mt-3 p-3 bg-gray-700 rounded">
+                            <span id="selectedVideoName" class="text-sm"></span>
+                            <button type="button" onclick="clearSelectedVideo()" class="text-red-400 ml-2 text-sm hover:underline">Remove</button>
+                        </div>
+
+                        <!-- Upload Progress -->
+                        <div id="uploadProgress" class="hidden mt-3">
+                            <div class="bg-gray-700 rounded-full h-2">
+                                <div id="uploadBar" class="bg-blue-600 h-2 rounded-full" style="width: 0%"></div>
+                            </div>
+                            <p class="text-gray-400 text-sm mt-1" id="uploadStatus">Uploading...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideRoundModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">Cancel</button>
+                    <button type="submit" id="saveRoundBtn" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const compId = '{{ competition.id }}';
+        let selectedVideoFile = null;
+        let currentClass = 'all';
+
+        function showClass(className) {
+            currentClass = className;
+            // Update tabs
+            document.querySelectorAll('[id^="tab-"]').forEach(tab => {
+                tab.classList.remove('bg-blue-600', 'text-white');
+                tab.classList.add('bg-gray-700');
+            });
+            document.getElementById('tab-' + className).classList.remove('bg-gray-700');
+            document.getElementById('tab-' + className).classList.add('bg-blue-600', 'text-white');
+
+            // Show/hide sections
+            document.querySelectorAll('.class-section').forEach(section => {
+                if (className === 'all') {
+                    section.classList.remove('hidden');
+                } else {
+                    if (section.id === 'class-' + className) {
+                        section.classList.remove('hidden');
+                    } else {
+                        section.classList.add('hidden');
+                    }
+                }
+            });
+        }
+
+        function showAddTeamModal() {
+            document.getElementById('addTeamModal').classList.remove('hidden');
+        }
+
+        function hideAddTeamModal() {
+            document.getElementById('addTeamModal').classList.add('hidden');
+        }
+
+        function showImportModal() {
+            document.getElementById('importModal').classList.remove('hidden');
+        }
+
+        function hideImportModal() {
+            document.getElementById('importModal').classList.add('hidden');
+        }
+
+        function openRoundModal(teamId, teamName, roundNum, score, videoId) {
+            document.getElementById('roundTeamId').value = teamId;
+            document.getElementById('roundNumber').value = roundNum;
+            document.getElementById('roundNum').textContent = roundNum;
+            document.getElementById('roundTeamName').textContent = teamName;
+            document.getElementById('roundScore').value = score || '';
+
+            // Video status
+            if (videoId) {
+                document.getElementById('existingVideo').classList.remove('hidden');
+                document.getElementById('viewVideoLink').href = '/video/' + videoId;
+            } else {
+                document.getElementById('existingVideo').classList.add('hidden');
+            }
+
+            selectedVideoFile = null;
+            document.getElementById('selectedVideoInfo').classList.add('hidden');
+            document.getElementById('uploadProgress').classList.add('hidden');
+
+            document.getElementById('roundModal').classList.remove('hidden');
+        }
+
+        function hideRoundModal() {
+            document.getElementById('roundModal').classList.add('hidden');
+        }
+
+        function handleVideoSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                selectedVideoFile = file;
+                document.getElementById('selectedVideoName').textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)';
+                document.getElementById('selectedVideoInfo').classList.remove('hidden');
+            }
+        }
+
+        function clearSelectedVideo() {
+            selectedVideoFile = null;
+            document.getElementById('selectedVideoInfo').classList.add('hidden');
+            document.getElementById('roundVideoFile').value = '';
+            document.getElementById('roundVideoCapture').value = '';
+        }
+
+        async function addTeam(e) {
+            e.preventDefault();
+
+            const data = {
+                team_number: document.getElementById('teamNumber').value,
+                team_name: document.getElementById('teamName').value,
+                class: document.getElementById('teamClass').value,
+                members: document.getElementById('teamMembers').value
+            };
+
+            try {
+                const response = await fetch('/admin/competition/' + compId + '/add-team', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to add team');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function importTeams(e) {
+            e.preventDefault();
+
+            const formData = new FormData();
+            formData.append('file', document.getElementById('csvFile').files[0]);
+            formData.append('class', document.getElementById('importClass').value);
+
+            try {
+                const response = await fetch('/admin/competition/' + compId + '/import-teams', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to import teams');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function saveRoundScore(e) {
+            e.preventDefault();
+
+            const teamId = document.getElementById('roundTeamId').value;
+            const roundNum = document.getElementById('roundNumber').value;
+            const score = parseFloat(document.getElementById('roundScore').value) || 0;
+
+            let videoId = '';
+
+            // Upload video if selected
+            if (selectedVideoFile) {
+                document.getElementById('uploadProgress').classList.remove('hidden');
+                document.getElementById('saveRoundBtn').disabled = true;
+
+                const formData = new FormData();
+                formData.append('file', selectedVideoFile);
+                formData.append('category', '{{ competition.event_type }}');
+                formData.append('event', '{{ competition.name }}');
+                formData.append('title', document.getElementById('roundTeamName').textContent + ' - Round ' + roundNum);
+
+                try {
+                    const uploadResponse = await fetch('/admin/upload-video', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    const uploadResult = await uploadResponse.json();
+                    if (uploadResult.success) {
+                        videoId = uploadResult.id;
+                        document.getElementById('uploadStatus').textContent = 'Video uploaded!';
+                        document.getElementById('uploadBar').style.width = '100%';
+                    } else {
+                        alert('Video upload failed: ' + uploadResult.error);
+                        document.getElementById('saveRoundBtn').disabled = false;
+                        return;
+                    }
+                } catch (err) {
+                    alert('Video upload error: ' + err.message);
+                    document.getElementById('saveRoundBtn').disabled = false;
+                    return;
+                }
+            }
+
+            // Save score
+            try {
+                const response = await fetch('/admin/team/' + teamId + '/score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        round_num: parseInt(roundNum),
+                        score: score,
+                        video_id: videoId
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to save score');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+
+            document.getElementById('saveRoundBtn').disabled = false;
+        }
+
+        async function deleteTeam(teamId) {
+            if (!confirm('Delete this team and all scores?')) return;
+
+            try {
+                const response = await fetch('/admin/team/' + teamId + '/delete', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to delete team');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function deleteCompetition() {
+            if (!confirm('Delete this competition and ALL teams/scores?')) return;
+
+            try {
+                const response = await fetch('/admin/competition/' + compId + '/delete', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    window.location.href = '/competitions';
+                } else {
+                    alert(result.error || 'Failed to delete competition');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+    </script>
+</body>
+</html>

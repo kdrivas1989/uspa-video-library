@@ -174,6 +174,46 @@ def init_db():
         except:
             pass
 
+        # Competitions tables
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS competitions (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                total_rounds INTEGER DEFAULT 10,
+                created_at TEXT NOT NULL,
+                status TEXT DEFAULT 'active'
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS competition_teams (
+                id TEXT PRIMARY KEY,
+                competition_id TEXT NOT NULL,
+                team_number TEXT NOT NULL,
+                team_name TEXT NOT NULL,
+                class TEXT NOT NULL,
+                members TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (competition_id) REFERENCES competitions(id)
+            )
+        ''')
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS competition_scores (
+                id TEXT PRIMARY KEY,
+                competition_id TEXT NOT NULL,
+                team_id TEXT NOT NULL,
+                round_num INTEGER NOT NULL,
+                score REAL,
+                score_data TEXT,
+                video_id TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (competition_id) REFERENCES competitions(id),
+                FOREIGN KEY (team_id) REFERENCES competition_teams(id)
+            )
+        ''')
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
@@ -352,6 +392,159 @@ def get_user(username):
         cursor = db.execute('SELECT * FROM users WHERE username = ?', (username,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+# Competition database functions
+def get_all_competitions():
+    """Get all competitions."""
+    if USE_SUPABASE:
+        result = supabase.table('competitions').select('*').order('created_at', desc=True).execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM competitions ORDER BY created_at DESC')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_competition(comp_id):
+    """Get a single competition."""
+    if USE_SUPABASE:
+        result = supabase.table('competitions').select('*').eq('id', comp_id).execute()
+        return result.data[0] if result.data else None
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM competitions WHERE id = ?', (comp_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def save_competition(comp_data):
+    """Save a competition."""
+    if USE_SUPABASE:
+        existing = supabase.table('competitions').select('id').eq('id', comp_data['id']).execute()
+        if existing.data:
+            supabase.table('competitions').update(comp_data).eq('id', comp_data['id']).execute()
+        else:
+            supabase.table('competitions').insert(comp_data).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('''
+            INSERT OR REPLACE INTO competitions (id, name, event_type, total_rounds, created_at, status)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (comp_data['id'], comp_data['name'], comp_data['event_type'],
+              comp_data.get('total_rounds', 10), comp_data['created_at'],
+              comp_data.get('status', 'active')))
+        db.commit()
+
+
+def delete_competition_db(comp_id):
+    """Delete a competition and its teams/scores."""
+    if USE_SUPABASE:
+        supabase.table('competition_scores').delete().eq('competition_id', comp_id).execute()
+        supabase.table('competition_teams').delete().eq('competition_id', comp_id).execute()
+        supabase.table('competitions').delete().eq('id', comp_id).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('DELETE FROM competition_scores WHERE competition_id = ?', (comp_id,))
+        db.execute('DELETE FROM competition_teams WHERE competition_id = ?', (comp_id,))
+        db.execute('DELETE FROM competitions WHERE id = ?', (comp_id,))
+        db.commit()
+
+
+def get_competition_teams(comp_id, class_filter=None):
+    """Get teams for a competition."""
+    if USE_SUPABASE:
+        query = supabase.table('competition_teams').select('*').eq('competition_id', comp_id)
+        if class_filter:
+            query = query.eq('class', class_filter)
+        result = query.order('team_number').execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        if class_filter:
+            cursor = db.execute(
+                'SELECT * FROM competition_teams WHERE competition_id = ? AND class = ? ORDER BY team_number',
+                (comp_id, class_filter)
+            )
+        else:
+            cursor = db.execute(
+                'SELECT * FROM competition_teams WHERE competition_id = ? ORDER BY class, team_number',
+                (comp_id,)
+            )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_team(team_id):
+    """Get a single team."""
+    if USE_SUPABASE:
+        result = supabase.table('competition_teams').select('*').eq('id', team_id).execute()
+        return result.data[0] if result.data else None
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM competition_teams WHERE id = ?', (team_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def save_team(team_data):
+    """Save a team."""
+    if USE_SUPABASE:
+        existing = supabase.table('competition_teams').select('id').eq('id', team_data['id']).execute()
+        if existing.data:
+            supabase.table('competition_teams').update(team_data).eq('id', team_data['id']).execute()
+        else:
+            supabase.table('competition_teams').insert(team_data).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('''
+            INSERT OR REPLACE INTO competition_teams (id, competition_id, team_number, team_name, class, members, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (team_data['id'], team_data['competition_id'], team_data['team_number'],
+              team_data['team_name'], team_data['class'], team_data.get('members', ''),
+              team_data['created_at']))
+        db.commit()
+
+
+def delete_team_db(team_id):
+    """Delete a team and its scores."""
+    if USE_SUPABASE:
+        supabase.table('competition_scores').delete().eq('team_id', team_id).execute()
+        supabase.table('competition_teams').delete().eq('id', team_id).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('DELETE FROM competition_scores WHERE team_id = ?', (team_id,))
+        db.execute('DELETE FROM competition_teams WHERE id = ?', (team_id,))
+        db.commit()
+
+
+def get_team_scores(team_id):
+    """Get all scores for a team."""
+    if USE_SUPABASE:
+        result = supabase.table('competition_scores').select('*').eq('team_id', team_id).order('round_num').execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM competition_scores WHERE team_id = ? ORDER BY round_num', (team_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def save_score(score_data):
+    """Save a score."""
+    if USE_SUPABASE:
+        existing = supabase.table('competition_scores').select('id').eq('id', score_data['id']).execute()
+        if existing.data:
+            supabase.table('competition_scores').update(score_data).eq('id', score_data['id']).execute()
+        else:
+            supabase.table('competition_scores').insert(score_data).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('''
+            INSERT OR REPLACE INTO competition_scores (id, competition_id, team_id, round_num, score, score_data, video_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (score_data['id'], score_data['competition_id'], score_data['team_id'],
+              score_data['round_num'], score_data.get('score'), score_data.get('score_data', ''),
+              score_data.get('video_id', ''), score_data['created_at']))
+        db.commit()
 
 
 # Initialize database
@@ -1289,6 +1482,224 @@ def events_list():
     return render_template('events.html',
                          events=event_data,
                          is_admin=session.get('role') == 'admin')
+
+
+# Competition routes
+@app.route('/competitions')
+def competitions_list():
+    """Show all competitions."""
+    competitions = get_all_competitions()
+    return render_template('competitions.html',
+                         competitions=competitions,
+                         categories=CATEGORIES,
+                         is_admin=session.get('role') == 'admin')
+
+
+@app.route('/competition/<comp_id>')
+def competition_page(comp_id):
+    """Show competition details."""
+    competition = get_competition(comp_id)
+    if not competition:
+        return "Competition not found", 404
+
+    teams = get_competition_teams(comp_id)
+
+    # Group teams by class
+    teams_by_class = {
+        'beginner': [],
+        'intermediate': [],
+        'advanced': [],
+        'open': []
+    }
+    for team in teams:
+        team_class = team.get('class', 'open').lower()
+        if team_class in teams_by_class:
+            # Get scores for this team
+            team['scores'] = get_team_scores(team['id'])
+            team['total_score'] = sum(s.get('score', 0) or 0 for s in team['scores'])
+            teams_by_class[team_class].append(team)
+
+    # Sort each class by total score descending
+    for class_name in teams_by_class:
+        teams_by_class[class_name].sort(key=lambda t: t['total_score'], reverse=True)
+
+    return render_template('competition.html',
+                         competition=competition,
+                         teams_by_class=teams_by_class,
+                         categories=CATEGORIES,
+                         is_admin=session.get('role') == 'admin')
+
+
+@app.route('/admin/competition/create', methods=['POST'])
+@admin_required
+def create_competition():
+    """Create a new competition."""
+    data = request.json
+
+    name = data.get('name', '').strip()
+    event_type = data.get('event_type', 'fs')
+    total_rounds = int(data.get('total_rounds', 10))
+
+    if not name:
+        return jsonify({'error': 'Competition name is required'}), 400
+
+    comp_id = str(uuid.uuid4())[:8]
+
+    save_competition({
+        'id': comp_id,
+        'name': name,
+        'event_type': event_type,
+        'total_rounds': total_rounds,
+        'created_at': datetime.now().isoformat(),
+        'status': 'active'
+    })
+
+    return jsonify({'success': True, 'id': comp_id, 'message': 'Competition created'})
+
+
+@app.route('/admin/competition/<comp_id>/delete', methods=['POST'])
+@admin_required
+def delete_competition(comp_id):
+    """Delete a competition."""
+    delete_competition_db(comp_id)
+    return jsonify({'success': True, 'message': 'Competition deleted'})
+
+
+@app.route('/admin/competition/<comp_id>/add-team', methods=['POST'])
+@admin_required
+def add_team(comp_id):
+    """Add a team to a competition."""
+    data = request.json
+
+    team_name = data.get('team_name', '').strip()
+    team_number = data.get('team_number', '').strip()
+    team_class = data.get('class', 'open').lower()
+    members = data.get('members', '').strip()
+
+    if not team_name or not team_number:
+        return jsonify({'error': 'Team name and number are required'}), 400
+
+    team_id = str(uuid.uuid4())[:8]
+
+    save_team({
+        'id': team_id,
+        'competition_id': comp_id,
+        'team_number': team_number,
+        'team_name': team_name,
+        'class': team_class,
+        'members': members,
+        'created_at': datetime.now().isoformat()
+    })
+
+    return jsonify({'success': True, 'id': team_id, 'message': 'Team added'})
+
+
+@app.route('/admin/competition/<comp_id>/import-teams', methods=['POST'])
+@admin_required
+def import_teams(comp_id):
+    """Import teams from CSV."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    team_class = request.form.get('class', 'open').lower()
+
+    try:
+        import csv
+        import io
+
+        # Read CSV content
+        content = file.read().decode('utf-8')
+        reader = csv.DictReader(io.StringIO(content))
+
+        imported = 0
+        errors = []
+
+        for row in reader:
+            try:
+                # Try different column name variations
+                team_number = row.get('team_number') or row.get('Team Number') or row.get('number') or row.get('Number') or ''
+                team_name = row.get('team_name') or row.get('Team Name') or row.get('name') or row.get('Name') or ''
+                members = row.get('members') or row.get('Members') or row.get('team_members') or row.get('Team Members') or ''
+                row_class = row.get('class') or row.get('Class') or team_class
+
+                if not team_name.strip():
+                    continue
+
+                team_id = str(uuid.uuid4())[:8]
+
+                save_team({
+                    'id': team_id,
+                    'competition_id': comp_id,
+                    'team_number': team_number.strip(),
+                    'team_name': team_name.strip(),
+                    'class': row_class.lower().strip(),
+                    'members': members.strip(),
+                    'created_at': datetime.now().isoformat()
+                })
+                imported += 1
+
+            except Exception as e:
+                errors.append(str(e))
+
+        return jsonify({
+            'success': True,
+            'message': f'Imported {imported} teams',
+            'imported': imported,
+            'errors': errors
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Failed to parse CSV: {str(e)}'}), 400
+
+
+@app.route('/admin/team/<team_id>/delete', methods=['POST'])
+@admin_required
+def delete_team(team_id):
+    """Delete a team."""
+    delete_team_db(team_id)
+    return jsonify({'success': True, 'message': 'Team deleted'})
+
+
+@app.route('/admin/team/<team_id>/score', methods=['POST'])
+@admin_required
+def save_team_score(team_id):
+    """Save a score for a team."""
+    data = request.json
+
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    round_num = int(data.get('round_num', 1))
+    score = float(data.get('score', 0))
+    score_data = data.get('score_data', '')
+    video_id = data.get('video_id', '')
+
+    # Check if score already exists for this round
+    existing_scores = get_team_scores(team_id)
+    existing = next((s for s in existing_scores if s['round_num'] == round_num), None)
+
+    if existing:
+        score_id = existing['id']
+    else:
+        score_id = str(uuid.uuid4())[:8]
+
+    save_score({
+        'id': score_id,
+        'competition_id': team['competition_id'],
+        'team_id': team_id,
+        'round_num': round_num,
+        'score': score,
+        'score_data': score_data,
+        'video_id': video_id,
+        'created_at': datetime.now().isoformat()
+    })
+
+    return jsonify({'success': True, 'message': 'Score saved'})
 
 
 if __name__ == '__main__':

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Competitions - USPA Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
+            <div class="flex items-center gap-4">
+                <a href="/competitions" class="text-blue-400">Competitions</a>
+                {% if is_admin %}
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-3xl font-bold">Competitions</h1>
+            {% if is_admin %}
+            <button onclick="showCreateModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">
+                + New Competition
+            </button>
+            {% endif %}
+        </div>
+
+        {% if competitions %}
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for comp in competitions %}
+            <a href="/competition/{{ comp.id }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition">
+                <h2 class="text-xl font-bold mb-2">{{ comp.name }}</h2>
+                <div class="text-gray-400 text-sm space-y-1">
+                    <p>Event: {{ comp.event_type|upper }}</p>
+                    <p>Rounds: {{ comp.total_rounds }}</p>
+                    <p>Status: <span class="{% if comp.status == 'active' %}text-green-400{% else %}text-gray-500{% endif %}">{{ comp.status }}</span></p>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="text-center py-16 text-gray-500">
+            <p class="text-xl mb-4">No competitions yet</p>
+            {% if is_admin %}
+            <button onclick="showCreateModal()" class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg text-white">
+                Create First Competition
+            </button>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Create Competition Modal -->
+    <div id="createModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h2 class="text-xl font-bold mb-4">Create Competition</h2>
+            <form onsubmit="createCompetition(event)">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Competition Name</label>
+                        <input type="text" id="compName" required
+                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="2024 USPA Nationals">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Event Type</label>
+                        <select id="compEventType" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                            {% for cat_id, cat in categories.items() %}
+                            <option value="{{ cat_id }}">{{ cat.name }} ({{ cat.abbrev }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Total Rounds</label>
+                        <input type="number" id="compRounds" value="10" min="1" max="20"
+                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideCreateModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">
+                        Create
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        function showCreateModal() {
+            document.getElementById('createModal').classList.remove('hidden');
+        }
+
+        function hideCreateModal() {
+            document.getElementById('createModal').classList.add('hidden');
+        }
+
+        async function createCompetition(e) {
+            e.preventDefault();
+
+            const data = {
+                name: document.getElementById('compName').value,
+                event_type: document.getElementById('compEventType').value,
+                total_rounds: parseInt(document.getElementById('compRounds').value)
+            };
+
+            try {
+                const response = await fetch('/admin/competition/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    window.location.href = '/competition/' + result.id;
+                } else {
+                    alert(result.error || 'Failed to create competition');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+    </script>
+</body>
+</html>
