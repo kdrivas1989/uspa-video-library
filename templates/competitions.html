@@ -40,11 +40,11 @@
                         {% if comp.parsed_event_types|length > 1 %}
                         <span class="text-gray-500 mr-1">Events:</span>
                         {% for et in comp.parsed_event_types %}
-                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded">{{ et|upper }}</span>
+                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded">{{ et|event_name }}</span>
                         {% endfor %}
                         {% else %}
                         <span class="text-gray-500 mr-1">Event:</span>
-                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded">{{ comp.event_type|upper }}</span>
+                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded">{{ comp.event_type|event_name }}</span>
                         {% endif %}
                     </div>
                     <p>Rounds: {{ comp.total_rounds }}</p>
@@ -81,6 +81,7 @@
                         <label class="block text-gray-400 text-sm mb-1">Event Types <span class="text-gray-500">(select multiple for multi-event competition)</span></label>
                         <div class="bg-gray-700 rounded p-3 max-h-48 overflow-y-auto space-y-1">
                             {% for cat_id, cat in categories.items() %}
+                            {% if cat_id != 'uncategorized' %}
                             {% if cat.subcategories %}
                             <div class="text-gray-400 text-xs font-medium mt-2 mb-1">{{ cat.name }} ({{ cat.abbrev }})</div>
                             {% for sub in cat.subcategories %}
@@ -95,14 +96,17 @@
                                 <span class="text-sm">{{ cat.name }} ({{ cat.abbrev }})</span>
                             </label>
                             {% endif %}
+                            {% endif %}
                             {% endfor %}
                         </div>
                         <p class="text-gray-500 text-xs mt-1">Selected: <span id="selectedEventsCount">0</span> event(s)</p>
                     </div>
-                    <div>
-                        <label class="block text-gray-400 text-sm mb-1">Total Rounds</label>
-                        <input type="number" id="compRounds" value="10" min="1" max="20"
-                            class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <!-- Rounds per Event (dynamically populated) -->
+                    <div id="roundsPerEventSection" class="hidden">
+                        <label class="block text-gray-400 text-sm mb-2">Rounds per Event</label>
+                        <div id="roundsPerEventList" class="space-y-2 bg-gray-700 rounded p-3 max-h-48 overflow-y-auto">
+                        </div>
+                        <p class="text-gray-500 text-xs mt-1">Adjust rounds based on class (Open/Advanced vs Intermediate)</p>
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
@@ -118,23 +122,126 @@
     </div>
 
     <script>
-        // Update selected events count on checkbox change
+        // Default rounds per event type based on USPA competition rules
+        const defaultRounds = {
+            // Formation Skydiving (FS)
+            // Open/Advanced: 10 rounds, Intermediate: 6 rounds, 16-Way/10-Way: 6 rounds
+            'fs_4way_fs': 10,
+            'fs_4way_vfs': 10,
+            'fs_2way_mfs': 10,
+            'fs_8way': 10,
+            'fs_16way': 6,
+            'fs_10way': 6,
+            // Canopy Formation (CF) - Max 8 rounds
+            'cf_4way_rot': 8,
+            'cf_4way_seq': 8,
+            'cf_2way_open': 8,
+            'cf_2way_proam': 8,
+            'cf_2way': 8,  // Legacy fallback
+            // Artistic Events (AE) - Max 7 rounds (F-C-F-F-C-F-F)
+            // 2 Compulsory + 5 Free = 7 rounds
+            'ae_freestyle': 7,
+            'ae_freefly': 7,
+            // Canopy Piloting (CP) - 9 rounds total (3 Speed + 3 Distance + 3 Zone Accuracy)
+            'cp_dsz': 9,  // Speed, Distance, Zone Accuracy - 3 rounds each = 9 total
+            'cp_team': 9,  // Team event - same structure as individual
+            'cp_freestyle': 3,
+            // Wingsuit Performance (WS) - 3 rounds (Time, Distance, Speed tasks)
+            'ws_performance': 3,
+            // Wingsuit Acrobatic - 7 rounds (F-C-C-F-C-C-F)
+            // 4 Compulsory + 3 Free = 7 rounds
+            'ws_acrobatic': 7,
+            // Speed Skydiving - Individual: 8 rounds, Mixed Team: 3 rounds
+            'sp_individual': 8,
+            'sp_mixed_team': 3,
+            'sp': 8,  // Legacy fallback
+            // Accuracy Landing - Individual and Team (Open category only)
+            'al_individual': 8,
+            'al_team': 8,
+            'al': 8,  // Legacy fallback
+            // Default
+            'default': 10
+        };
+
+        // Round type patterns for events with mixed Compulsory/Free rounds
+        const roundPatterns = {
+            'ae_freestyle': ['F', 'C', 'F', 'F', 'C', 'F', 'F'],
+            'ae_freefly': ['F', 'C', 'F', 'F', 'C', 'F', 'F'],
+            'ws_acrobatic': ['F', 'C', 'C', 'F', 'C', 'C', 'F']
+        };
+
+        // Event display names
+        const eventNames = {
+            'fs_4way_fs': '4-Way FS',
+            'fs_4way_vfs': '4-Way VFS',
+            'fs_2way_mfs': '2-Way MFS',
+            'fs_8way': '8-Way FS',
+            'fs_16way': '16-Way FS',
+            'fs_10way': '10-Way FS',
+            'cf_4way_rot': 'CF 4-Way Rotation',
+            'cf_4way_seq': 'CF 4-Way Sequential',
+            'cf_2way_open': 'CF 2-Way Sequential Open',
+            'cf_2way_proam': 'CF 2-Way Sequential Pro/Am',
+            'cf_2way': 'CF 2-Way',
+            'al': 'Accuracy Landing',
+            'al_individual': 'AL Individual (Open)',
+            'al_team': 'AL Team',
+            'cp_dsz': 'CP Speed/Distance/Zone Individual (9 rounds)',
+            'cp_team': 'CP Team (9 rounds)',
+            'cp_freestyle': 'CP Freestyle',
+            'ae_freestyle': 'AE Freestyle (F-C-F-F-C-F-F)',
+            'ae_freefly': 'AE Freefly (F-C-F-F-C-F-F)',
+            'ws_acrobatic': 'WS Acrobatic (F-C-C-F-C-C-F)',
+            'ws_performance': 'WS Performance (Time/Dist/Speed)',
+            'sp': 'Speed Skydiving',
+            'sp_individual': 'SP Individual (8 rounds)',
+            'sp_mixed_team': 'SP Mixed Team (3 rounds)'
+        };
+
+        // Update selected events count and rounds section
         document.querySelectorAll('.event-type-checkbox').forEach(cb => {
-            cb.addEventListener('change', updateSelectedCount);
+            cb.addEventListener('change', updateSelectedEvents);
         });
 
-        function updateSelectedCount() {
-            const count = document.querySelectorAll('.event-type-checkbox:checked').length;
-            document.getElementById('selectedEventsCount').textContent = count;
+        function updateSelectedEvents() {
+            const selectedEvents = [];
+            document.querySelectorAll('.event-type-checkbox:checked').forEach(cb => {
+                selectedEvents.push(cb.value);
+            });
+
+            document.getElementById('selectedEventsCount').textContent = selectedEvents.length;
+
+            // Update rounds per event section
+            const roundsSection = document.getElementById('roundsPerEventSection');
+            const roundsList = document.getElementById('roundsPerEventList');
+
+            if (selectedEvents.length === 0) {
+                roundsSection.classList.add('hidden');
+                roundsList.innerHTML = '';
+                return;
+            }
+
+            roundsSection.classList.remove('hidden');
+            roundsList.innerHTML = selectedEvents.map(eventId => {
+                const defaultRoundCount = defaultRounds[eventId] || defaultRounds['default'];
+                const displayName = eventNames[eventId] || eventId.replace(/_/g, ' ').toUpperCase();
+                return `
+                    <div class="flex items-center justify-between gap-3 py-1">
+                        <span class="text-sm text-gray-300">${displayName}</span>
+                        <input type="number" data-event="${eventId}" value="${defaultRoundCount}" min="1" max="20"
+                            class="w-20 px-2 py-1 rounded bg-gray-600 text-white text-center text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </div>
+                `;
+            }).join('');
         }
 
         function showCreateModal() {
             document.getElementById('createModal').classList.remove('hidden');
-            // Reset checkboxes
+            // Reset checkboxes and rounds section
             document.querySelectorAll('.event-type-checkbox').forEach(cb => {
                 cb.checked = false;
             });
-            updateSelectedCount();
+            updateSelectedEvents();
         }
 
         function hideCreateModal() {
@@ -144,21 +251,27 @@
         async function createCompetition(e) {
             e.preventDefault();
 
-            // Get selected event types
-            const selectedEvents = [];
-            document.querySelectorAll('.event-type-checkbox:checked').forEach(cb => {
-                selectedEvents.push(cb.value);
+            // Get selected event types with their rounds
+            const eventRounds = {};
+            document.querySelectorAll('#roundsPerEventList input[data-event]').forEach(input => {
+                eventRounds[input.dataset.event] = parseInt(input.value) || 10;
             });
+
+            const selectedEvents = Object.keys(eventRounds);
 
             if (selectedEvents.length === 0) {
                 alert('Please select at least one event type');
                 return;
             }
 
+            // Find max rounds for backward compatibility
+            const maxRounds = Math.max(...Object.values(eventRounds));
+
             const data = {
                 name: document.getElementById('compName').value,
                 event_types: selectedEvents,
-                total_rounds: parseInt(document.getElementById('compRounds').value)
+                event_rounds: eventRounds,
+                total_rounds: maxRounds
             };
 
             try {

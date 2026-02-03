@@ -643,6 +643,14 @@
                         </svg>
                     </button>
                     {% endif %}
+                    {% if is_event_judge %}
+                    <button onclick="startSyncViewing()" class="bg-purple-600 hover:bg-purple-700 px-3 py-1 rounded text-sm flex items-center gap-1" title="Start synchronized viewing with judges">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Sync View
+                    </button>
+                    {% endif %}
                 </div>
 
                 <div class="flex flex-wrap items-center gap-4 mb-6 text-gray-400">
@@ -2879,6 +2887,28 @@
                 saveQuickScore();
             }
         });
+    </script>
+    {% endif %}
+
+    {% if is_event_judge %}
+    <script>
+        async function startSyncViewing() {
+            try {
+                const response = await fetch('/sync-room/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ video_id: '{{ video.id }}' })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    window.location.href = '/sync-room/' + result.room_id;
+                } else {
+                    alert(result.error || 'Failed to create sync room');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
     </script>
     {% endif %}
 </body>

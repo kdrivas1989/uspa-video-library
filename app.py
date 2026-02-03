@@ -35,6 +35,123 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'uspa-video-library-secret-key')
 DROPBOX_APP_KEY = os.environ.get('DROPBOX_APP_KEY', '')
 
+# Event type display names mapping
+EVENT_DISPLAY_NAMES = {
+    'fs_4way_fs': '4-Way FS',
+    'fs_4way_vfs': '4-Way VFS',
+    'fs_2way_mfs': '2-Way MFS',
+    'fs_8way': '8-Way FS',
+    'fs_16way': '16-Way FS',
+    'fs_10way': '10-Way FS',
+    'cf_4way_rot': '4-Way Rotation',
+    'cf_4way_seq': '4-Way Sequential',
+    'cf_2way_open': '2-Way Sequential Open',
+    'cf_2way_proam': '2-Way Sequential Pro/Am',
+    'cf_2way': '2-Way CF',
+    'al_individual': 'AL Individual',
+    'al_team': 'AL Team',
+    'cp_dsz': 'CP Individual',
+    'cp_team': 'CP Team',
+    'cp_freestyle': 'CP Freestyle',
+    'ae_freestyle': 'AE Freestyle',
+    'ae_freefly': 'AE Freefly',
+    'ws_acrobatic': 'WS Acrobatic',
+    'ws_performance': 'WS Performance',
+    'sp_individual': 'SP Individual',
+    'sp_mixed_team': 'SP Mixed Team',
+}
+
+@app.template_filter('event_name')
+def event_name_filter(event_type):
+    """Convert event type code to display name."""
+    return EVENT_DISPLAY_NAMES.get(event_type, event_type.upper().replace('_', ' '))
+
+
+def normalize_event_type(input_str):
+    """Normalize event type string for flexible CSV matching.
+
+    Matches inputs like '4 way fs', '4wayFS', '4-Way FS' to 'fs_4way_fs'.
+    """
+    if not input_str:
+        return ''
+
+    # Normalize: lowercase, remove spaces/hyphens/underscores
+    normalized = input_str.lower().replace(' ', '').replace('-', '').replace('_', '')
+
+    # Build lookup from EVENT_DISPLAY_NAMES (both keys and values)
+    for event_code, display_name in EVENT_DISPLAY_NAMES.items():
+        # Normalize the event code
+        code_normalized = event_code.replace('_', '')
+        # Normalize the display name
+        display_normalized = display_name.lower().replace(' ', '').replace('-', '')
+
+        if normalized == code_normalized or normalized == display_normalized:
+            return event_code
+
+    # Also check common variations
+    event_aliases = {
+        '4wayfs': 'fs_4way_fs',
+        '4wayvfs': 'fs_4way_vfs',
+        '2waymfs': 'fs_2way_mfs',
+        '8wayfs': 'fs_8way',
+        '8way': 'fs_8way',
+        '16wayfs': 'fs_16way',
+        '16way': 'fs_16way',
+        '10wayfs': 'fs_10way',
+        '10way': 'fs_10way',
+        '4wayrotation': 'cf_4way_rot',
+        '4wayrot': 'cf_4way_rot',
+        'cf4wayrot': 'cf_4way_rot',
+        '4waysequential': 'cf_4way_seq',
+        '4wayseq': 'cf_4way_seq',
+        'cf4wayseq': 'cf_4way_seq',
+        '2waysequentialopen': 'cf_2way_open',
+        '2wayopen': 'cf_2way_open',
+        'cf2wayopen': 'cf_2way_open',
+        '2waysequentialproam': 'cf_2way_proam',
+        '2wayproam': 'cf_2way_proam',
+        'cf2wayproam': 'cf_2way_proam',
+        '2waycf': 'cf_2way',
+        'cf2way': 'cf_2way',
+        'alindividual': 'al_individual',
+        'alind': 'al_individual',
+        'alteam': 'al_team',
+        'cpindividual': 'cp_dsz',
+        'cpind': 'cp_dsz',
+        'cpdsz': 'cp_dsz',
+        'cpteam': 'cp_team',
+        'cpfreestyle': 'cp_freestyle',
+        'aefreestyle': 'ae_freestyle',
+        'freestyle': 'ae_freestyle',
+        'aefreefly': 'ae_freefly',
+        'freefly': 'ae_freefly',
+        'wsacrobatic': 'ws_acrobatic',
+        'wsperformance': 'ws_performance',
+        'spindividual': 'sp_individual',
+        'spind': 'sp_individual',
+        'spmixedteam': 'sp_mixed_team',
+        'spmixed': 'sp_mixed_team',
+    }
+
+    if normalized in event_aliases:
+        return event_aliases[normalized]
+
+    # If no match found, return original stripped
+    return input_str.strip()
+
+# SocketIO for real-time sync viewing
+try:
+    from flask_socketio import SocketIO, emit, join_room, leave_room
+    socketio = SocketIO(app, cors_allowed_origins="*")
+    SOCKETIO_ENABLED = True
+except ImportError:
+    SOCKETIO_ENABLED = False
+    socketio = None
+
+# Sync rooms for synchronized video viewing
+# Structure: {room_id: {'video_id': str, 'event_judge': str, 'judges': {username: {'ready': bool, 'start_time': float}}, 'state': 'waiting'|'playing'|'syncing'}}
+sync_rooms = {}
+
 # Email configuration for password reset
 SMTP_SERVER = os.environ.get('SMTP_SERVER', 'smtp.gmail.com')
 SMTP_PORT = int(os.environ.get('SMTP_PORT', 587))
@@ -117,24 +234,29 @@ CATEGORIES = {
         'name': 'Accuracy Landing',
         'abbrev': 'AL',
         'description': 'Chapter 8 - Accuracy Landing competition videos',
-        'subcategories': []
+        'subcategories': [
+            {'id': 'individual', 'name': 'Individual (Open)'},
+            {'id': 'team', 'name': 'Team'}
+        ]
     },
     'cf': {
         'name': 'Canopy Formation',
         'abbrev': 'CF',
         'description': 'Chapter 10 - Canopy Formation competition videos',
         'subcategories': [
-            {'id': '4way', 'name': '4-Way'},
-            {'id': '2way', 'name': '2-Way'}
+            {'id': '4way_rot', 'name': '4-Way Rotation'},
+            {'id': '4way_seq', 'name': '4-Way Sequential'},
+            {'id': '2way_open', 'name': '2-Way Sequential Open'},
+            {'id': '2way_proam', 'name': '2-Way Sequential Pro/Am'}
         ]
     },
     'cp': {
         'name': 'Canopy Piloting',
         'abbrev': 'CP',
         'description': 'Chapters 12-13 - Canopy Piloting competition videos',
-        'individual': True,
         'subcategories': [
-            {'id': 'dsz', 'name': 'Distance/Speed/Zone Accuracy'},
+            {'id': 'dsz', 'name': 'Distance/Speed/Zone (Individual)'},
+            {'id': 'team', 'name': 'Team'},
             {'id': 'freestyle', 'name': 'Freestyle'}
         ]
     },
@@ -173,7 +295,10 @@ CATEGORIES = {
         'name': 'Speed Skydiving',
         'abbrev': 'SP',
         'description': 'Chapter 15 - Speed Skydiving competition data',
-        'subcategories': [],
+        'subcategories': [
+            {'id': 'individual', 'name': 'Individual (8 rounds)'},
+            {'id': 'mixed_team', 'name': 'Mixed Team (3 rounds)'}
+        ],
         'file_type': 'flysight'  # Uses FlysSight GPS files instead of video
     }
 }
@@ -322,6 +447,12 @@ def init_db():
         except:
             pass
 
+        # Add event_rounds column if it doesn't exist (rounds per event type)
+        try:
+            cursor.execute('ALTER TABLE competitions ADD COLUMN event_rounds TEXT')
+        except:
+            pass
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS competition_teams (
                 id TEXT PRIMARY KEY,
@@ -360,6 +491,24 @@ def init_db():
         except:
             pass
 
+        # Add rejump column if it doesn't exist
+        try:
+            cursor.execute('ALTER TABLE competition_scores ADD COLUMN rejump INTEGER DEFAULT 0')
+        except:
+            pass
+
+        # Add training_flag column if it doesn't exist (for flagging videos as training material)
+        try:
+            cursor.execute('ALTER TABLE competition_scores ADD COLUMN training_flag INTEGER DEFAULT 0')
+        except:
+            pass
+
+        # Add exit_time_penalty column for CF events (20% penalty when exit time not determined)
+        try:
+            cursor.execute('ALTER TABLE competition_scores ADD COLUMN exit_time_penalty INTEGER DEFAULT 0')
+        except:
+            pass
+
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 username TEXT PRIMARY KEY,
@@ -380,6 +529,22 @@ def init_db():
             cursor.execute('ALTER TABLE users ADD COLUMN email TEXT')
         except:
             pass
+
+        # Video assignments table (for chief judge to assign videos to judges)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS video_assignments (
+                id TEXT PRIMARY KEY,
+                video_id TEXT NOT NULL,
+                assigned_to TEXT NOT NULL,
+                assigned_by TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (video_id) REFERENCES videos(id),
+                FOREIGN KEY (assigned_to) REFERENCES users(username),
+                FOREIGN KEY (assigned_by) REFERENCES users(username)
+            )
+        ''')
 
         cursor.execute('SELECT username FROM users WHERE username = ?', ('admin',))
         if not cursor.fetchone():
@@ -604,6 +769,84 @@ def delete_user(username):
         db.commit()
 
 
+# Video assignment functions
+def create_video_assignment(video_id, assigned_to, assigned_by, notes=''):
+    """Create a video assignment."""
+    assignment_id = str(uuid.uuid4())[:8]
+    assignment = {
+        'id': assignment_id,
+        'video_id': video_id,
+        'assigned_to': assigned_to,
+        'assigned_by': assigned_by,
+        'status': 'pending',
+        'notes': notes,
+        'created_at': datetime.now().isoformat()
+    }
+    if USE_SUPABASE:
+        supabase.table('video_assignments').insert(assignment).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('''
+            INSERT INTO video_assignments (id, video_id, assigned_to, assigned_by, status, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (assignment_id, video_id, assigned_to, assigned_by, 'pending', notes, assignment['created_at']))
+        db.commit()
+    return assignment_id
+
+
+def get_assignments_for_user(username):
+    """Get all video assignments for a user."""
+    if USE_SUPABASE:
+        result = supabase.table('video_assignments').select('*').eq('assigned_to', username).order('created_at', desc=True).execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM video_assignments WHERE assigned_to = ? ORDER BY created_at DESC', (username,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def get_assignments_by_assigner(username):
+    """Get all assignments created by a user (chief judge)."""
+    if USE_SUPABASE:
+        result = supabase.table('video_assignments').select('*').eq('assigned_by', username).order('created_at', desc=True).execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM video_assignments WHERE assigned_by = ? ORDER BY created_at DESC', (username,))
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def update_assignment_status(assignment_id, status):
+    """Update assignment status (pending, in_progress, completed)."""
+    if USE_SUPABASE:
+        supabase.table('video_assignments').update({'status': status}).eq('id', assignment_id).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('UPDATE video_assignments SET status = ? WHERE id = ?', (status, assignment_id))
+        db.commit()
+
+
+def delete_assignment(assignment_id):
+    """Delete a video assignment."""
+    if USE_SUPABASE:
+        supabase.table('video_assignments').delete().eq('id', assignment_id).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('DELETE FROM video_assignments WHERE id = ?', (assignment_id,))
+        db.commit()
+
+
+def get_all_assignments():
+    """Get all video assignments."""
+    if USE_SUPABASE:
+        result = supabase.table('video_assignments').select('*').order('created_at', desc=True).execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM video_assignments ORDER BY created_at DESC')
+        return [dict(row) for row in cursor.fetchall()]
+
+
 # Competition database functions
 def get_all_competitions():
     """Get all competitions."""
@@ -639,11 +882,11 @@ def save_competition(comp_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO competitions (id, name, event_type, event_types, total_rounds, created_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO competitions (id, name, event_type, event_types, event_rounds, total_rounds, created_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (comp_data['id'], comp_data['name'], comp_data['event_type'],
-              comp_data.get('event_types', ''), comp_data.get('total_rounds', 10),
-              comp_data['created_at'], comp_data.get('status', 'active')))
+              comp_data.get('event_types', ''), comp_data.get('event_rounds', '{}'),
+              comp_data.get('total_rounds', 10), comp_data['created_at'], comp_data.get('status', 'active')))
         db.commit()
 
 
@@ -655,10 +898,15 @@ def delete_competition_db(comp_id):
         supabase.table('competitions').delete().eq('id', comp_id).execute()
     else:
         db = get_sqlite_db()
-        db.execute('DELETE FROM competition_scores WHERE competition_id = ?', (comp_id,))
-        db.execute('DELETE FROM competition_teams WHERE competition_id = ?', (comp_id,))
-        db.execute('DELETE FROM competitions WHERE id = ?', (comp_id,))
-        db.commit()
+        try:
+            # Delete in correct order to avoid foreign key issues
+            db.execute('DELETE FROM competition_scores WHERE competition_id = ?', (comp_id,))
+            db.execute('DELETE FROM competition_teams WHERE competition_id = ?', (comp_id,))
+            db.execute('DELETE FROM competitions WHERE id = ?', (comp_id,))
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            raise e
 
 
 def get_competition_teams(comp_id, class_filter=None):
@@ -750,11 +998,12 @@ def save_score(score_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO competition_scores (id, competition_id, team_id, round_num, score, score_data, video_id, scored_by, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO competition_scores (id, competition_id, team_id, round_num, score, score_data, video_id, scored_by, rejump, training_flag, exit_time_penalty, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (score_data['id'], score_data['competition_id'], score_data['team_id'],
               score_data['round_num'], score_data.get('score'), score_data.get('score_data', ''),
-              score_data.get('video_id', ''), score_data.get('scored_by', ''), score_data['created_at']))
+              score_data.get('video_id', ''), score_data.get('scored_by', ''), score_data.get('rejump', 0),
+              score_data.get('training_flag', 0), score_data.get('exit_time_penalty', 0), score_data['created_at']))
         db.commit()
 
 
@@ -1107,7 +1356,8 @@ def video(video_id):
                          category=cat,
                          related_videos=related_videos,
                          competition_context=competition_context,
-                         is_admin=session.get('role') == 'admin')
+                         is_admin=session.get('role') == 'admin',
+                         is_event_judge=session.get('role') in ['admin', 'chief_judge', 'event_judge'])
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1250,6 +1500,42 @@ def logout():
     return redirect(url_for('index'))
 
 
+@app.route('/example-csv/<csv_type>')
+def example_csv(csv_type):
+    """Serve example CSV files for import."""
+    from flask import Response
+
+    if csv_type == 'teams':
+        content = """name,class,event,team_number,members
+Skydivers United,open,fs_4way_fs,101,"John Smith, Jane Doe, Bob Wilson, Alice Brown"
+Flying Aces,open,fs_4way_fs,102,"Mike Johnson, Sarah Davis, Tom Anderson, Lisa White"
+Blue Sky Team,advanced,fs_4way_vfs,103,"Chris Martin, Emma Taylor, David Lee, Amy Chen"
+Cloud Jumpers,intermediate,cf_4way_seq,104,"James Wilson, Mary Jones, Robert Garcia, Jennifer Miller"
+Air Force One,open,fs_8way,105,"William Brown, Elizabeth Davis, Michael Moore, Patricia Taylor"
+"""
+        filename = 'example_teams_import.csv'
+    else:  # competitors
+        content = """name,class,event,number,country
+John Smith,open,cp_dsz,1,USA
+Maria Garcia,open,cp_dsz,2,ESP
+Hans Mueller,open,sp_individual,3,GER
+Yuki Tanaka,open,sp_individual,4,JPN
+Pierre Dubois,open,al_individual,5,FRA
+Anna Kowalski,open,al_individual,6,POL
+James Wilson,open,ws_performance,7,GBR
+Sofia Rossi,open,ws_performance,8,ITA
+Lars Andersson,open,cp_dsz,9,SWE
+Emma Chen,open,sp_individual,10,CHN
+"""
+        filename = 'example_competitors_import.csv'
+
+    return Response(
+        content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
+    )
+
+
 @app.route('/admin')
 @admin_required
 def admin_dashboard():
@@ -1378,6 +1664,103 @@ def admin_delete_user(username):
 
     delete_user(username)
     return jsonify({'success': True, 'message': 'User deleted'})
+
+
+# Video Assignment Routes (Chief Judge+)
+@app.route('/assignments')
+@chief_judge_required
+def assignments_page():
+    """Manage video assignments (chief judge and above)."""
+    videos = get_all_videos()
+    users = get_all_users()
+    judges = [u for u in users if u['role'] in ('judge', 'event_judge', 'chief_judge')]
+    assignments = get_all_assignments()
+
+    # Enrich assignments with video and user info
+    videos_dict = {v['id']: v for v in videos}
+    users_dict = {u['username']: u for u in users}
+
+    for a in assignments:
+        a['video'] = videos_dict.get(a['video_id'], {})
+        a['judge'] = users_dict.get(a['assigned_to'], {})
+        a['assigner'] = users_dict.get(a['assigned_by'], {})
+
+    return render_template('assignments.html',
+                         videos=videos,
+                         judges=judges,
+                         assignments=assignments,
+                         categories=CATEGORIES,
+                         is_admin=session.get('role') == 'admin')
+
+
+@app.route('/assign-videos', methods=['POST'])
+@chief_judge_required
+def assign_videos():
+    """Assign multiple videos to a judge."""
+    data = request.json
+    video_ids = data.get('video_ids', [])
+    assigned_to = data.get('assigned_to', '')
+    notes = data.get('notes', '')
+
+    if not video_ids or not assigned_to:
+        return jsonify({'error': 'Video IDs and assignee are required'}), 400
+
+    # Verify judge exists
+    judge = get_user(assigned_to)
+    if not judge:
+        return jsonify({'error': 'Judge not found'}), 404
+
+    assigned_by = session.get('username')
+    count = 0
+
+    for video_id in video_ids:
+        create_video_assignment(video_id, assigned_to, assigned_by, notes)
+        count += 1
+
+    return jsonify({'success': True, 'message': f'Assigned {count} video(s) to {judge["name"]}'})
+
+
+@app.route('/assignment/<assignment_id>/delete', methods=['POST'])
+@chief_judge_required
+def delete_assignment_route(assignment_id):
+    """Delete a video assignment."""
+    delete_assignment(assignment_id)
+    return jsonify({'success': True})
+
+
+@app.route('/my-assignments')
+@judge_required
+def my_assignments():
+    """View videos assigned to current user."""
+    username = session.get('username')
+    assignments = get_assignments_for_user(username)
+
+    # Get video details for each assignment
+    for a in assignments:
+        video = get_video(a['video_id'])
+        a['video'] = video if video else {}
+        assigner = get_user(a['assigned_by'])
+        a['assigner'] = assigner if assigner else {}
+
+    return render_template('my_assignments.html',
+                         assignments=assignments,
+                         categories=CATEGORIES,
+                         is_admin=session.get('role') == 'admin',
+                         is_chief_judge=session.get('role') in ['admin', 'chief_judge'])
+
+
+@app.route('/assignment/<assignment_id>/status', methods=['POST'])
+@judge_required
+def update_assignment_status_route(assignment_id):
+    """Update assignment status."""
+    data = request.json
+    status = data.get('status', 'pending')
+
+    if status not in ('pending', 'in_progress', 'completed'):
+        return jsonify({'error': 'Invalid status'}), 400
+
+    update_assignment_status(assignment_id, status)
+    return jsonify({'success': True})
 
 
 def download_and_convert_video(url, video_id):
@@ -1882,6 +2265,37 @@ def edit_video(video_id):
     return jsonify({'success': True, 'message': 'Video updated'})
 
 
+@app.route('/admin/bulk-move-videos', methods=['POST'])
+@admin_required
+def bulk_move_videos():
+    """Move multiple videos to a new category at once."""
+    data = request.json
+    video_ids = data.get('video_ids', [])
+    new_category = data.get('category', '')
+    new_subcategory = data.get('subcategory', '')
+
+    if not video_ids:
+        return jsonify({'error': 'No videos selected'}), 400
+
+    if not new_category:
+        return jsonify({'error': 'No category specified'}), 400
+
+    success_count = 0
+    for video_id in video_ids:
+        video = get_video(video_id)
+        if video:
+            video['category'] = new_category
+            video['subcategory'] = new_subcategory
+            save_video(video)
+            success_count += 1
+
+    return jsonify({
+        'success': True,
+        'message': f'Moved {success_count} video(s)',
+        'moved_count': success_count
+    })
+
+
 @app.route('/api/video/<video_id>/set-start-time', methods=['POST'])
 def set_video_start_time(video_id):
     """Set the start time for a video (videographer/judge access)."""
@@ -2004,10 +2418,72 @@ def competition_page(comp_id):
     else:
         event_types = [competition.get('event_type', 'fs')]
 
+    # Sort event_types by category order, then by custom event order
+    category_order = {'fs': 0, 'cf': 1, 'ae': 2, 'cp': 3, 'ws': 4, 'sp': 5, 'al': 6}
+    # Custom order within each category
+    event_order = {
+        # FS: 4-Way, 8-Way, 16-Way, 10-Way, 4-Way VFS, 2-Way MFS
+        'fs_4way_fs': 0, 'fs_8way': 1, 'fs_16way': 2, 'fs_10way': 3, 'fs_4way_vfs': 4, 'fs_2way_mfs': 5,
+        # CF: 4-Way Rotation, 4-Way Sequential, 2-Way Open, 2-Way Pro/Am
+        'cf_4way_rot': 0, 'cf_4way_seq': 1, 'cf_2way_open': 2, 'cf_2way_proam': 3, 'cf_2way': 4,
+        # AE: Freestyle, Freefly
+        'ae_freestyle': 0, 'ae_freefly': 1,
+        # CP: Individual, Team, Freestyle
+        'cp_dsz': 0, 'cp_team': 1, 'cp_freestyle': 2,
+        # WS: Performance, Acrobatic
+        'ws_performance': 0, 'ws_acrobatic': 1,
+        # SP: Individual, Mixed Team
+        'sp_individual': 0, 'sp_mixed_team': 1,
+        # AL: Individual, Team
+        'al_individual': 0, 'al_team': 1,
+    }
+    def event_sort_key(et):
+        prefix = et.split('_')[0] if '_' in et else et
+        return (category_order.get(prefix, 99), event_order.get(et, 99))
+    event_types = sorted(event_types, key=event_sort_key)
+
+    # Default rounds per event type
+    default_event_rounds = {
+        'fs_4way_fs': 10, 'fs_4way_vfs': 10, 'fs_2way_mfs': 10, 'fs_8way': 10,
+        'fs_16way': 6, 'fs_10way': 6,
+        'cf_4way_rot': 8, 'cf_4way_seq': 8, 'cf_2way_open': 8, 'cf_2way_proam': 8, 'cf_2way': 8,
+        'ae_freestyle': 7, 'ae_freefly': 7,
+        'cp_dsz': 9, 'cp_team': 9, 'cp_freestyle': 3,
+        'ws_performance': 3, 'ws_acrobatic': 7,
+        'sp_individual': 8, 'sp_mixed_team': 3,
+        'al_individual': 8, 'al_team': 8,
+    }
+
+    # Parse event_rounds from JSON (rounds per event type)
+    event_rounds = {}
+    if competition.get('event_rounds'):
+        try:
+            event_rounds = json.loads(competition['event_rounds'])
+        except:
+            pass
+    # Ensure all events have correct rounds - always use defaults for known event types
+    for et in event_types:
+        if et in default_event_rounds:
+            # Always use the correct default for known event types
+            event_rounds[et] = default_event_rounds[et]
+        elif et not in event_rounds:
+            event_rounds[et] = competition.get('total_rounds', 10)
+
     competition['parsed_event_types'] = event_types
+    competition['parsed_event_rounds'] = event_rounds
     is_multi_event = len(event_types) > 1
 
     teams = get_competition_teams(comp_id)
+
+    # Check if any scores have been entered (to disable delete)
+    has_scores = False
+    if USE_SUPABASE:
+        scores_check = supabase.table('competition_scores').select('id').eq('competition_id', comp_id).not_.is_('score', 'null').limit(1).execute()
+        has_scores = len(scores_check.data) > 0
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT id FROM competition_scores WHERE competition_id = ? AND score IS NOT NULL LIMIT 1', (comp_id,))
+        has_scores = cursor.fetchone() is not None
 
     # For multi-event competitions, group by event first, then by class
     # For single-event, just group by class
@@ -2039,6 +2515,77 @@ def competition_page(comp_id):
                 # Unknown event, add to first event's open class
                 teams_by_event[event_types[0]]['open'].append(team)
 
+        # Calculate weighted scores for CP Individual (cp_dsz)
+        # Rounds 1-3: Zone Accuracy (higher is better)
+        # Rounds 4-6: Distance (higher is better)
+        # Rounds 7-9: Speed (lower time is better, score^1.333, inverse weighted)
+        if 'cp_dsz' in teams_by_event:
+            # Collect all teams in cp_dsz across all classes
+            all_cp_teams = []
+            for class_name in teams_by_event['cp_dsz']:
+                all_cp_teams.extend(teams_by_event['cp_dsz'][class_name])
+
+            # Find best raw score for each round
+            # For Zone Accuracy (1-3) and Distance (4-6): best = highest
+            # For Speed (7-9): best = lowest (fastest time)
+            best_scores = {}
+            for round_num in range(1, 10):  # 9 rounds
+                is_speed_round = round_num >= 7  # Rounds 7-9 are Speed
+                best_score = None
+                for team in all_cp_teams:
+                    for score in team.get('scores', []):
+                        if score.get('round_num') == round_num and score.get('score') is not None:
+                            raw = score.get('score', 0) or 0
+                            # Skip penalty results (score_data contains penalty code)
+                            score_data = score.get('score_data', '')
+                            # Penalty codes: WL, OF, OC, CD, ME, DQ (not JSON)
+                            if score_data and not score_data.startswith('{'):
+                                continue
+                            if raw > 0:
+                                if best_score is None:
+                                    best_score = raw
+                                elif is_speed_round and raw < best_score:
+                                    best_score = raw  # For speed, lower is better
+                                elif not is_speed_round and raw > best_score:
+                                    best_score = raw  # For ZA/Distance, higher is better
+                best_scores[round_num] = best_score
+
+            # Calculate weighted scores for each team
+            for team in all_cp_teams:
+                weighted_total = 0
+                for score in team.get('scores', []):
+                    round_num = score.get('round_num')
+                    raw_score = score.get('score')
+                    score_data = score.get('score_data', '')
+                    is_speed_round = round_num >= 7
+
+                    # Handle penalties (score_data contains penalty code, not JSON)
+                    if score_data and not score_data.startswith('{'):
+                        # Penalty result - weighted score is 0 (not counted in weighted total)
+                        score['weighted_score'] = 0
+                        score['penalty'] = score_data
+                        continue
+
+                    if raw_score is not None and raw_score > 0 and best_scores.get(round_num):
+                        best = best_scores[round_num]
+                        if is_speed_round:
+                            # Speed: score^1.333, then inverse weighted
+                            # Points = (best^1.333 / score^1.333) * 100
+                            score_calc = raw_score ** 1.333
+                            best_calc = best ** 1.333
+                            weighted = (best_calc / score_calc) * 100
+                        else:
+                            # Zone Accuracy & Distance: (score / best) * 100
+                            weighted = (raw_score / best) * 100
+                        # 3 decimal places, no rounding
+                        score['weighted_score'] = int(weighted * 1000) / 1000
+                        weighted_total += score['weighted_score']
+                    else:
+                        score['weighted_score'] = None
+
+                # Calculate total (3 decimal places)
+                team['total_score'] = int(weighted_total * 1000) / 1000
+
         # Sort each class within each event by total score descending
         for event_type in teams_by_event:
             for class_name in teams_by_event[event_type]:
@@ -2050,8 +2597,10 @@ def competition_page(comp_id):
                              teams_by_class={'beginner': [], 'intermediate': [], 'advanced': [], 'open': []},
                              is_multi_event=True,
                              event_types=event_types,
+                             event_rounds=event_rounds,
                              categories=CATEGORIES,
-                             is_admin=session.get('role') == 'admin')
+                             is_admin=session.get('role') == 'admin',
+                             has_scores=has_scores)
     else:
         # Single event - group by class only
         teams_by_class = {
@@ -2083,8 +2632,10 @@ def competition_page(comp_id):
                              teams_by_event={},
                              is_multi_event=False,
                              event_types=event_types,
+                             event_rounds=event_rounds,
                              categories=CATEGORIES,
-                             is_admin=session.get('role') == 'admin')
+                             is_admin=session.get('role') == 'admin',
+                             has_scores=has_scores)
 
 
 @app.route('/admin/competition/create', methods=['POST'])
@@ -2096,6 +2647,7 @@ def create_competition():
     name = data.get('name', '').strip()
     event_types = data.get('event_types', [])  # Array of event types
     event_type = data.get('event_type', 'fs')  # Legacy single event type
+    event_rounds = data.get('event_rounds', {})  # Rounds per event type
     total_rounds = int(data.get('total_rounds', 10))
 
     if not name:
@@ -2110,6 +2662,9 @@ def create_competition():
         # Single event - store as array for consistency
         event_types_json = json.dumps([event_type])
 
+    # Store event_rounds as JSON
+    event_rounds_json = json.dumps(event_rounds) if event_rounds else '{}'
+
     comp_id = str(uuid.uuid4())[:8]
 
     save_competition({
@@ -2117,6 +2672,7 @@ def create_competition():
         'name': name,
         'event_type': event_type,
         'event_types': event_types_json,
+        'event_rounds': event_rounds_json,
         'total_rounds': total_rounds,
         'created_at': datetime.now().isoformat(),
         'status': 'active'
@@ -2128,9 +2684,351 @@ def create_competition():
 @app.route('/admin/competition/<comp_id>/delete', methods=['POST'])
 @admin_required
 def delete_competition(comp_id):
-    """Delete a competition."""
-    delete_competition_db(comp_id)
-    return jsonify({'success': True, 'message': 'Competition deleted'})
+    """Delete a competition (only if no scores have been entered)."""
+    try:
+        # Check if any scores exist for this competition
+        if USE_SUPABASE:
+            scores = supabase.table('competition_scores').select('id').eq('competition_id', comp_id).limit(1).execute()
+            has_scores = len(scores.data) > 0
+        else:
+            db = get_sqlite_db()
+            cursor = db.execute('SELECT id FROM competition_scores WHERE competition_id = ? AND score IS NOT NULL LIMIT 1', (comp_id,))
+            has_scores = cursor.fetchone() is not None
+
+        if has_scores:
+            return jsonify({'error': 'Cannot delete competition once scoring has started. Remove all scores first.'}), 400
+
+        delete_competition_db(comp_id)
+        return jsonify({'success': True, 'message': 'Competition deleted'})
+    except Exception as e:
+        print(f"Error deleting competition {comp_id}: {e}")
+        return jsonify({'error': f'Failed to delete: {str(e)}'}), 500
+
+
+@app.route('/admin/competition/<comp_id>/remove-event', methods=['POST'])
+@admin_required
+def remove_event_from_competition(comp_id):
+    """Remove an event from a multi-event competition."""
+    try:
+        data = request.json
+        event_type = data.get('event_type')
+
+        if not event_type:
+            return jsonify({'error': 'Event type is required'}), 400
+
+        competition = get_competition(comp_id)
+        if not competition:
+            return jsonify({'error': 'Competition not found'}), 404
+
+        # Parse current event types
+        event_types = []
+        if competition.get('event_types'):
+            try:
+                event_types = json.loads(competition['event_types'])
+            except:
+                event_types = [competition.get('event_type', 'fs')]
+
+        if event_type not in event_types:
+            return jsonify({'error': f'Event {event_type} not found in competition'}), 400
+
+        if len(event_types) <= 1:
+            return jsonify({'error': 'Cannot remove the last event from a competition'}), 400
+
+        # Remove the event type
+        event_types.remove(event_type)
+
+        # Parse and update event_rounds
+        event_rounds = {}
+        if competition.get('event_rounds'):
+            try:
+                event_rounds = json.loads(competition['event_rounds'])
+            except:
+                pass
+        if event_type in event_rounds:
+            del event_rounds[event_type]
+
+        # Delete teams and scores for this event
+        if USE_SUPABASE:
+            # Get team IDs for this event
+            teams = supabase.table('competition_teams').select('id').eq('competition_id', comp_id).eq('event', event_type).execute()
+            team_ids = [t['id'] for t in teams.data]
+
+            # Delete scores for these teams
+            for team_id in team_ids:
+                supabase.table('competition_scores').delete().eq('team_id', team_id).execute()
+
+            # Delete teams
+            supabase.table('competition_teams').delete().eq('competition_id', comp_id).eq('event', event_type).execute()
+
+            # Update competition
+            supabase.table('competitions').update({
+                'event_types': json.dumps(event_types),
+                'event_rounds': json.dumps(event_rounds),
+                'event_type': event_types[0] if event_types else 'fs'
+            }).eq('id', comp_id).execute()
+        else:
+            db = get_sqlite_db()
+
+            # Get team IDs for this event
+            cursor = db.execute('SELECT id FROM competition_teams WHERE competition_id = ? AND event = ?', (comp_id, event_type))
+            team_ids = [row['id'] for row in cursor.fetchall()]
+
+            # Delete scores for these teams
+            for team_id in team_ids:
+                db.execute('DELETE FROM competition_scores WHERE team_id = ?', (team_id,))
+
+            # Delete teams
+            db.execute('DELETE FROM competition_teams WHERE competition_id = ? AND event = ?', (comp_id, event_type))
+
+            # Update competition
+            db.execute('''
+                UPDATE competitions SET event_types = ?, event_rounds = ?, event_type = ?
+                WHERE id = ?
+            ''', (json.dumps(event_types), json.dumps(event_rounds), event_types[0] if event_types else 'fs', comp_id))
+
+            db.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Event {event_type.upper()} removed successfully',
+            'remaining_events': event_types
+        })
+
+    except Exception as e:
+        print(f"Error removing event: {e}")
+        return jsonify({'error': f'Failed to remove event: {str(e)}'}), 500
+
+
+@app.route('/admin/competition/<comp_id>/add-event', methods=['POST'])
+@admin_required
+def add_event_to_competition(comp_id):
+    """Add a new event to an existing competition."""
+    try:
+        data = request.json
+        event_type = data.get('event_type')
+        rounds = int(data.get('rounds', 10))
+
+        if not event_type:
+            return jsonify({'error': 'Event type is required'}), 400
+
+        competition = get_competition(comp_id)
+        if not competition:
+            return jsonify({'error': 'Competition not found'}), 404
+
+        # Parse current event types
+        event_types = []
+        if competition.get('event_types'):
+            try:
+                event_types = json.loads(competition['event_types'])
+            except:
+                event_types = [competition.get('event_type', 'fs')]
+        else:
+            event_types = [competition.get('event_type', 'fs')]
+
+        # Check if event already exists
+        if event_type in event_types:
+            return jsonify({'error': f'Event {event_type} already exists in this competition'}), 400
+
+        # Add the new event type
+        event_types.append(event_type)
+
+        # Parse and update event_rounds
+        event_rounds = {}
+        if competition.get('event_rounds'):
+            try:
+                event_rounds = json.loads(competition['event_rounds'])
+            except:
+                pass
+        event_rounds[event_type] = rounds
+
+        # Calculate new total_rounds (max of all events)
+        total_rounds = max(event_rounds.values()) if event_rounds else rounds
+
+        # Update competition
+        if USE_SUPABASE:
+            supabase.table('competitions').update({
+                'event_types': json.dumps(event_types),
+                'event_rounds': json.dumps(event_rounds),
+                'total_rounds': total_rounds
+            }).eq('id', comp_id).execute()
+        else:
+            db = get_sqlite_db()
+            db.execute('''
+                UPDATE competitions SET event_types = ?, event_rounds = ?, total_rounds = ?
+                WHERE id = ?
+            ''', (json.dumps(event_types), json.dumps(event_rounds), total_rounds, comp_id))
+            db.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Event {event_type.upper()} added successfully ({rounds} rounds)',
+            'event_types': event_types
+        })
+
+    except Exception as e:
+        print(f"Error adding event: {e}")
+        return jsonify({'error': f'Failed to add event: {str(e)}'}), 500
+
+
+@app.route('/admin/score/<score_id>/training-flag', methods=['POST'])
+@event_judge_required
+def toggle_training_flag(score_id):
+    """Toggle the training flag for a score/video."""
+    data = request.json
+    flag_value = data.get('training_flag', 0)
+
+    if USE_SUPABASE:
+        supabase.table('competition_scores').update({'training_flag': flag_value}).eq('id', score_id).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('UPDATE competition_scores SET training_flag = ? WHERE id = ?', (flag_value, score_id))
+        db.commit()
+
+    return jsonify({'success': True, 'training_flag': flag_value})
+
+
+@app.route('/competition/<comp_id>/training-report')
+@event_judge_required
+def training_report(comp_id):
+    """Generate CSV report of videos flagged for training."""
+    import csv
+    import io
+
+    competition = get_competition(comp_id)
+    if not competition:
+        return "Competition not found", 404
+
+    # Get all scores with training flag
+    if USE_SUPABASE:
+        result = supabase.table('competition_scores').select('*').eq('competition_id', comp_id).eq('training_flag', 1).execute()
+        flagged_scores = result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM competition_scores WHERE competition_id = ? AND training_flag = 1', (comp_id,))
+        flagged_scores = [dict(row) for row in cursor.fetchall()]
+
+    # Build CSV data
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Team Name', 'Team Number', 'Round', 'Score', 'Video ID', 'Video File', 'Video Title', 'Event', 'Class'])
+
+    for score in flagged_scores:
+        team = get_team(score['team_id'])
+        video = get_video(score['video_id']) if score.get('video_id') else None
+
+        writer.writerow([
+            team.get('team_name', '') if team else '',
+            team.get('team_number', '') if team else '',
+            score.get('round_num', ''),
+            score.get('score', ''),
+            score.get('video_id', ''),
+            video.get('local_file', video.get('url', '')) if video else '',
+            video.get('title', '') if video else '',
+            team.get('event', '') if team else '',
+            team.get('class', '') if team else ''
+        ])
+
+    output.seek(0)
+    response = app.response_class(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename={competition["name"]}_training_videos.csv'}
+    )
+    return response
+
+
+@app.route('/competition/<comp_id>/training-download')
+@event_judge_required
+def download_training_videos(comp_id):
+    """Download all videos flagged for training as a zip file."""
+    import zipfile
+    import io
+
+    competition = get_competition(comp_id)
+    if not competition:
+        return "Competition not found", 404
+
+    # Get all scores with training flag
+    if USE_SUPABASE:
+        result = supabase.table('competition_scores').select('*').eq('competition_id', comp_id).eq('training_flag', 1).execute()
+        flagged_scores = result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM competition_scores WHERE competition_id = ? AND training_flag = 1', (comp_id,))
+        flagged_scores = [dict(row) for row in cursor.fetchall()]
+
+    if not flagged_scores:
+        return jsonify({'error': 'No videos flagged for training'}), 404
+
+    # Create zip file in memory
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for score in flagged_scores:
+            if not score.get('video_id'):
+                continue
+
+            video = get_video(score['video_id'])
+            if not video:
+                continue
+
+            team = get_team(score['team_id'])
+            team_name = team.get('team_name', 'Unknown') if team else 'Unknown'
+            round_num = score.get('round_num', 0)
+
+            # Check if it's a local file
+            if video.get('local_file'):
+                local_path = os.path.join(VIDEOS_FOLDER, video['local_file'])
+                if os.path.exists(local_path):
+                    # Create a descriptive filename
+                    ext = os.path.splitext(video['local_file'])[1]
+                    zip_filename = f"{team_name}_Round{round_num}_{video['local_file']}"
+                    zip_file.write(local_path, zip_filename)
+
+    zip_buffer.seek(0)
+
+    response = app.response_class(
+        zip_buffer.getvalue(),
+        mimetype='application/zip',
+        headers={'Content-Disposition': f'attachment; filename={competition["name"]}_training_videos.zip'}
+    )
+    return response
+
+
+@app.route('/competition/<comp_id>/training-videos')
+@event_judge_required
+def get_training_videos(comp_id):
+    """Get list of videos flagged for training."""
+    competition = get_competition(comp_id)
+    if not competition:
+        return jsonify({'error': 'Competition not found'}), 404
+
+    # Get all scores with training flag
+    if USE_SUPABASE:
+        result = supabase.table('competition_scores').select('*').eq('competition_id', comp_id).eq('training_flag', 1).execute()
+        flagged_scores = result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM competition_scores WHERE competition_id = ? AND training_flag = 1', (comp_id,))
+        flagged_scores = [dict(row) for row in cursor.fetchall()]
+
+    # Enrich with team and video info
+    videos = []
+    for score in flagged_scores:
+        team = get_team(score['team_id'])
+        video = get_video(score['video_id']) if score.get('video_id') else None
+
+        videos.append({
+            'score_id': score['id'],
+            'team_name': team.get('team_name', '') if team else '',
+            'team_number': team.get('team_number', '') if team else '',
+            'round_num': score.get('round_num'),
+            'score': score.get('score'),
+            'video_id': score.get('video_id'),
+            'video_title': video.get('title', '') if video else '',
+            'video_file': video.get('local_file', '') if video else ''
+        })
+
+    return jsonify({'videos': videos, 'count': len(videos)})
 
 
 @app.route('/admin/competition/<comp_id>/add-team', methods=['POST'])
@@ -2177,8 +3075,6 @@ def import_teams(comp_id):
     if file.filename == '':
         return jsonify({'error': 'No file selected'}), 400
 
-    team_class = request.form.get('class', 'open').lower()
-
     try:
         import csv
         import io
@@ -2187,19 +3083,55 @@ def import_teams(comp_id):
         content = file.read().decode('utf-8')
         reader = csv.DictReader(io.StringIO(content))
 
+        # Check for required columns in header
+        headers = reader.fieldnames or []
+        headers_lower = [h.lower() for h in headers]
+
+        # Check for name column (required)
+        has_name = any(h in headers_lower for h in ['name', 'team_name'])
+        if not has_name:
+            return jsonify({'error': 'Missing required column: name (or team_name)'}), 400
+
+        # Check for class column (required)
+        has_class = 'class' in headers_lower
+        if not has_class:
+            return jsonify({'error': 'Missing required column: class'}), 400
+
+        # Check for event column (required)
+        has_event = any(h in headers_lower for h in ['event', 'event_type'])
+        if not has_event:
+            return jsonify({'error': 'Missing required column: event (or event_type)'}), 400
+
         imported = 0
         errors = []
+        row_num = 1  # Start at 1 since header is row 0
+
+        import_type = request.form.get('import_type', 'teams')
 
         for row in reader:
+            row_num += 1
             try:
                 # Try different column name variations
                 team_number = row.get('team_number') or row.get('Team Number') or row.get('number') or row.get('Number') or ''
                 team_name = row.get('team_name') or row.get('Team Name') or row.get('name') or row.get('Name') or ''
-                members = row.get('members') or row.get('Members') or row.get('team_members') or row.get('Team Members') or ''
-                row_class = row.get('class') or row.get('Class') or team_class
+                # For competitors, country goes into members field; for teams, use members
+                members = row.get('members') or row.get('Members') or row.get('team_members') or row.get('Team Members') or row.get('country') or row.get('Country') or ''
+                row_class = row.get('class') or row.get('Class') or ''
+                event_type = row.get('event') or row.get('Event') or row.get('event_type') or row.get('Event Type') or ''
 
+                # Validate required fields
                 if not team_name.strip():
+                    errors.append(f'Row {row_num}: Missing required field "name"')
                     continue
+                if not row_class.strip():
+                    errors.append(f'Row {row_num}: Missing required field "class"')
+                    continue
+                if not event_type.strip():
+                    errors.append(f'Row {row_num}: Missing required field "event"')
+                    continue
+
+                # Normalize event type for flexible matching (e.g., "4 way fs" -> "fs_4way_fs")
+                normalized_event = normalize_event_type(event_type)
 
                 team_id = str(uuid.uuid4())[:8]
 
@@ -2210,22 +3142,92 @@ def import_teams(comp_id):
                     'team_name': team_name.strip(),
                     'class': row_class.lower().strip(),
                     'members': members.strip(),
+                    'event': normalized_event,
                     'created_at': datetime.now().isoformat()
                 })
                 imported += 1
 
             except Exception as e:
-                errors.append(str(e))
+                errors.append(f'Row {row_num}: {str(e)}')
+
+        if imported == 0 and errors:
+            return jsonify({'error': f'No rows imported. Errors: {"; ".join(errors[:5])}'}), 400
 
         return jsonify({
             'success': True,
-            'message': f'Imported {imported} teams',
+            'message': f'Imported {imported} teams/competitors' + (f' ({len(errors)} errors)' if errors else ''),
             'imported': imported,
             'errors': errors
         })
 
     except Exception as e:
         return jsonify({'error': f'Failed to parse CSV: {str(e)}'}), 400
+
+
+@app.route('/admin/competition/<comp_id>/renumber', methods=['POST'])
+@admin_required
+def renumber_teams(comp_id):
+    """Renumber all teams/competitors in a competition sequentially by class."""
+    try:
+        data = request.json or {}
+        class_start_numbers = data.get('class_start_numbers', {
+            'open': 1,
+            'advanced': 101,
+            'intermediate': 201,
+            'beginner': 301
+        })
+
+        # Get all teams for this competition
+        teams = get_competition_teams(comp_id)
+
+        if not teams:
+            return jsonify({'error': 'No teams found'}), 404
+
+        # Group teams by class
+        teams_by_class = {}
+        for team in teams:
+            team_class = team.get('class', 'open').lower()
+            if team_class not in teams_by_class:
+                teams_by_class[team_class] = []
+            teams_by_class[team_class].append(team)
+
+        # Sort each class by current number
+        for team_class in teams_by_class:
+            teams_by_class[team_class].sort(
+                key=lambda t: int(t.get('team_number', 0)) if str(t.get('team_number', '')).isdigit() else 999999
+            )
+
+        # Renumber each class starting from its start number
+        renumbered = 0
+        for team_class, class_teams in teams_by_class.items():
+            start_num = int(class_start_numbers.get(team_class, class_start_numbers.get('open', 1)))
+
+            for idx, team in enumerate(class_teams):
+                new_number = str(start_num + idx)
+                if team.get('team_number') != new_number:
+                    # Update the team number
+                    team_data = {
+                        'id': team['id'],
+                        'competition_id': comp_id,
+                        'team_number': new_number,
+                        'team_name': team['team_name'],
+                        'class': team.get('class', 'open'),
+                        'members': team.get('members', ''),
+                        'category': team.get('category', ''),
+                        'event': team.get('event', ''),
+                        'photo': team.get('photo', ''),
+                        'created_at': team.get('created_at', datetime.now().isoformat())
+                    }
+                    save_team(team_data)
+                    renumbered += 1
+
+        return jsonify({
+            'success': True,
+            'message': f'Renumbered {renumbered} entries (total: {len(teams)})'
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Failed to renumber: {str(e)}'}), 400
 
 
 @app.route('/admin/team/<team_id>/update', methods=['POST'])
@@ -2367,9 +3369,18 @@ def save_team_score(team_id):
 
     round_num = int(data.get('round_num', 1))
     score_val = data.get('score')
-    score = float(score_val) if score_val is not None else None
+    raw_score = float(score_val) if score_val is not None else None
     score_data = data.get('score_data', '')
     video_id = data.get('video_id', '')
+    exit_time_penalty = int(data.get('exit_time_penalty', 0))
+
+    # Apply 20% penalty for CF events when working time cannot be determined
+    # Penalty is rounded down per USPA rules
+    score = raw_score
+    penalty_amount = 0
+    if raw_score is not None and exit_time_penalty:
+        penalty_amount = int(raw_score * 0.20)  # 20% rounded down
+        score = raw_score - penalty_amount
 
     # Check if score already exists for this round
     existing_scores = get_team_scores(team_id)
@@ -2386,6 +3397,10 @@ def save_team_score(team_id):
     # Record who scored (only if score is being set)
     scored_by = session.get('username', '') if score is not None else (existing.get('scored_by', '') if existing else '')
 
+    # Store raw score and penalty info in score_data if penalty applied
+    if exit_time_penalty and raw_score is not None:
+        score_data = f"Raw: {int(raw_score)}, Penalty: -{penalty_amount} (20%)"
+
     save_score({
         'id': score_id,
         'competition_id': team['competition_id'],
@@ -2395,10 +3410,104 @@ def save_team_score(team_id):
         'score_data': score_data,
         'video_id': video_id,
         'scored_by': scored_by,
+        'rejump': 0,  # Clear rejump flag when new data is saved
+        'exit_time_penalty': exit_time_penalty,
         'created_at': datetime.now().isoformat()
     })
 
-    return jsonify({'success': True, 'message': 'Score saved'})
+    response_data = {'success': True, 'message': 'Score saved'}
+    if exit_time_penalty and penalty_amount > 0:
+        response_data['penalty_applied'] = True
+        response_data['raw_score'] = int(raw_score)
+        response_data['penalty_amount'] = penalty_amount
+        response_data['final_score'] = int(score)
+    return jsonify(response_data)
+
+
+@app.route('/admin/team/<team_id>/rejump', methods=['POST'])
+@event_judge_required
+def award_rejump(team_id):
+    """Award a rejump for a team's round - clears score and allows new video upload."""
+    data = request.json
+    round_num = int(data.get('round_num', 0))
+
+    if not round_num:
+        return jsonify({'error': 'Round number is required'}), 400
+
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    # Find the score record for this round
+    existing_scores = get_team_scores(team_id)
+    existing = next((s for s in existing_scores if s['round_num'] == round_num), None)
+
+    if existing:
+        # Clear the score and video, mark as rejump
+        save_score({
+            'id': existing['id'],
+            'competition_id': team['competition_id'],
+            'team_id': team_id,
+            'round_num': round_num,
+            'score': None,
+            'score_data': '',
+            'video_id': '',
+            'scored_by': '',
+            'rejump': 1,
+            'created_at': existing.get('created_at', datetime.now().isoformat())
+        })
+    else:
+        # Create a new score record marked as rejump
+        score_id = str(uuid.uuid4())[:8]
+        save_score({
+            'id': score_id,
+            'competition_id': team['competition_id'],
+            'team_id': team_id,
+            'round_num': round_num,
+            'score': None,
+            'score_data': '',
+            'video_id': '',
+            'scored_by': '',
+            'rejump': 1,
+            'created_at': datetime.now().isoformat()
+        })
+
+    return jsonify({'success': True, 'message': f'Rejump awarded for Round {round_num}'})
+
+
+@app.route('/admin/team/<team_id>/clear-rejump', methods=['POST'])
+@event_judge_required
+def clear_rejump(team_id):
+    """Clear the rejump status for a team's round."""
+    data = request.json
+    round_num = int(data.get('round_num', 0))
+
+    if not round_num:
+        return jsonify({'error': 'Round number is required'}), 400
+
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    # Find the score record for this round
+    existing_scores = get_team_scores(team_id)
+    existing = next((s for s in existing_scores if s['round_num'] == round_num), None)
+
+    if existing:
+        save_score({
+            'id': existing['id'],
+            'competition_id': team['competition_id'],
+            'team_id': team_id,
+            'round_num': round_num,
+            'score': existing.get('score'),
+            'score_data': existing.get('score_data', ''),
+            'video_id': existing.get('video_id', ''),
+            'scored_by': existing.get('scored_by', ''),
+            'rejump': 0,
+            'created_at': existing.get('created_at', datetime.now().isoformat())
+        })
+
+    return jsonify({'success': True, 'message': f'Rejump cleared for Round {round_num}'})
 
 
 @app.route('/admin/get-video-info/<video_id>')
@@ -2600,8 +3709,8 @@ def videographer_upload_flysight():
 
 @app.route('/videographer/team/<team_id>/score', methods=['POST'])
 @event_judge_required
-def videographer_save_team_score(team_id):
-    """Save a score for a team (event judge and above)."""
+def videographer_link_video(team_id):
+    """Link a video to a team's round (videographer - NO score entry allowed)."""
     data = request.json
 
     team = get_team(team_id)
@@ -2609,10 +3718,10 @@ def videographer_save_team_score(team_id):
         return jsonify({'error': 'Team not found'}), 404
 
     round_num = int(data.get('round_num', 1))
-    score_val = data.get('score')
-    score = float(score_val) if score_val is not None else None
-    score_data = data.get('score_data', '')
     video_id = data.get('video_id', '')
+
+    if not video_id:
+        return jsonify({'error': 'Video ID is required'}), 400
 
     # Check if score already exists for this round
     existing_scores = get_team_scores(team_id)
@@ -2620,31 +3729,30 @@ def videographer_save_team_score(team_id):
 
     if existing:
         score_id = existing['id']
-        # Preserve existing video_id if not provided
-        if not video_id and existing.get('video_id'):
-            video_id = existing['video_id']
-        # Preserve existing score if not provided (videographer uploading video only)
-        if score is None and existing.get('score') is not None:
-            score = existing['score']
+        # Preserve existing score - videographer cannot modify scores
+        score = existing.get('score')
+        score_data = existing.get('score_data', '')
+        scored_by = existing.get('scored_by', '')
     else:
         score_id = str(uuid.uuid4())[:8]
-
-    # Record who scored (only if score is being set)
-    scored_by = session.get('username', '') if score is not None else (existing.get('scored_by', '') if existing else '')
+        score = None
+        score_data = ''
+        scored_by = ''
 
     save_score({
         'id': score_id,
         'competition_id': team['competition_id'],
         'team_id': team_id,
         'round_num': round_num,
-        'score': score,
-        'score_data': score_data,
+        'score': score,  # Preserved from existing or None
+        'score_data': score_data,  # Preserved from existing
         'video_id': video_id,
-        'scored_by': scored_by,
+        'scored_by': scored_by,  # Preserved from existing
+        'rejump': 0,  # Clear rejump flag when new video is uploaded
         'created_at': datetime.now().isoformat()
     })
 
-    return jsonify({'success': True, 'message': 'Score saved'})
+    return jsonify({'success': True, 'message': 'Video linked to round'})
 
 
 @app.route('/videographer/get-video-info/<video_id>')
@@ -2746,11 +3854,222 @@ def debug_status():
         }), 500
 
 
+# ==================== SYNC VIEWING ====================
+
+@app.route('/sync-room/create', methods=['POST'])
+@login_required
+def create_sync_room():
+    """Create a sync viewing room (event judge only)."""
+    if session.get('role') not in ['admin', 'chief_judge', 'event_judge']:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    data = request.json
+    video_id = data.get('video_id')
+    if not video_id:
+        return jsonify({'error': 'Video ID required'}), 400
+
+    video = get_video(video_id)
+    if not video:
+        return jsonify({'error': 'Video not found'}), 404
+
+    room_id = str(uuid.uuid4())[:8]
+    sync_rooms[room_id] = {
+        'video_id': video_id,
+        'video': video,
+        'event_judge': session.get('username'),
+        'judges': {},
+        'state': 'waiting',
+        'play_time': None,
+        'created_at': datetime.now().isoformat()
+    }
+
+    return jsonify({'success': True, 'room_id': room_id})
+
+
+@app.route('/sync-room/<room_id>')
+@login_required
+def sync_room_page(room_id):
+    """Join a sync viewing room."""
+    if room_id not in sync_rooms:
+        return "Room not found", 404
+
+    room = sync_rooms[room_id]
+    video = room.get('video') or get_video(room['video_id'])
+    is_event_judge = session.get('username') == room['event_judge']
+
+    return render_template('sync_room.html',
+                         room_id=room_id,
+                         room=room,
+                         video=video,
+                         is_event_judge=is_event_judge,
+                         username=session.get('username'),
+                         categories=CATEGORIES)
+
+
+@app.route('/sync-room/<room_id>/status')
+@login_required
+def sync_room_status(room_id):
+    """Get current room status."""
+    if room_id not in sync_rooms:
+        return jsonify({'error': 'Room not found'}), 404
+
+    room = sync_rooms[room_id]
+    return jsonify({
+        'state': room['state'],
+        'judges': room['judges'],
+        'play_time': room['play_time']
+    })
+
+
+# SocketIO events for sync viewing
+if SOCKETIO_ENABLED:
+    @socketio.on('join_sync_room')
+    def on_join_sync_room(data):
+        room_id = data.get('room_id')
+        username = data.get('username')
+        is_event_judge = data.get('is_event_judge', False)
+
+        if room_id not in sync_rooms:
+            emit('error', {'message': 'Room not found'})
+            return
+
+        join_room(room_id)
+        room = sync_rooms[room_id]
+
+        if not is_event_judge:
+            room['judges'][username] = {
+                'ready': False,
+                'start_time': None,
+                'joined_at': datetime.now().isoformat()
+            }
+
+        # Broadcast updated judge list to everyone in room
+        emit('room_update', {
+            'judges': room['judges'],
+            'state': room['state']
+        }, room=room_id)
+
+    @socketio.on('leave_sync_room')
+    def on_leave_sync_room(data):
+        room_id = data.get('room_id')
+        username = data.get('username')
+
+        if room_id in sync_rooms:
+            leave_room(room_id)
+            if username in sync_rooms[room_id]['judges']:
+                del sync_rooms[room_id]['judges'][username]
+            emit('room_update', {
+                'judges': sync_rooms[room_id]['judges'],
+                'state': sync_rooms[room_id]['state']
+            }, room=room_id)
+
+    @socketio.on('event_judge_play')
+    def on_event_judge_play(data):
+        """Event judge starts playback - all judges should watch."""
+        room_id = data.get('room_id')
+        username = data.get('username')
+
+        if room_id not in sync_rooms:
+            return
+
+        room = sync_rooms[room_id]
+        if username != room['event_judge']:
+            emit('error', {'message': 'Only event judge can control playback'})
+            return
+
+        import time
+        room['state'] = 'syncing'
+        room['play_time'] = time.time()
+        # Reset all judge ready states
+        for judge in room['judges']:
+            room['judges'][judge]['ready'] = False
+            room['judges'][judge]['start_time'] = None
+
+        # Tell all judges to prepare and press X
+        emit('prepare_to_start', {
+            'play_time': room['play_time'],
+            'message': 'Press X when ready to start video'
+        }, room=room_id)
+
+    @socketio.on('judge_start_video')
+    def on_judge_start_video(data):
+        """Judge pressed X to start video - check timing tolerance."""
+        room_id = data.get('room_id')
+        username = data.get('username')
+        press_time = data.get('press_time')
+
+        if room_id not in sync_rooms:
+            return
+
+        room = sync_rooms[room_id]
+        if username not in room['judges']:
+            return
+
+        import time
+        room['judges'][username]['ready'] = True
+        room['judges'][username]['start_time'] = press_time
+
+        # Check if all judges have pressed X
+        all_ready = all(j['ready'] for j in room['judges'].values())
+
+        if all_ready and len(room['judges']) > 0:
+            # Check timing tolerance (0.5 seconds)
+            start_times = [j['start_time'] for j in room['judges'].values()]
+            time_spread = max(start_times) - min(start_times)
+
+            if time_spread <= 0.5:
+                # All within tolerance - play video
+                room['state'] = 'playing'
+                emit('sync_play', {
+                    'message': 'All judges synchronized! Playing video.',
+                    'sync_successful': True
+                }, room=room_id)
+            else:
+                # Outside tolerance - reset
+                room['state'] = 'waiting'
+                for judge in room['judges']:
+                    room['judges'][judge]['ready'] = False
+                    room['judges'][judge]['start_time'] = None
+
+                emit('sync_failed', {
+                    'message': f'Timing spread was {time_spread:.2f}s (max 0.5s). Video reset. Event judge must press Play again.',
+                    'time_spread': time_spread
+                }, room=room_id)
+        else:
+            # Update room status - waiting for other judges
+            emit('room_update', {
+                'judges': room['judges'],
+                'state': room['state'],
+                'waiting_for': [j for j, d in room['judges'].items() if not d['ready']]
+            }, room=room_id)
+
+    @socketio.on('video_ended')
+    def on_video_ended(data):
+        """Video playback ended."""
+        room_id = data.get('room_id')
+
+        if room_id in sync_rooms:
+            room = sync_rooms[room_id]
+            room['state'] = 'waiting'
+            for judge in room['judges']:
+                room['judges'][judge]['ready'] = False
+                room['judges'][judge]['start_time'] = None
+
+            emit('room_update', {
+                'judges': room['judges'],
+                'state': room['state']
+            }, room=room_id)
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
     debug = os.environ.get('FLASK_ENV', 'development') == 'development'
     print("\n=== USPA Video Library ===")
     print(f"Database: {'Supabase' if USE_SUPABASE else 'SQLite'}")
+    print(f"SocketIO: {'Enabled' if SOCKETIO_ENABLED else 'Disabled'}")
     print(f"Open http://localhost:{port} in your browser")
     print("\nAdmin login: admin / admin123\n")
-    app.run(debug=debug, host='0.0.0.0', port=port)
+    if SOCKETIO_ENABLED:
+        socketio.run(app, debug=debug, host='0.0.0.0', port=port)
+    else:
+        app.run(debug=debug, host='0.0.0.0', port=port)

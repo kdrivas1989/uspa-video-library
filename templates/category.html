@@ -61,11 +61,44 @@
         </div>
         {% endif %}
 
+        {% if is_admin and videos %}
+        <!-- Bulk Actions Bar -->
+        <div class="bg-gray-800 rounded-lg p-4 mb-6 flex flex-wrap items-center gap-4">
+            <div class="flex items-center gap-3">
+                <button onclick="selectAll()" class="text-blue-400 hover:text-blue-300 text-sm">Select All</button>
+                <button onclick="selectNone()" class="text-gray-400 hover:text-gray-300 text-sm">Clear</button>
+                <span id="selectedCount" class="text-gray-500 text-sm">0 selected</span>
+            </div>
+            <div class="flex items-center gap-2 ml-auto">
+                <label class="text-gray-400 text-sm">Move selected to:</label>
+                <select id="bulkCategory" class="bg-gray-700 text-white px-3 py-2 rounded">
+                    <option value="">Select category...</option>
+                    {% for c_id, c in all_categories.items() %}
+                    <option value="{{ c_id }}">{{ c.abbrev }} - {{ c.name }}</option>
+                    {% endfor %}
+                </select>
+                <select id="bulkSubcategory" class="bg-gray-700 text-white px-3 py-2 rounded hidden">
+                    <option value="">No subcategory</option>
+                </select>
+                <button onclick="bulkMove()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded font-medium">
+                    Move Selected
+                </button>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Videos Grid -->
         {% if videos %}
-        <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="videosGrid">
             {% for video in videos %}
-            <div class="bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition">
+            <div class="video-card bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition relative" data-id="{{ video.id }}">
+                {% if is_admin %}
+                <!-- Checkbox overlay -->
+                <div class="absolute top-2 left-2 z-10">
+                    <input type="checkbox" class="video-checkbox w-5 h-5 rounded bg-gray-700 border-gray-500 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        value="{{ video.id }}" onchange="updateSelectedCount()">
+                </div>
+                {% endif %}
                 <a href="/video/{{ video.id }}" class="block">
                     <div class="aspect-video bg-gray-700 relative">
                         {% if video.thumbnail %}
@@ -124,6 +157,40 @@
 
     {% if is_admin %}
     <script>
+        const categories = {{ all_categories | tojson | safe }};
+
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('.video-checkbox:checked').length;
+            document.getElementById('selectedCount').textContent = count + ' selected';
+        }
+
+        function selectAll() {
+            document.querySelectorAll('.video-checkbox').forEach(cb => cb.checked = true);
+            updateSelectedCount();
+        }
+
+        function selectNone() {
+            document.querySelectorAll('.video-checkbox').forEach(cb => cb.checked = false);
+            updateSelectedCount();
+        }
+
+        // Update subcategory dropdown when category changes
+        document.getElementById('bulkCategory').addEventListener('change', function() {
+            const catId = this.value;
+            const subSelect = document.getElementById('bulkSubcategory');
+
+            if (catId && categories[catId] && categories[catId].subcategories && categories[catId].subcategories.length > 0) {
+                subSelect.innerHTML = '<option value="">No subcategory</option>';
+                categories[catId].subcategories.forEach(sub => {
+                    subSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
+                });
+                subSelect.classList.remove('hidden');
+            } else {
+                subSelect.classList.add('hidden');
+                subSelect.value = '';
+            }
+        });
+
         async function moveToCategory(videoId, newCategory) {
             try {
                 const response = await fetch('/admin/edit-video/' + videoId, {
@@ -133,13 +200,57 @@
                 });
                 const result = await response.json();
                 if (result.success) {
-                    // Remove video card from current view if moved to different category
                     const currentCategory = '{{ cat_id }}';
                     if (newCategory !== currentCategory) {
                         location.reload();
                     }
                 } else {
                     alert(result.error || 'Failed to move video');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function bulkMove() {
+            const newCategory = document.getElementById('bulkCategory').value;
+            const newSubcategory = document.getElementById('bulkSubcategory').value;
+
+            if (!newCategory) {
+                alert('Please select a category');
+                return;
+            }
+
+            const selectedVideos = [];
+            document.querySelectorAll('.video-checkbox:checked').forEach(cb => {
+                selectedVideos.push(cb.value);
+            });
+
+            if (selectedVideos.length === 0) {
+                alert('Please select at least one video');
+                return;
+            }
+
+            if (!confirm(`Move ${selectedVideos.length} video(s) to ${categories[newCategory].name}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/bulk-move-videos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_ids: selectedVideos,
+                        category: newCategory,
+                        subcategory: newSubcategory
+                    })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(result.message);
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to move videos');
                 }
             } catch (err) {
                 alert('Error: ' + err.message);

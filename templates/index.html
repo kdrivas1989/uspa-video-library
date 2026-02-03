@@ -47,6 +47,7 @@
         <h2 class="text-2xl font-bold mb-6">Categories</h2>
         <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
             {% for cat_id, cat in categories.items() %}
+            {% if cat_id != 'uncategorized' or category_counts.get(cat_id, 0) > 0 %}
             <a href="/category/{{ cat_id }}" class="block bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition transform hover:scale-105">
                 <div class="p-6">
                     <div class="flex justify-between items-start mb-3">
@@ -66,6 +67,7 @@
                     {% endif %}
                 </div>
             </a>
+            {% endif %}
             {% endfor %}
         </div>
 
