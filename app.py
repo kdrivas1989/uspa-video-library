@@ -1316,6 +1316,7 @@ def admin_update_user(username):
 
     data = request.json
     name = data.get('name', user['name']).strip()
+    email = data.get('email', user.get('email', '')).strip().lower()
     role = data.get('role', user['role'])
     password = data.get('password', '').strip()
 
@@ -1332,8 +1333,10 @@ def admin_update_user(username):
     update_data = {
         'username': username,
         'name': name,
+        'email': email,
         'role': role,
-        'password': password if password else user['password']
+        'password': password if password else user['password'],
+        'must_change_password': user.get('must_change_password', 0)
     }
 
     save_user(update_data)
