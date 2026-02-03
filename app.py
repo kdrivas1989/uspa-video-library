@@ -8,6 +8,7 @@ import subprocess
 import shutil
 import smtplib
 import secrets
+import threading
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
@@ -16,6 +17,10 @@ from werkzeug.utils import secure_filename
 from functools import wraps
 import sqlite3
 from io import BytesIO
+
+# Background conversion job tracking
+conversion_jobs = {}
+conversion_lock = threading.Lock()
 
 # PDF generation
 try:
@@ -51,6 +56,7 @@ except ImportError:
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'uspa-video-library-secret-key')
 DROPBOX_APP_KEY = os.environ.get('DROPBOX_APP_KEY', '')
+ADMIN_PIN = os.environ.get('ADMIN_PIN', '1234')  # Default PIN for dangerous operations
 
 # Event type display names mapping
 EVENT_DISPLAY_NAMES = {
@@ -1345,7 +1351,7 @@ def parse_filename_metadata(filename, folder_path=''):
             if metadata['subcategory']:
                 break
 
-    # Event detection from folder path
+    # Event detection from folder path and filename
     folder_parts = folder_path.split(os.sep)
     for part in folder_parts:
         part_lower = part.lower()
@@ -1353,6 +1359,30 @@ def parse_filename_metadata(filename, folder_path=''):
         if re.search(r'20\d{2}', part) or any(kw in part_lower for kw in ['nationals', 'championship', 'world', 'uspa', 'competition']):
             if len(part) > 5:
                 metadata['event'] = part.replace('_', ' ').replace('-', ' ').strip()
+                break
+
+    # If no event found from folder, try to detect from filename
+    if not metadata['event']:
+        event_patterns = [
+            (r'(\d{4})\s*nationals?', r'\1 Nationals'),
+            (r'nationals?\s*(\d{4})', r'\1 Nationals'),
+            (r'uspa\s*nationals?\s*(\d{4})', r'USPA Nationals \1'),
+            (r'(\d{4})\s*uspa\s*nationals?', r'USPA Nationals \1'),
+            (r'(\d{4})\s*worlds?', r'\1 World Championships'),
+            (r'worlds?\s*(\d{4})', r'\1 World Championships'),
+            (r'world\s*championships?\s*(\d{4})', r'\1 World Championships'),
+            (r'(\d{4})\s*regionals?', r'\1 Regionals'),
+            (r'regionals?\s*(\d{4})', r'\1 Regionals'),
+            (r'(\d{4})\s*indoor\s*nationals?', r'\1 Indoor Nationals'),
+            (r'pops\s*(\d{4})', r'POPs \1'),
+            (r'(\d{4})\s*pops', r'POPs \1'),
+        ]
+
+        for pattern, replacement in event_patterns:
+            match = re.search(pattern, combined)
+            if match:
+                detected_event = re.sub(pattern, replacement, match.group(0))
+                metadata['event'] = ' '.join(word.capitalize() for word in detected_event.split())
                 break
 
     # Team/Competitor detection - look for team names or proper nouns
@@ -1411,6 +1441,140 @@ def generate_thumbnail(video_path, thumbnail_path):
         return False
 
 
+def detect_category_from_filename(filename):
+    """Auto-detect category, subcategory, and event name from filename."""
+    import re
+
+    if not filename:
+        return None, None, None
+
+    name_lower = filename.lower()
+    detected_category = None
+    detected_subcategory = None
+    detected_event = None
+
+    # Check for "indoor" first - it takes priority as main category
+    indoor_patterns = ['indoor', 'wind tunnel', 'windtunnel', 'ifly', 'tunnel']
+    is_indoor = any(pattern in name_lower for pattern in indoor_patterns)
+
+    if is_indoor:
+        detected_category = 'indoor'
+
+    # Category detection patterns (order matters - more specific first)
+    # Only used if not already detected as indoor
+    category_patterns = {
+        'sp': ['speed skydiving', '_sp_', '-sp-', ' sp ', 'sp_', '_sp', 'speedskydiving'],
+        'cp': ['canopy piloting', '_cp_', '-cp-', ' cp ', 'cp_', '_cp', 'canopypiloting', 'swooping'],
+        'cf': ['canopy formation', '_cf_', '-cf-', ' cf ', 'cf_', '_cf', 'canopyformation', 'crw'],
+        'fs': ['formation skydiving', '_fs_', '-fs-', ' fs ', 'fs_', '_fs', 'formationskydiving', 'rw'],
+        'ae': ['artistic', '_ae_', '-ae-', ' ae ', 'ae_', '_ae', 'freestyle', 'freefly'],
+        'ws': ['wingsuit', '_ws_', '-ws-', ' ws ', 'ws_', '_ws'],
+        'al': ['accuracy', 'landing', '_al_', '-al-', ' al ', 'al_', '_al'],
+    }
+
+    # Subcategory detection patterns
+    subcategory_patterns = {
+        'indoor': {
+            '4way_vfs': ['4way vfs', '4-way vfs', '4wayvfs', 'vfs', 'vertical'],
+            '4way_fs': ['4way', '4-way', '4 way', 'fs4', 'fs 4', 'fs-4'],
+            '2way_vfs': ['2way vfs', '2-way vfs', '2wayvfs'],
+            '2way_fs': ['2way', '2-way', '2 way', 'mfs', 'fs2', 'fs 2', 'fs-2'],
+            '8way': ['8way', '8-way', '8 way', 'fs8', 'fs 8', 'fs-8'],
+        },
+        'cp': {
+            'freestyle': ['cp freestyle', 'cp_freestyle', 'cpfreestyle'],
+            'speed': ['speed run', 'speedrun'],
+            'distance': ['distance'],
+            'zone_accuracy': ['zone', 'pond swoop']
+        },
+        'fs': {
+            '4way_vfs': ['4way vfs', '4-way vfs', '4wayvfs', 'vfs', 'vertical'],
+            '4way_fs': ['4way', '4-way', '4 way'],
+            '2way_mfs': ['2way', '2-way', '2 way', 'mfs'],
+            '8way': ['8way', '8-way', '8 way'],
+            '10way': ['10way', '10-way', '10 way'],
+            '16way': ['16way', '16-way', '16 way']
+        },
+        'cf': {
+            '4way_rot': ['4way rot', '4-way rot', 'rotation'],
+            '4way_seq': ['4way seq', '4-way seq', 'sequential'],
+            '2way': ['2way', '2-way', '2 way']
+        },
+        'ae': {
+            'freefly': ['freefly', 'free fly'],
+            'freestyle': ['freestyle', 'free style']
+        },
+        'ws': {
+            'performance': ['performance', 'perf'],
+            'acrobatic': ['acrobatic', 'acro']
+        }
+    }
+
+    # Event name patterns (common competition names)
+    event_patterns = [
+        # Nationals patterns
+        (r'(\d{4})\s*nationals?', r'\1 Nationals'),
+        (r'nationals?\s*(\d{4})', r'\1 Nationals'),
+        (r'uspa\s*nationals?\s*(\d{4})', r'USPA Nationals \1'),
+        (r'(\d{4})\s*uspa\s*nationals?', r'USPA Nationals \1'),
+        # World patterns
+        (r'(\d{4})\s*worlds?', r'\1 World Championships'),
+        (r'worlds?\s*(\d{4})', r'\1 World Championships'),
+        (r'world\s*championships?\s*(\d{4})', r'\1 World Championships'),
+        # Regional patterns
+        (r'(\d{4})\s*regionals?', r'\1 Regionals'),
+        (r'regionals?\s*(\d{4})', r'\1 Regionals'),
+        # Other common events
+        (r'(\d{4})\s*indoor\s*nationals?', r'\1 Indoor Nationals'),
+        (r'pops\s*(\d{4})', r'POPs \1'),
+        (r'(\d{4})\s*pops', r'POPs \1'),
+        # Generic year-based event detection
+        (r'([a-z\s]+)\s*(\d{4})', None),  # Will be handled specially
+    ]
+
+    # Detect category (only if not already detected as indoor)
+    if not detected_category:
+        for cat_id, patterns in category_patterns.items():
+            for pattern in patterns:
+                if pattern in name_lower:
+                    detected_category = cat_id
+                    break
+            if detected_category:
+                break
+
+    # Detect subcategory if category was found
+    if detected_category and detected_category in subcategory_patterns:
+        for sub_id, patterns in subcategory_patterns[detected_category].items():
+            for pattern in patterns:
+                if pattern in name_lower:
+                    detected_subcategory = sub_id
+                    break
+            if detected_subcategory:
+                break
+
+    # Detect event name
+    for pattern, replacement in event_patterns:
+        match = re.search(pattern, name_lower)
+        if match:
+            if replacement:
+                detected_event = re.sub(pattern, replacement, match.group(0))
+                # Capitalize properly
+                detected_event = ' '.join(word.capitalize() for word in detected_event.split())
+            else:
+                # Generic pattern - extract event name with year
+                groups = match.groups()
+                if len(groups) >= 2:
+                    event_name = groups[0].strip()
+                    year = groups[1]
+                    # Clean up event name
+                    event_name = ' '.join(word.capitalize() for word in event_name.split())
+                    if event_name and len(event_name) > 2:
+                        detected_event = f"{event_name} {year}"
+            break
+
+    return detected_category, detected_subcategory, detected_event
+
+
 def convert_video_to_mp4(input_path, output_path):
     """Convert video to MP4 using ffmpeg."""
     try:
@@ -1425,6 +1589,123 @@ def convert_video_to_mp4(input_path, output_path):
     except Exception as e:
         print(f"Conversion error: {e}")
         return False
+
+
+def background_convert_video(job_id, input_path, output_path, video_data, temp_file=None):
+    """Run video conversion in background thread."""
+    try:
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'converting'
+            conversion_jobs[job_id]['progress'] = 10
+
+        # Run ffmpeg conversion
+        result = subprocess.run([
+            'ffmpeg', '-y', '-i', input_path,
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            output_path
+        ], capture_output=True)
+
+        if result.returncode != 0:
+            with conversion_lock:
+                conversion_jobs[job_id]['status'] = 'failed'
+                conversion_jobs[job_id]['error'] = 'FFmpeg conversion failed'
+            if temp_file and os.path.exists(temp_file):
+                os.remove(temp_file)
+            return
+
+        with conversion_lock:
+            conversion_jobs[job_id]['progress'] = 70
+
+        # Clean up temp file
+        if temp_file and os.path.exists(temp_file):
+            os.remove(temp_file)
+
+        # Generate thumbnail
+        video_id = video_data['id']
+        thumbnail_filename = f"{video_id}_thumb.jpg"
+        thumbnail_path = os.path.join(VIDEOS_FOLDER, thumbnail_filename)
+
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'generating_thumbnail'
+            conversion_jobs[job_id]['progress'] = 80
+
+        if generate_thumbnail(output_path, thumbnail_path):
+            video_data['thumbnail'] = f"/static/videos/{thumbnail_filename}"
+
+        # Get duration
+        duration = get_video_duration(output_path)
+        if duration:
+            video_data['duration'] = duration
+
+        with conversion_lock:
+            conversion_jobs[job_id]['progress'] = 90
+
+        # Save video to database
+        video_data['local_file'] = os.path.basename(output_path)
+        save_video(video_data)
+
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'completed'
+            conversion_jobs[job_id]['progress'] = 100
+            conversion_jobs[job_id]['video_id'] = video_id
+            conversion_jobs[job_id]['completed_at'] = datetime.now().isoformat()
+
+    except Exception as e:
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'failed'
+            conversion_jobs[job_id]['error'] = str(e)
+        if temp_file and os.path.exists(temp_file):
+            os.remove(temp_file)
+
+
+@app.route('/conversion/status/<job_id>')
+def conversion_status(job_id):
+    """Get status of a background conversion job."""
+    with conversion_lock:
+        job = conversion_jobs.get(job_id)
+    if not job:
+        return jsonify({'error': 'Job not found'}), 404
+    return jsonify(job)
+
+
+@app.route('/conversion/active')
+def active_conversions():
+    """Get list of active conversion jobs for current session."""
+    session_id = session.get('_id', request.remote_addr)
+    with conversion_lock:
+        active = {
+            jid: job for jid, job in conversion_jobs.items()
+            if job.get('session_id') == session_id and job.get('status') not in ('completed', 'failed')
+        }
+    return jsonify(active)
+
+
+@app.route('/conversion/all')
+def all_conversions():
+    """Get all conversion jobs for current session (including completed)."""
+    session_id = session.get('_id', request.remote_addr)
+    with conversion_lock:
+        jobs = {
+            jid: job for jid, job in conversion_jobs.items()
+            if job.get('session_id') == session_id
+        }
+    return jsonify(jobs)
+
+
+@app.route('/conversion/clear-completed', methods=['POST'])
+def clear_completed_conversions():
+    """Clear completed/failed conversion jobs from the list."""
+    session_id = session.get('_id', request.remote_addr)
+    with conversion_lock:
+        to_remove = [
+            jid for jid, job in conversion_jobs.items()
+            if job.get('session_id') == session_id and job.get('status') in ('completed', 'failed')
+        ]
+        for jid in to_remove:
+            del conversion_jobs[jid]
+    return jsonify({'success': True, 'cleared': len(to_remove)})
 
 
 @app.route('/')
@@ -2196,12 +2477,25 @@ def upload_video():
     category = request.form.get('category', '') or 'uncategorized'
     subcategory = request.form.get('subcategory', '')
     event = request.form.get('event', '').strip()
+    background = request.form.get('background', 'true').lower() == 'true'
 
     if category not in CATEGORIES:
         category = 'uncategorized'
 
     # Check file extension
     filename = secure_filename(file.filename)
+
+    # Auto-detect category, subcategory, and event from filename if uncategorized
+    category_auto = False  # Track if category was auto-detected
+    if category == 'uncategorized' or not category:
+        detected_cat, detected_sub, detected_event = detect_category_from_filename(file.filename)
+        if detected_cat and detected_cat in CATEGORIES:
+            category = detected_cat
+            category_auto = True  # Mark as auto-categorized
+            if detected_sub and not subcategory:
+                subcategory = detected_sub
+        if detected_event and not event:
+            event = detected_event
     ext = os.path.splitext(filename)[1].lower()
     allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv', '.mts', '.m2ts', '.avi', '.mkv')
 
@@ -2217,8 +2511,68 @@ def upload_video():
     needs_conversion = ext in CONVERSION_FORMATS
 
     try:
-        if needs_conversion:
-            # Save to temp, convert, then save to videos folder
+        if needs_conversion and background:
+            # Background conversion - save file and start thread
+            import tempfile
+            temp_path = os.path.join(tempfile.gettempdir(), f"{video_id}_input{ext}")
+            file.save(temp_path)
+
+            output_filename = f"{video_id}.mp4"
+            output_path = os.path.join(VIDEOS_FOLDER, output_filename)
+
+            # Create job tracking entry
+            job_id = str(uuid.uuid4())[:8]
+            session_id = session.get('_id', request.remote_addr)
+
+            video_data = {
+                'id': video_id,
+                'title': title,
+                'description': '',
+                'url': '',
+                'thumbnail': None,
+                'category': category,
+                'subcategory': subcategory,
+                'tags': '',
+                'duration': None,
+                'created_at': datetime.now().isoformat(),
+                'views': 0,
+                'video_type': 'local',
+                'local_file': output_filename,
+                'event': event,
+                'category_auto': category_auto
+            }
+
+            with conversion_lock:
+                conversion_jobs[job_id] = {
+                    'job_id': job_id,
+                    'video_id': video_id,
+                    'filename': filename,
+                    'title': title,
+                    'status': 'queued',
+                    'progress': 0,
+                    'session_id': session_id,
+                    'created_at': datetime.now().isoformat(),
+                    'error': None
+                }
+
+            # Start background thread
+            thread = threading.Thread(
+                target=background_convert_video,
+                args=(job_id, temp_path, output_path, video_data, temp_path)
+            )
+            thread.daemon = True
+            thread.start()
+
+            return jsonify({
+                'success': True,
+                'background': True,
+                'job_id': job_id,
+                'video_id': video_id,
+                'message': 'Video upload started - conversion running in background'
+            })
+
+        elif needs_conversion:
+            # Synchronous conversion (legacy behavior)
             import tempfile
             temp_path = os.path.join(tempfile.gettempdir(), f"{video_id}_input{ext}")
             file.save(temp_path)
@@ -2233,7 +2587,7 @@ def upload_video():
                 os.remove(temp_path)
                 return jsonify({'error': 'Failed to convert video. Make sure ffmpeg is installed.'}), 400
         else:
-            # Save directly
+            # Save directly (no conversion needed)
             output_filename = f"{video_id}{ext}"
             output_path = os.path.join(VIDEOS_FOLDER, output_filename)
             file.save(output_path)
@@ -2265,7 +2619,8 @@ def upload_video():
             'views': 0,
             'video_type': 'local',
             'local_file': local_file,
-            'event': event
+            'event': event,
+            'category_auto': category_auto
         })
 
         return jsonify({
@@ -2410,6 +2765,112 @@ def import_folder():
     })
 
 
+@app.route('/admin/auto-categorize', methods=['POST'])
+@admin_required
+def auto_categorize_videos():
+    """Auto-categorize uncategorized videos based on their filenames."""
+    data = request.json or {}
+    only_uncategorized = data.get('only_uncategorized', True)
+    admin_pin = data.get('admin_pin', '')
+
+    # Require PIN to process ALL files (not just uncategorized)
+    if not only_uncategorized:
+        if admin_pin != ADMIN_PIN:
+            return jsonify({'error': 'Invalid admin PIN. Required for processing all files.'}), 403
+
+    videos = get_all_videos()
+    updated = 0
+    skipped = 0
+    skipped_manual = 0
+    details = []
+
+    for video in videos:
+        current_cat = video.get('category', 'uncategorized')
+        is_uncategorized = current_cat in ('uncategorized', '', None)
+        was_auto_categorized = video.get('category_auto', True)  # Default True for backwards compat
+
+        # Skip logic:
+        # - If only_uncategorized: skip anything that's not uncategorized
+        # - If processing all: skip manually categorized videos (category_auto = False)
+        if only_uncategorized:
+            if not is_uncategorized:
+                continue
+        else:
+            # Processing all files - but skip manually categorized ones
+            if not is_uncategorized and not was_auto_categorized:
+                skipped_manual += 1
+                continue
+
+        # Get filename from title or local_file
+        filename = video.get('local_file') or video.get('title') or ''
+
+        if not filename:
+            skipped += 1
+            continue
+
+        # Detect category, subcategory, and event
+        detected_cat, detected_sub, detected_event = detect_category_from_filename(filename)
+
+        # Also try the title if local_file didn't give results
+        if not detected_cat and video.get('title'):
+            detected_cat, detected_sub, detected_event = detect_category_from_filename(video.get('title'))
+
+        changes = {}
+        change_desc = []
+
+        # Update category if detected and different
+        if detected_cat and detected_cat in CATEGORIES:
+            if is_uncategorized or (not only_uncategorized and was_auto_categorized):
+                if detected_cat != current_cat:
+                    changes['category'] = detected_cat
+                    changes['category_auto'] = True  # Mark as auto-categorized
+                    change_desc.append(f"category: {current_cat} → {detected_cat}")
+
+        # Update subcategory if detected and not already set
+        if detected_sub and not video.get('subcategory'):
+            changes['subcategory'] = detected_sub
+            change_desc.append(f"subcategory: {detected_sub}")
+
+        # Update event if detected and not already set
+        if detected_event and not video.get('event'):
+            changes['event'] = detected_event
+            change_desc.append(f"event: {detected_event}")
+
+        if changes:
+            # Update the video
+            video_id = video.get('id')
+            if USE_SUPABASE:
+                supabase.table('videos').update(changes).eq('id', video_id).execute()
+            else:
+                db = get_sqlite_db()
+                set_clause = ', '.join(f"{k} = ?" for k in changes.keys())
+                values = list(changes.values()) + [video_id]
+                db.execute(f"UPDATE videos SET {set_clause} WHERE id = ?", values)
+                db.commit()
+
+            updated += 1
+            details.append({
+                'id': video_id,
+                'title': video.get('title', filename),
+                'changes': change_desc
+            })
+        else:
+            skipped += 1
+
+    msg = f"Updated {updated} video(s), skipped {skipped}"
+    if skipped_manual > 0:
+        msg += f", preserved {skipped_manual} manually categorized"
+
+    return jsonify({
+        'success': True,
+        'message': msg,
+        'updated': updated,
+        'skipped': skipped,
+        'skipped_manual': skipped_manual,
+        'details': details[:50]  # Limit details to first 50
+    })
+
+
 @app.route('/admin/delete-video/<video_id>', methods=['POST'])
 @admin_required
 def delete_video(video_id):
@@ -2535,6 +2996,11 @@ def edit_video(video_id):
     if not video:
         return jsonify({'error': 'Video not found'}), 404
 
+    # Check if category is being manually changed
+    new_category = data.get('category')
+    if new_category and new_category != video.get('category'):
+        video['category_auto'] = False  # Mark as manually categorized
+
     video['title'] = data.get('title', video['title']).strip()
     video['description'] = data.get('description', video.get('description', '')).strip()
     video['category'] = data.get('category', video['category'])
@@ -2546,6 +3012,41 @@ def edit_video(video_id):
     save_video(video)
 
     return jsonify({'success': True, 'message': 'Video updated'})
+
+
+@app.route('/admin/delete-score/<team_id>/<score_id>', methods=['DELETE'])
+@admin_required
+def delete_score(team_id, score_id):
+    """Delete a score for a team."""
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    scores = team.get('scores', [])
+
+    # Find and remove the score
+    score_found = False
+    new_scores = []
+    deleted_score = None
+
+    for score in scores:
+        if score.get('id') == score_id:
+            score_found = True
+            deleted_score = score
+        else:
+            new_scores.append(score)
+
+    if not score_found:
+        return jsonify({'error': 'Score not found'}), 404
+
+    team['scores'] = new_scores
+    save_team(team)
+
+    return jsonify({
+        'success': True,
+        'message': f'Score deleted for round {deleted_score.get("round_num", "unknown")}',
+        'deleted_score': deleted_score
+    })
 
 
 @app.route('/admin/bulk-move-videos', methods=['POST'])
@@ -2761,7 +3262,7 @@ def competition_page(comp_id):
         'cf_4way_rot': 8, 'cf_4way_seq': 8, 'cf_2way_open': 8, 'cf_2way_proam': 8, 'cf_2way': 8,
         'ae_freestyle': 7, 'ae_freefly': 7,
         'cp_dsz': 9, 'cp_team': 9, 'cp_freestyle': 3,
-        'ws_performance': 3, 'ws_acrobatic': 7,
+        'ws_performance': 9, 'ws_acrobatic': 7,  # WS Performance: 3 Time + 3 Distance + 3 Speed
         'sp_individual': 8, 'sp_mixed_team': 3,
         'al_individual': 8, 'al_team': 8,
     }
@@ -2916,6 +3417,75 @@ def competition_page(comp_id):
                     # Calculate total (3 decimal places)
                     team['total_score'] = int(weighted_total * 1000) / 1000
 
+        # Calculate weighted scores for WS Performance (ws_performance)
+        # Rounds 1-3: Time (higher is better - longer time in competition window)
+        # Rounds 4-6: Distance (higher is better - longer distance flown)
+        # Rounds 7-9: Speed (higher is better - faster horizontal speed in km/h)
+        # All tasks: Score = (result / best_result) × 100
+        if 'ws_performance' in teams_by_event:
+            for class_name in teams_by_event['ws_performance']:
+                class_teams = teams_by_event['ws_performance'][class_name]
+                if not class_teams:
+                    continue
+
+                total_teams_in_class = len(class_teams)
+
+                # Find best raw score for each round and check if all teams have scored
+                best_scores = {}
+                round_complete = {}
+
+                for round_num in range(1, 10):  # 9 rounds
+                    best_score = None
+                    scored_count = 0
+
+                    for team in class_teams:
+                        team_has_score = False
+                        for score in team.get('scores', []):
+                            if score.get('round_num') == round_num:
+                                raw = score.get('score')
+                                score_data = score.get('score_data', '')
+
+                                if raw is not None or (score_data and not score_data.startswith('{')):
+                                    team_has_score = True
+
+                                if score_data and not score_data.startswith('{'):
+                                    continue
+
+                                # All WS Performance tasks: higher is better
+                                if raw is not None and raw > 0:
+                                    if best_score is None or raw > best_score:
+                                        best_score = raw
+
+                        if team_has_score:
+                            scored_count += 1
+
+                    best_scores[round_num] = best_score
+                    round_complete[round_num] = (scored_count == total_teams_in_class)
+
+                # Calculate weighted scores for each team
+                for team in class_teams:
+                    weighted_total = 0
+                    for score in team.get('scores', []):
+                        round_num = score.get('round_num')
+                        raw_score = score.get('score')
+                        score_data = score.get('score_data', '')
+
+                        if score_data and not score_data.startswith('{'):
+                            score['weighted_score'] = 0
+                            score['penalty'] = score_data
+                            continue
+
+                        if round_complete.get(round_num) and raw_score is not None and raw_score > 0 and best_scores.get(round_num):
+                            best = best_scores[round_num]
+                            # All WS tasks: Score = (result / best) × 100
+                            weighted = (raw_score / best) * 100
+                            score['weighted_score'] = int(weighted * 1000) / 1000
+                            weighted_total += score['weighted_score']
+                        else:
+                            score['weighted_score'] = None
+
+                    team['total_score'] = int(weighted_total * 1000) / 1000
+
         # Sort each class within each event by total score descending
         for event_type in teams_by_event:
             for class_name in teams_by_event[event_type]:
@@ -3023,6 +3593,70 @@ def competition_page(comp_id):
                                 weighted = (best_calc / score_calc) * 100
                             else:
                                 weighted = (raw_score / best) * 100
+                            score['weighted_score'] = int(weighted * 1000) / 1000
+                            weighted_total += score['weighted_score']
+                        else:
+                            score['weighted_score'] = None
+
+                    team['total_score'] = int(weighted_total * 1000) / 1000
+
+        # Calculate weighted scores for WS Performance (ws_performance) - single event
+        # Rounds 1-3: Time (higher is better)
+        # Rounds 4-6: Distance (higher is better)
+        # Rounds 7-9: Speed (higher is better)
+        if competition['event_type'] == 'ws_performance':
+            for class_name in teams_by_class:
+                class_teams = teams_by_class[class_name]
+                if not class_teams:
+                    continue
+
+                total_teams_in_class = len(class_teams)
+
+                best_scores = {}
+                round_complete = {}
+
+                for round_num in range(1, 10):
+                    best_score = None
+                    scored_count = 0
+
+                    for team in class_teams:
+                        team_has_score = False
+                        for score in team.get('scores', []):
+                            if score.get('round_num') == round_num:
+                                raw = score.get('score')
+                                score_data = score.get('score_data', '')
+
+                                if raw is not None or (score_data and not score_data.startswith('{')):
+                                    team_has_score = True
+
+                                if score_data and not score_data.startswith('{'):
+                                    continue
+
+                                if raw is not None and raw > 0:
+                                    if best_score is None or raw > best_score:
+                                        best_score = raw
+
+                        if team_has_score:
+                            scored_count += 1
+
+                    best_scores[round_num] = best_score
+                    round_complete[round_num] = (scored_count == total_teams_in_class)
+
+                for team in class_teams:
+                    weighted_total = 0
+                    for score in team.get('scores', []):
+                        round_num = score.get('round_num')
+                        raw_score = score.get('score')
+                        score_data = score.get('score_data', '')
+
+                        if score_data and not score_data.startswith('{'):
+                            score['weighted_score'] = 0
+                            score['penalty'] = score_data
+                            continue
+
+                        if round_complete.get(round_num) and raw_score is not None and raw_score > 0 and best_scores.get(round_num):
+                            best = best_scores[round_num]
+                            weighted = (raw_score / best) * 100
                             score['weighted_score'] = int(weighted * 1000) / 1000
                             weighted_total += score['weighted_score']
                         else:
@@ -3677,8 +4311,74 @@ def print_competition_pdf(comp_id):
                         score['weighted_score'] = None
 
                 team['total_score'] = int(weighted_total * 1000) / 1000
+
+    # Calculate weighted scores for WS Performance events
+    elif event_type == 'ws_performance':
+        teams_by_class_pdf = {}
+        for team in teams:
+            team_class = team.get('class', 'open')
+            if team_class not in teams_by_class_pdf:
+                teams_by_class_pdf[team_class] = []
+            teams_by_class_pdf[team_class].append(team)
+
+        for class_name, class_teams in teams_by_class_pdf.items():
+            if not class_teams:
+                continue
+
+            total_teams_in_class = len(class_teams)
+            best_scores = {}
+            round_complete = {}
+
+            for round_num in range(1, 10):
+                best_score = None
+                scored_count = 0
+
+                for team in class_teams:
+                    team_has_score = False
+                    for score in team.get('scores', []):
+                        if score.get('round_num') == round_num:
+                            raw = score.get('score')
+                            score_data = score.get('score_data', '')
+
+                            if raw is not None or (score_data and not score_data.startswith('{')):
+                                team_has_score = True
+
+                            if score_data and not score_data.startswith('{'):
+                                continue
+
+                            # All WS tasks: higher is better
+                            if raw is not None and raw > 0:
+                                if best_score is None or raw > best_score:
+                                    best_score = raw
+
+                    if team_has_score:
+                        scored_count += 1
+
+                best_scores[round_num] = best_score
+                round_complete[round_num] = (scored_count == total_teams_in_class)
+
+            for team in class_teams:
+                weighted_total = 0
+                for score in team.get('scores', []):
+                    round_num = score.get('round_num')
+                    raw_score = score.get('score')
+                    score_data = score.get('score_data', '')
+
+                    if score_data and not score_data.startswith('{'):
+                        score['weighted_score'] = 0
+                        continue
+
+                    if round_complete.get(round_num) and raw_score is not None and raw_score > 0 and best_scores.get(round_num):
+                        best = best_scores[round_num]
+                        weighted = (raw_score / best) * 100
+                        score['weighted_score'] = int(weighted * 1000) / 1000
+                        weighted_total += score['weighted_score']
+                    else:
+                        score['weighted_score'] = None
+
+                team['total_score'] = int(weighted_total * 1000) / 1000
     else:
-        # Non-CP events - just sum raw scores
+        # Non-CP/WS events - just sum raw scores
         for team in teams:
             team['total_score'] = sum(s.get('score', 0) or 0 for s in team['scores'] if s.get('score') is not None)
 
@@ -3708,6 +4408,9 @@ def print_competition_pdf(comp_id):
         if event_type == 'cp_dsz':
             round_names = {1: 'ZA1', 2: 'ZA2', 3: 'ZA3', 4: 'D1', 5: 'D2', 6: 'D3', 7: 'S1', 8: 'S2', 9: 'S3'}
             round_label = round_names.get(selected_round, f'Round {selected_round}')
+        elif event_type == 'ws_performance':
+            round_names = {1: 'T1', 2: 'T2', 3: 'T3', 4: 'D1', 5: 'D2', 6: 'D3', 7: 'S1', 8: 'S2', 9: 'S3'}
+            round_label = round_names.get(selected_round, f'Round {selected_round}')
         else:
             round_label = f'Round {selected_round}'
         elements.append(Paragraph(f"Results - {round_label}", subtitle_style))
@@ -3717,6 +4420,13 @@ def print_competition_pdf(comp_id):
                 range_label = 'Zone Accuracy (ZA1-ZA3)'
             elif selected_round <= 6:
                 range_label = 'Through Distance (ZA1-D3)'
+            else:
+                range_label = 'Full Event'
+        elif event_type == 'ws_performance':
+            if selected_round <= 3:
+                range_label = 'Time (T1-T3)'
+            elif selected_round <= 6:
+                range_label = 'Through Distance (T1-D3)'
             else:
                 range_label = 'Full Event'
         else:
@@ -3791,6 +4501,52 @@ def print_competition_pdf(comp_id):
             for rn in ['Z1', 'Z2', 'Z3']:
                 round_headers.extend([rn, f'{rn}W'])
             round_headers.append('ZT')
+            for rn in ['D1', 'D2', 'D3']:
+                round_headers.extend([rn, f'{rn}W'])
+            round_headers.append('DT')
+            for rn in ['S1', 'S2', 'S3']:
+                round_headers.extend([rn, f'{rn}W'])
+            round_headers.append('ST')
+    elif event_type == 'ws_performance':
+        # WS Performance: Time (T), Distance (D), Speed (S)
+        if print_range == 'single':
+            num_rounds = selected_round
+            start_round = selected_round
+            round_names = {1: 'T1', 2: 'T2', 3: 'T3', 4: 'D1', 5: 'D2', 6: 'D3', 7: 'S1', 8: 'S2', 9: 'S3'}
+            rn = round_names[selected_round]
+            round_headers = [rn, f'{rn}W']
+        elif print_range == 'upTo':
+            num_rounds = selected_round
+            start_round = 1
+            round_headers = []
+            # T rounds (Time)
+            for i in range(1, min(4, selected_round + 1)):
+                rn = ['T1', 'T2', 'T3'][i-1]
+                round_headers.extend([rn, f'{rn}W'])
+            if selected_round >= 3:
+                round_headers.append('TT')
+            # D rounds
+            if selected_round >= 4:
+                for i in range(4, min(7, selected_round + 1)):
+                    rn = ['D1', 'D2', 'D3'][i-4]
+                    round_headers.extend([rn, f'{rn}W'])
+                if selected_round >= 6:
+                    round_headers.append('DT')
+            # S rounds
+            if selected_round >= 7:
+                for i in range(7, min(10, selected_round + 1)):
+                    rn = ['S1', 'S2', 'S3'][i-7]
+                    round_headers.extend([rn, f'{rn}W'])
+                if selected_round >= 9:
+                    round_headers.append('ST')
+        else:
+            # Full event
+            num_rounds = 9
+            start_round = 1
+            round_headers = []
+            for rn in ['T1', 'T2', 'T3']:
+                round_headers.extend([rn, f'{rn}W'])
+            round_headers.append('TT')
             for rn in ['D1', 'D2', 'D3']:
                 round_headers.extend([rn, f'{rn}W'])
             round_headers.append('DT')
@@ -3901,6 +4657,89 @@ def print_competition_pdf(comp_id):
         span_commands.append(('SPAN', (0, 0), (0, 1)))  # Rank
         span_commands.append(('SPAN', (1, 0), (1, 1)))  # Name
         span_commands.append(('SPAN', (col_idx, 0), (col_idx, 1)))  # Total
+
+    elif event_type == 'ws_performance':
+        # WS Performance: Time (T), Distance (D), Speed (S) with two-row headers
+        header_row1 = ['Rank', 'Name']
+        header_row2 = ['', '']
+        span_commands = []
+        col_idx = 2
+
+        if print_range == 'single':
+            round_names = {1: 'T1', 2: 'T2', 3: 'T3', 4: 'D1', 5: 'D2', 6: 'D3', 7: 'S1', 8: 'S2', 9: 'S3'}
+            rn = round_names[selected_round]
+            header_row1.extend([rn, ''])
+            header_row2.extend(['Score', 'Points'])
+            span_commands.append(('SPAN', (col_idx, 0), (col_idx + 1, 0)))
+            col_idx += 2
+        elif print_range == 'upTo':
+            # T rounds (Time)
+            for i in range(1, min(4, selected_round + 1)):
+                rn = ['T1', 'T2', 'T3'][i-1]
+                header_row1.extend([rn, ''])
+                header_row2.extend(['Score', 'Points'])
+                span_commands.append(('SPAN', (col_idx, 0), (col_idx + 1, 0)))
+                col_idx += 2
+            if selected_round >= 3:
+                header_row1.append('TT')
+                header_row2.append('')
+                col_idx += 1
+            # D rounds
+            if selected_round >= 4:
+                for i in range(4, min(7, selected_round + 1)):
+                    rn = ['D1', 'D2', 'D3'][i-4]
+                    header_row1.extend([rn, ''])
+                    header_row2.extend(['Score', 'Points'])
+                    span_commands.append(('SPAN', (col_idx, 0), (col_idx + 1, 0)))
+                    col_idx += 2
+                if selected_round >= 6:
+                    header_row1.append('DT')
+                    header_row2.append('')
+                    col_idx += 1
+            # S rounds
+            if selected_round >= 7:
+                for i in range(7, min(10, selected_round + 1)):
+                    rn = ['S1', 'S2', 'S3'][i-7]
+                    header_row1.extend([rn, ''])
+                    header_row2.extend(['Score', 'Points'])
+                    span_commands.append(('SPAN', (col_idx, 0), (col_idx + 1, 0)))
+                    col_idx += 2
+                if selected_round >= 9:
+                    header_row1.append('ST')
+                    header_row2.append('')
+                    col_idx += 1
+        else:
+            # Full event
+            for rn in ['T1', 'T2', 'T3']:
+                header_row1.extend([rn, ''])
+                header_row2.extend(['Score', 'Points'])
+                span_commands.append(('SPAN', (col_idx, 0), (col_idx + 1, 0)))
+                col_idx += 2
+            header_row1.append('TT')
+            header_row2.append('')
+            col_idx += 1
+            for rn in ['D1', 'D2', 'D3']:
+                header_row1.extend([rn, ''])
+                header_row2.extend(['Score', 'Points'])
+                span_commands.append(('SPAN', (col_idx, 0), (col_idx + 1, 0)))
+                col_idx += 2
+            header_row1.append('DT')
+            header_row2.append('')
+            col_idx += 1
+            for rn in ['S1', 'S2', 'S3']:
+                header_row1.extend([rn, ''])
+                header_row2.extend(['Score', 'Points'])
+                span_commands.append(('SPAN', (col_idx, 0), (col_idx + 1, 0)))
+                col_idx += 2
+            header_row1.append('ST')
+            header_row2.append('')
+            col_idx += 1
+
+        header_row1.append('Total')
+        header_row2.append('')
+        span_commands.append(('SPAN', (0, 0), (0, 1)))  # Rank
+        span_commands.append(('SPAN', (1, 0), (1, 1)))  # Name
+        span_commands.append(('SPAN', (col_idx, 0), (col_idx, 1)))  # Total
     else:
         header = ['Rank', 'Name' if is_individual else 'Team'] + round_headers + ['Total']
         span_commands = []
@@ -3918,7 +4757,7 @@ def print_competition_pdf(comp_id):
         class_teams = [t for t in teams if t.get('class', 'open') == team_class]
         class_teams.sort(key=lambda t: t['total_score'], reverse=True)
 
-        if event_type == 'cp_dsz':
+        if event_type in ['cp_dsz', 'ws_performance']:
             table_data = [header_row1, header_row2]
         else:
             table_data = [header]
@@ -4026,8 +4865,102 @@ def print_competition_pdf(comp_id):
                     # Overall total
                     overall_total = za_total + d_total + s_total
                     row.append(f"{overall_total:.2f}")
+
+            elif event_type == 'ws_performance':
+                # WS Performance with separate raw and weighted columns
+                t_total = 0  # Time total
+                d_total = 0  # Distance total
+                s_total = 0  # Speed total
+
+                if print_range == 'single':
+                    score = next((s for s in team['scores'] if s['round_num'] == selected_round), None)
+                    if score and score.get('score') is not None:
+                        if selected_round <= 3:
+                            raw = f"{score['score']:.1f}s"  # Time in seconds
+                        elif selected_round <= 6:
+                            raw = f"{int(score['score'])}m"  # Distance in meters
+                        else:
+                            raw = f"{score['score']:.1f}"  # Speed in km/h
+                        row.append(raw)
+                        weighted = score.get('weighted_score')
+                        if weighted is not None:
+                            row.append(f"{weighted:.1f}")
+                            if selected_round <= 3:
+                                t_total = weighted
+                            elif selected_round <= 6:
+                                d_total = weighted
+                            else:
+                                s_total = weighted
+                        else:
+                            row.append('-')
+                    else:
+                        row.append('-')
+                        row.append('-')
+                    row.append(f"{t_total + d_total + s_total:.1f}")
+                else:
+                    max_round = 9 if print_range == 'full' else selected_round
+
+                    # Time rounds 1-3
+                    if max_round >= 1:
+                        for i in range(1, min(4, max_round + 1)):
+                            score = next((s for s in team['scores'] if s['round_num'] == i), None)
+                            if score and score.get('score') is not None:
+                                raw = f"{score['score']:.1f}"
+                                row.append(raw)
+                                weighted = score.get('weighted_score')
+                                if weighted is not None:
+                                    row.append(f"{weighted:.1f}")
+                                    t_total += weighted
+                                else:
+                                    row.append('-')
+                            else:
+                                row.append('-')
+                                row.append('-')
+                        if max_round >= 3 or (print_range == 'upTo' and max_round <= 3):
+                            row.append(f"{t_total:.1f}")
+
+                    # Distance rounds 4-6
+                    if max_round >= 4:
+                        for i in range(4, min(7, max_round + 1)):
+                            score = next((s for s in team['scores'] if s['round_num'] == i), None)
+                            if score and score.get('score') is not None:
+                                raw = f"{int(score['score'])}"
+                                row.append(raw)
+                                weighted = score.get('weighted_score')
+                                if weighted is not None:
+                                    row.append(f"{weighted:.1f}")
+                                    d_total += weighted
+                                else:
+                                    row.append('-')
+                            else:
+                                row.append('-')
+                                row.append('-')
+                        if max_round >= 6 or (print_range == 'upTo' and max_round <= 6 and max_round >= 4):
+                            row.append(f"{d_total:.1f}")
+
+                    # Speed rounds 7-9
+                    if max_round >= 7:
+                        for i in range(7, min(10, max_round + 1)):
+                            score = next((s for s in team['scores'] if s['round_num'] == i), None)
+                            if score and score.get('score') is not None:
+                                raw = f"{score['score']:.1f}"
+                                row.append(raw)
+                                weighted = score.get('weighted_score')
+                                if weighted is not None:
+                                    row.append(f"{weighted:.1f}")
+                                    s_total += weighted
+                                else:
+                                    row.append('-')
+                            else:
+                                row.append('-')
+                                row.append('-')
+                        if max_round >= 9:
+                            row.append(f"{s_total:.1f}")
+
+                    overall_total = t_total + d_total + s_total
+                    row.append(f"{overall_total:.2f}")
             else:
-                # Non-CP DSZ events
+                # Non-CP/WS events
                 if print_range == 'single':
                     score = next((s for s in team['scores'] if s['round_num'] == selected_round), None)
                     if score and score.get('score') is not None:
@@ -4050,7 +4983,7 @@ def print_competition_pdf(comp_id):
             table_data.append(row)
 
         # Create table for this class
-        if event_type == 'cp_dsz':
+        if event_type in ['cp_dsz', 'ws_performance']:
             num_cols = len(header_row1)
             # Compact columns to fit all data on page
             col_widths = [0.3*inch, 1.2*inch] + [0.4*inch] * (num_cols - 3) + [0.5*inch]
@@ -4061,8 +4994,8 @@ def print_competition_pdf(comp_id):
         table = Table(table_data, colWidths=col_widths)
 
         # Determine header row count
-        header_rows = 1 if event_type != 'cp_dsz' else 1  # Single header row visually (row2 is hidden)
-        data_start_row = 2 if event_type == 'cp_dsz' else 1
+        header_rows = 1 if event_type not in ['cp_dsz', 'ws_performance'] else 1  # Single header row visually (row2 is hidden)
+        data_start_row = 2 if event_type in ['cp_dsz', 'ws_performance'] else 1
 
         # InTime-style professional table formatting
         style_commands = [
@@ -4076,7 +5009,7 @@ def print_competition_pdf(comp_id):
             ('VALIGN', (0, 0), (-1, 0), 'MIDDLE'),
         ]
 
-        if event_type == 'cp_dsz':
+        if event_type in ['cp_dsz', 'ws_performance']:
             # Style the second header row (Score/Points sub-labels)
             style_commands.extend([
                 ('BACKGROUND', (0, 1), (-1, 1), colors.Color(0.1, 0.35, 0.5)),
@@ -4725,9 +5658,7 @@ def videographer_upload_video():
     category = request.form.get('category', '')
     subcategory = request.form.get('subcategory', '')
     event = request.form.get('event', '').strip()
-
-    if not category:
-        category = '4way-fs'  # Default category for competition videos
+    background = request.form.get('background', 'true').lower() == 'true'
 
     # Check file extension
     filename = secure_filename(file.filename)
@@ -4736,6 +5667,11 @@ def videographer_upload_video():
 
     if ext not in allowed_extensions:
         return jsonify({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}), 400
+
+    # Videographer uploads are manually assigned to team/round slots
+    # No auto-categorization - category comes from competition context
+    if not category:
+        category = 'fs'  # Default category for competition videos
 
     video_id = str(uuid.uuid4())[:8]
 
@@ -4746,8 +5682,68 @@ def videographer_upload_video():
     needs_conversion = ext in CONVERSION_FORMATS
 
     try:
-        if needs_conversion:
-            # Save to temp, convert, then save to videos folder
+        if needs_conversion and background:
+            # Background conversion - save file and start thread
+            import tempfile
+            temp_path = os.path.join(tempfile.gettempdir(), f"{video_id}_input{ext}")
+            file.save(temp_path)
+
+            output_filename = f"{video_id}.mp4"
+            output_path = os.path.join(VIDEOS_FOLDER, output_filename)
+
+            # Create job tracking entry
+            job_id = str(uuid.uuid4())[:8]
+            session_id = session.get('_id', request.remote_addr)
+
+            video_data = {
+                'id': video_id,
+                'title': title,
+                'description': '',
+                'url': '',
+                'thumbnail': None,
+                'category': category,
+                'subcategory': subcategory,
+                'tags': '',
+                'duration': None,
+                'created_at': datetime.now().isoformat(),
+                'views': 0,
+                'video_type': 'local',
+                'local_file': output_filename,
+                'event': event,
+                'category_auto': False  # Videographer uploads are manually assigned
+            }
+
+            with conversion_lock:
+                conversion_jobs[job_id] = {
+                    'job_id': job_id,
+                    'video_id': video_id,
+                    'filename': filename,
+                    'title': title,
+                    'status': 'queued',
+                    'progress': 0,
+                    'session_id': session_id,
+                    'created_at': datetime.now().isoformat(),
+                    'error': None
+                }
+
+            # Start background thread
+            thread = threading.Thread(
+                target=background_convert_video,
+                args=(job_id, temp_path, output_path, video_data, temp_path)
+            )
+            thread.daemon = True
+            thread.start()
+
+            return jsonify({
+                'success': True,
+                'background': True,
+                'job_id': job_id,
+                'video_id': video_id,
+                'message': 'Video upload started - conversion running in background'
+            })
+
+        elif needs_conversion:
+            # Synchronous conversion (legacy behavior)
             import tempfile
             temp_path = os.path.join(tempfile.gettempdir(), f"{video_id}_input{ext}")
             file.save(temp_path)
@@ -4762,7 +5758,7 @@ def videographer_upload_video():
                 os.remove(temp_path)
                 return jsonify({'error': 'Failed to convert video. Make sure ffmpeg is installed.'}), 400
         else:
-            # Save directly
+            # Save directly (no conversion needed)
             output_filename = f"{video_id}{ext}"
             output_path = os.path.join(VIDEOS_FOLDER, output_filename)
             file.save(output_path)
@@ -4794,7 +5790,8 @@ def videographer_upload_video():
             'views': 0,
             'video_type': 'local',
             'local_file': local_file,
-            'event': event
+            'event': event,
+            'category_auto': False  # Videographer uploads are manually assigned
         })
 
         return jsonify({
@@ -4872,6 +5869,454 @@ def videographer_upload_flysight():
 
     except Exception as e:
         return jsonify({'error': f'Upload failed: {str(e)}'}), 500
+
+
+def parse_flysight_csv(file_content):
+    """Parse FlySight CSV and extract competition window data for WS Performance.
+
+    Competition window: 3000m to 2000m altitude (hMSL)
+    Returns: time (seconds), distance (meters), speed (km/h)
+    """
+    import csv
+    import io
+    import math
+
+    lines = file_content.decode('utf-8').splitlines()
+
+    # Find the header row (skip $ prefixed metadata lines)
+    header_idx = 0
+    for i, line in enumerate(lines):
+        if not line.startswith('$') and line.strip():
+            header_idx = i
+            break
+
+    # Parse CSV
+    reader = csv.DictReader(lines[header_idx:])
+
+    data_points = []
+    for row in reader:
+        try:
+            # FlySight columns: time,lat,lon,hMSL,velN,velE,velD,hAcc,vAcc,sAcc,numSV
+            point = {
+                'time': row.get('time', ''),
+                'lat': float(row.get('lat', 0)),
+                'lon': float(row.get('lon', 0)),
+                'hMSL': float(row.get('hMSL', 0)),  # Altitude in meters
+                'velN': float(row.get('velN', 0)),  # North velocity m/s
+                'velE': float(row.get('velE', 0)),  # East velocity m/s
+                'velD': float(row.get('velD', 0)),  # Down velocity m/s
+            }
+            data_points.append(point)
+        except (ValueError, KeyError):
+            continue
+
+    if not data_points:
+        return None, "No valid data points found in CSV"
+
+    # Find competition window (3000m to 2000m)
+    window_start = None
+    window_end = None
+    window_points = []
+
+    for i, point in enumerate(data_points):
+        alt = point['hMSL']
+
+        # Find when we first drop below 3000m (entering window)
+        if window_start is None and alt <= 3000:
+            window_start = i
+
+        # Collect points in the window
+        if window_start is not None and alt >= 2000:
+            window_points.append(point)
+
+        # Find when we drop below 2000m (exiting window)
+        if window_start is not None and alt < 2000:
+            window_end = i
+            break
+
+    if not window_points:
+        return None, "Could not find competition window (3000m-2000m) in data"
+
+    # Calculate metrics
+    # Time: duration in competition window
+    if len(window_points) >= 2:
+        # Parse timestamps (format: YYYY-MM-DDTHH:MM:SS.sssZ or similar)
+        from datetime import datetime
+        try:
+            t_start = datetime.fromisoformat(window_points[0]['time'].replace('Z', '+00:00'))
+            t_end = datetime.fromisoformat(window_points[-1]['time'].replace('Z', '+00:00'))
+            time_seconds = (t_end - t_start).total_seconds()
+        except:
+            # Fallback: estimate from data point count (typically 5Hz)
+            time_seconds = len(window_points) / 5.0
+    else:
+        time_seconds = 0
+
+    # Distance: horizontal distance traveled
+    total_distance = 0
+    for i in range(1, len(window_points)):
+        p1 = window_points[i-1]
+        p2 = window_points[i]
+
+        # Haversine formula for distance between GPS points
+        lat1, lon1 = math.radians(p1['lat']), math.radians(p1['lon'])
+        lat2, lon2 = math.radians(p2['lat']), math.radians(p2['lon'])
+
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+
+        a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+        c = 2 * math.asin(math.sqrt(a))
+        r = 6371000  # Earth radius in meters
+
+        total_distance += r * c
+
+    # Speed: average horizontal speed in km/h
+    if time_seconds > 0:
+        speed_kmh = (total_distance / time_seconds) * 3.6  # m/s to km/h
+    else:
+        # Calculate from velocity components
+        total_speed = 0
+        for point in window_points:
+            horiz_speed = math.sqrt(point['velN']**2 + point['velE']**2)
+            total_speed += horiz_speed
+        speed_kmh = (total_speed / len(window_points)) * 3.6 if window_points else 0
+
+    return {
+        'time': round(time_seconds, 2),
+        'distance': round(total_distance, 2),
+        'speed': round(speed_kmh, 2),
+        'points_in_window': len(window_points)
+    }, None
+
+
+@app.route('/ws-performance/upload-flysight/<team_id>/<int:round_num>', methods=['POST'])
+@chief_judge_required
+def ws_performance_upload_flysight(team_id, round_num):
+    """Upload and parse FlySight CSV for WS Performance scoring.
+
+    round_num mapping:
+    1-3: Time rounds (store time value)
+    4-6: Distance rounds (store distance value)
+    7-9: Speed rounds (store speed value)
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # Check file extension
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+
+    if ext != '.csv':
+        return jsonify({'error': 'Invalid file type. Only CSV files are allowed.'}), 400
+
+    # Get team
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    # Parse FlySight CSV
+    file_content = file.read()
+    result, error = parse_flysight_csv(file_content)
+
+    if error:
+        return jsonify({'error': error}), 400
+
+    # Determine which value to use based on round number
+    # Rounds 1-3: Time, Rounds 4-6: Distance, Rounds 7-9: Speed
+    if round_num <= 3:
+        score_value = result['time']
+        task_type = 'Time'
+    elif round_num <= 6:
+        score_value = result['distance']
+        task_type = 'Distance'
+    else:
+        score_value = result['speed']
+        task_type = 'Speed'
+
+    # Save FlySight file
+    flysight_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'flysight')
+    os.makedirs(flysight_folder, exist_ok=True)
+
+    flysight_id = f"{team_id}_r{round_num}_{str(uuid.uuid4())[:8]}"
+    output_path = os.path.join(flysight_folder, f"{flysight_id}.csv")
+
+    with open(output_path, 'wb') as f:
+        f.write(file_content)
+
+    # Update team's score for this round
+    scores = team.get('scores', [])
+    score_updated = False
+
+    for score in scores:
+        if score.get('round_num') == round_num:
+            score['score'] = score_value
+            score['score_data'] = json.dumps({
+                'flysight_file': f"{flysight_id}.csv",
+                'time': result['time'],
+                'distance': result['distance'],
+                'speed': result['speed'],
+                'task_type': task_type
+            })
+            score['scored_by'] = session.get('username', 'system')
+            score_updated = True
+            break
+
+    if not score_updated:
+        scores.append({
+            'id': str(uuid.uuid4())[:8],
+            'round_num': round_num,
+            'score': score_value,
+            'score_data': json.dumps({
+                'flysight_file': f"{flysight_id}.csv",
+                'time': result['time'],
+                'distance': result['distance'],
+                'speed': result['speed'],
+                'task_type': task_type
+            }),
+            'video_id': None,
+            'scored_by': session.get('username', 'system')
+        })
+
+    team['scores'] = scores
+    save_team(team)
+
+    return jsonify({
+        'success': True,
+        'message': f'{task_type} score recorded: {score_value}',
+        'result': result,
+        'score': score_value
+    })
+
+
+@app.route('/ws-performance/bulk-upload-flysight/<team_id>', methods=['POST'])
+@chief_judge_required
+def ws_performance_bulk_upload_flysight(team_id):
+    """Upload FlySight CSV and apply to all three task types for a round.
+
+    Expects round_base (1, 2, or 3) and applies:
+    - Time to round_base
+    - Distance to round_base + 3
+    - Speed to round_base + 6
+    """
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    round_base = int(request.form.get('round_base', 1))
+    if round_base not in [1, 2, 3]:
+        return jsonify({'error': 'Invalid round. Must be 1, 2, or 3.'}), 400
+
+    # Check file extension
+    filename = secure_filename(file.filename)
+    ext = os.path.splitext(filename)[1].lower()
+
+    if ext != '.csv':
+        return jsonify({'error': 'Invalid file type. Only CSV files are allowed.'}), 400
+
+    # Get team
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    # Parse FlySight CSV
+    file_content = file.read()
+    result, error = parse_flysight_csv(file_content)
+
+    if error:
+        return jsonify({'error': error}), 400
+
+    # Save FlySight file
+    flysight_folder = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'flysight')
+    os.makedirs(flysight_folder, exist_ok=True)
+
+    flysight_id = f"{team_id}_round{round_base}_{str(uuid.uuid4())[:8]}"
+    output_path = os.path.join(flysight_folder, f"{flysight_id}.csv")
+
+    with open(output_path, 'wb') as f:
+        f.write(file_content)
+
+    # Update scores for all three tasks
+    scores = team.get('scores', [])
+
+    tasks = [
+        (round_base, result['time'], 'Time'),
+        (round_base + 3, result['distance'], 'Distance'),
+        (round_base + 6, result['speed'], 'Speed')
+    ]
+
+    for round_num, score_value, task_type in tasks:
+        score_updated = False
+        for score in scores:
+            if score.get('round_num') == round_num:
+                score['score'] = score_value
+                score['score_data'] = json.dumps({
+                    'flysight_file': f"{flysight_id}.csv",
+                    'time': result['time'],
+                    'distance': result['distance'],
+                    'speed': result['speed'],
+                    'task_type': task_type
+                })
+                score['scored_by'] = session.get('username', 'system')
+                score_updated = True
+                break
+
+        if not score_updated:
+            scores.append({
+                'id': str(uuid.uuid4())[:8],
+                'round_num': round_num,
+                'score': score_value,
+                'score_data': json.dumps({
+                    'flysight_file': f"{flysight_id}.csv",
+                    'time': result['time'],
+                    'distance': result['distance'],
+                    'speed': result['speed'],
+                    'task_type': task_type
+                }),
+                'video_id': None,
+                'scored_by': session.get('username', 'system')
+            })
+
+    team['scores'] = scores
+    save_team(team)
+
+    return jsonify({
+        'success': True,
+        'message': f'Round {round_base} scores recorded from FlySight',
+        'result': result,
+        'scores': {
+            'time': result['time'],
+            'distance': result['distance'],
+            'speed': result['speed']
+        }
+    })
+
+
+@app.route('/ws-performance/save-score/<team_id>', methods=['POST'])
+@chief_judge_required
+def ws_performance_save_score(team_id):
+    """Save a single WS Performance score for a specific task and round."""
+    data = request.json
+
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    round_num = int(data.get('round_num', 1))
+    score_value = float(data.get('score', 0))
+    task = data.get('task', 'time')  # 'time', 'distance', 'speed'
+
+    # Validate round number based on task
+    # Time: 1-3, Distance: 4-6, Speed: 7-9
+    valid_rounds = {
+        'time': [1, 2, 3],
+        'distance': [4, 5, 6],
+        'speed': [7, 8, 9]
+    }
+
+    if round_num not in valid_rounds.get(task, []):
+        return jsonify({'error': f'Invalid round number {round_num} for task {task}'}), 400
+
+    # Update or create score
+    scores = team.get('scores', [])
+    score_updated = False
+
+    for score in scores:
+        if score.get('round_num') == round_num:
+            score['score'] = score_value
+            score['score_data'] = json.dumps({
+                'task_type': task.capitalize(),
+                'source': 'flysight'
+            })
+            score['scored_by'] = session.get('username', 'system')
+            score_updated = True
+            break
+
+    if not score_updated:
+        scores.append({
+            'id': str(uuid.uuid4())[:8],
+            'round_num': round_num,
+            'score': score_value,
+            'score_data': json.dumps({
+                'task_type': task.capitalize(),
+                'source': 'flysight'
+            }),
+            'video_id': None,
+            'scored_by': session.get('username', 'system')
+        })
+
+    team['scores'] = scores
+    save_team(team)
+
+    return jsonify({
+        'success': True,
+        'message': f'{task.capitalize()} score saved',
+        'round_num': round_num,
+        'score': score_value
+    })
+
+
+@app.route('/ws-performance/reference-points/<competition_id>', methods=['GET', 'POST'])
+@chief_judge_required
+def ws_performance_reference_points(competition_id):
+    """Get or set ground reference points for WS Performance competition."""
+    competition = get_competition(competition_id)
+    if not competition:
+        return jsonify({'error': 'Competition not found'}), 404
+
+    if request.method == 'GET':
+        # Return existing reference points
+        ref_points = competition.get('ws_reference_points', [])
+        return jsonify({
+            'success': True,
+            'points': ref_points
+        })
+
+    elif request.method == 'POST':
+        # Save reference points
+        data = request.json
+        points = data.get('points', [])
+
+        if len(points) != 4:
+            return jsonify({'error': 'Exactly 4 reference points are required'}), 400
+
+        # Validate points
+        validated_points = []
+        for point in points:
+            lat = point.get('lat')
+            lng = point.get('lng')
+
+            if lat is None or lng is None:
+                return jsonify({'error': 'Each point must have lat and lng'}), 400
+
+            if not (-90 <= lat <= 90):
+                return jsonify({'error': 'Latitude must be between -90 and 90'}), 400
+
+            if not (-180 <= lng <= 180):
+                return jsonify({'error': 'Longitude must be between -180 and 180'}), 400
+
+            validated_points.append({
+                'index': point.get('index', len(validated_points)),
+                'lat': float(lat),
+                'lng': float(lng)
+            })
+
+        # Save to competition
+        competition['ws_reference_points'] = validated_points
+        save_competition(competition)
+
+        return jsonify({
+            'success': True,
+            'message': 'Reference points saved',
+            'points': validated_points
+        })
 
 
 @app.route('/videographer/team/<team_id>/score', methods=['POST'])

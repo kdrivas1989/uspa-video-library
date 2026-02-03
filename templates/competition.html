@@ -132,27 +132,35 @@
         </div>
 
         {% if is_multi_event %}
-        <!-- Event Tabs (for multi-event competitions) -->
-        <div class="flex gap-2 mb-4 border-b border-gray-200 pb-2 flex-wrap items-center">
-            <button onclick="showEvent('all')" id="event-tab-all" class="px-4 py-2 rounded-t-lg bg-blue-600 text-white">
-                All Events
-            </button>
-            {% for et in event_types %}
-            <div class="relative inline-flex">
-                <button onclick="showEvent('{{ et }}')" id="event-tab-{{ et }}" class="px-4 py-2 rounded-t-lg bg-gray-200 hover:bg-gray-300">
-                    {{ et|event_name }}
-                </button>
+        <!-- Event and Class Selectors (for multi-event competitions) -->
+        <div class="flex gap-4 mb-4 pb-2 flex-wrap items-center">
+            <div class="flex items-center gap-2">
+                <label class="text-gray-700 font-medium">Event:</label>
+                <select id="eventSelector" onchange="showEvent(this.value)" class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    {% for et in event_types %}
+                    <option value="{{ et }}" {% if loop.first %}selected{% endif %}>{{ et|event_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex items-center gap-2">
+                <label class="text-gray-700 font-medium">Class:</label>
+                <select id="multiEventClassSelector" onchange="filterMultiEventClass(this.value)" class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="open" selected>Open</option>
+                    <option value="advanced">Advanced</option>
+                    <option value="intermediate">Intermediate</option>
+                </select>
+            </div>
+            {% if is_admin %}
+            <div class="ml-auto flex gap-2">
+                {% for et in event_types %}
                 {% set event_has_teams = teams_by_event.get(et, {}).values()|sum(start=[]) %}
-                {% if is_admin and event_types|length > 1 and not event_has_teams %}
-                <button onclick="removeEvent('{{ et }}')" class="absolute -top-1 -right-1 w-5 h-5 bg-red-600 hover:bg-red-500 rounded-full text-xs flex items-center justify-center" title="Remove event">
-                    &times;
+                {% if event_types|length > 1 and not event_has_teams %}
+                <button onclick="removeEvent('{{ et }}')" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded text-sm" title="Remove {{ et|event_name }}">
+                    Remove {{ et|event_name }}
                 </button>
                 {% endif %}
-            </div>
-            {% endfor %}
-            {% if is_admin %}
-            <div class="ml-auto">
-                <button onclick="showRenumberModal()" class="bg-yellow-600 hover:bg-gray-300 px-3 py-1 rounded text-sm">
+                {% endfor %}
+                <button onclick="showRenumberModal()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm">
                     Renumber
                 </button>
             </div>
@@ -172,7 +180,35 @@
                 <div class="bg-white rounded-lg overflow-hidden">
                     <table class="w-full">
                         {% set is_individual = (event_type.startswith('cp') and event_type != 'cp_team') or event_type.startswith('al') or event_type.startswith('sp') or event_type.startswith('ws_performance') %}
+                        {% set event_round_count = event_rounds.get(event_type, competition.total_rounds) %}
                         <thead class="bg-gray-200">
+                            {% if event_type == 'ws_performance' %}
+                            <!-- WS Performance: Two-row header with Round 1/2/3 spanning T/D/S -->
+                            <tr>
+                                <th rowspan="2" class="px-4 py-2 text-left">Rank</th>
+                                <th rowspan="2" class="px-2 py-2 text-center">Photo</th>
+                                <th rowspan="2" class="px-4 py-2 text-left">#</th>
+                                <th rowspan="2" class="px-4 py-2 text-left">Competitor</th>
+                                <th colspan="3" class="px-2 py-2 text-center text-sm bg-blue-200 border-l border-r border-gray-300">Round 1</th>
+                                <th colspan="3" class="px-2 py-2 text-center text-sm bg-blue-100 border-r border-gray-300">Round 2</th>
+                                <th colspan="3" class="px-2 py-2 text-center text-sm bg-blue-200 border-r border-gray-300">Round 3</th>
+                                <th rowspan="2" class="px-4 py-2 text-right">Total</th>
+                            </tr>
+                            <tr>
+                                <!-- Round 1: T, D, S -->
+                                <th class="px-2 py-1 text-center text-xs bg-blue-200 border-l border-gray-300" title="Time (seconds)">Time</th>
+                                <th class="px-2 py-1 text-center text-xs bg-blue-200" title="Distance (meters)">Dist</th>
+                                <th class="px-2 py-1 text-center text-xs bg-blue-200 border-r border-gray-300" title="Speed (km/h)">Speed</th>
+                                <!-- Round 2: T, D, S -->
+                                <th class="px-2 py-1 text-center text-xs bg-blue-100" title="Time (seconds)">Time</th>
+                                <th class="px-2 py-1 text-center text-xs bg-blue-100" title="Distance (meters)">Dist</th>
+                                <th class="px-2 py-1 text-center text-xs bg-blue-100 border-r border-gray-300" title="Speed (km/h)">Speed</th>
+                                <!-- Round 3: T, D, S -->
+                                <th class="px-2 py-1 text-center text-xs bg-blue-200" title="Time (seconds)">Time</th>
+                                <th class="px-2 py-1 text-center text-xs bg-blue-200" title="Distance (meters)">Dist</th>
+                                <th class="px-2 py-1 text-center text-xs bg-blue-200 border-r border-gray-300" title="Speed (km/h)">Speed</th>
+                            </tr>
+                            {% else %}
                             <tr>
                                 <th class="px-4 py-3 text-left">Rank</th>
                                 <th class="px-2 py-3 text-center">Photo</th>
@@ -182,7 +218,6 @@
                                 {% else %}
                                 <th class="px-4 py-3 text-left">Team Name</th>
                                 {% endif %}
-                                {% set event_round_count = event_rounds.get(event_type, competition.total_rounds) %}
                                 {% if event_type == 'cp_dsz' %}
                                 <!-- CP Individual: Zone Accuracy (1-3), Distance (4-6), Speed (7-9) -->
                                 <th class="px-2 py-3 text-center text-sm bg-gray-200" title="Zone Accuracy Round 1">ZA1</th>
@@ -207,6 +242,7 @@
                                 <th class="px-4 py-3 text-right">Avg Speed</th>
                                 {% endif %}
                             </tr>
+                            {% endif %}
                         </thead>
                         <tbody>
                             {% for team in teams %}
@@ -235,6 +271,54 @@
                                 {% else %}
                                 <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
                                 {% endif %}
+                                {% if event_type == 'ws_performance' %}
+                                <!-- WS Performance: Display grouped by round (T, D, S for each round) -->
+                                {% for round_num in [1, 2, 3] %}
+                                {% set t_idx = round_num %}
+                                {% set d_idx = round_num + 3 %}
+                                {% set s_idx = round_num + 6 %}
+                                {% set t_score = team.scores|selectattr('round_num', 'equalto', t_idx)|first %}
+                                {% set d_score = team.scores|selectattr('round_num', 'equalto', d_idx)|first %}
+                                {% set s_score = team.scores|selectattr('round_num', 'equalto', s_idx)|first %}
+                                {% set bg_class = 'bg-blue-50' if round_num == 2 else 'bg-blue-100/50' %}
+                                <!-- Time for Round {{ round_num }} -->
+                                <td class="px-1 py-2 text-center {{ bg_class }} border-l border-gray-200">
+                                    {% if t_score and t_score.score is not none %}
+                                    <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ t_idx }}, {{ t_score.score }}, '{{ t_score.video_id|default("") }}', 'ws_performance', '{{ t_score.id }}', 0)"
+                                        class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400" title="Time: {{ t_score.score|round(2) }}s{% if t_score.weighted_score %} | Points: {{ t_score.weighted_score|round(1) }}{% endif %}">
+                                        {{ t_score.score|round(1) }}
+                                    </button>
+                                    {% else %}
+                                    <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ t_idx }}, null, '', 'ws_performance', null, 0)"
+                                        class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400">-</button>
+                                    {% endif %}
+                                </td>
+                                <!-- Distance for Round {{ round_num }} -->
+                                <td class="px-1 py-2 text-center {{ bg_class }}">
+                                    {% if d_score and d_score.score is not none %}
+                                    <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ d_idx }}, {{ d_score.score }}, '{{ d_score.video_id|default("") }}', 'ws_performance', '{{ d_score.id }}', 0)"
+                                        class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400" title="Distance: {{ d_score.score|round(2) }}m{% if d_score.weighted_score %} | Points: {{ d_score.weighted_score|round(1) }}{% endif %}">
+                                        {{ d_score.score|round(0)|int }}
+                                    </button>
+                                    {% else %}
+                                    <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ d_idx }}, null, '', 'ws_performance', null, 0)"
+                                        class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400">-</button>
+                                    {% endif %}
+                                </td>
+                                <!-- Speed for Round {{ round_num }} -->
+                                <td class="px-1 py-2 text-center {{ bg_class }} border-r border-gray-200">
+                                    {% if s_score and s_score.score is not none %}
+                                    <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ s_idx }}, {{ s_score.score }}, '{{ s_score.video_id|default("") }}', 'ws_performance', '{{ s_score.id }}', 0)"
+                                        class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400" title="Speed: {{ s_score.score|round(2) }}km/h{% if s_score.weighted_score %} | Points: {{ s_score.weighted_score|round(1) }}{% endif %}">
+                                        {{ s_score.score|round(1) }}
+                                    </button>
+                                    {% else %}
+                                    <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ s_idx }}, null, '', 'ws_performance', null, 0)"
+                                        class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400">-</button>
+                                    {% endif %}
+                                </td>
+                                {% endfor %}
+                                {% else %}
                                 {% for i in range(1, event_round_count + 1) %}
                                 {% set round_score = team.scores|selectattr('round_num', 'equalto', i)|first %}
                                 <td class="px-2 py-3 text-center">
@@ -302,7 +386,8 @@
                                 </td>
                                 {% endif %}
                                 {% endfor %}
-                                <td class="px-4 py-3 text-right font-bold text-black">{% if event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
+                                {% endif %}
+                                <td class="px-4 py-3 text-right font-bold text-black">{% if event_type in ['cp_dsz', 'ws_performance'] %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
                                 {% if 'sp' in event_type %}
                                 <td class="px-4 py-3 text-right text-blue-400">
                                     {% set completed_scores = team.scores|selectattr('score', 'ne', none)|list %}
@@ -350,20 +435,26 @@
             </div>
 
             {% if competition.event_type == 'cp_dsz' %}
-            <!-- Discipline Tabs for CP DSZ -->
-            <div class="flex gap-2">
-                <button onclick="filterDiscipline('all')" id="tab-all" class="discipline-tab px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white">
-                    Overall
-                </button>
-                <button onclick="filterDiscipline('za')" id="tab-za" class="discipline-tab px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 hover:bg-gray-300 text-gray-700">
-                    Zone Accuracy
-                </button>
-                <button onclick="filterDiscipline('d')" id="tab-d" class="discipline-tab px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 hover:bg-gray-300 text-gray-700">
-                    Distance
-                </button>
-                <button onclick="filterDiscipline('s')" id="tab-s" class="discipline-tab px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 hover:bg-gray-300 text-gray-700">
-                    Speed
-                </button>
+            <!-- Discipline Selector for CP DSZ -->
+            <div class="flex items-center gap-2">
+                <label class="text-gray-700 font-medium">Discipline:</label>
+                <select id="disciplineSelector" onchange="filterDiscipline(this.value)" class="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="all" selected>Overall</option>
+                    <option value="za">Zone Accuracy</option>
+                    <option value="d">Distance</option>
+                    <option value="s">Speed</option>
+                </select>
+            </div>
+            {% elif competition.event_type == 'ws_performance' %}
+            <!-- Round Selector for WS Performance -->
+            <div class="flex items-center gap-2">
+                <label class="text-gray-700 font-medium">Round:</label>
+                <select id="wsRoundSelector" onchange="filterWsRound(this.value)" class="px-4 py-2 rounded-lg border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="all" selected>All Rounds</option>
+                    <option value="r1">Round 1</option>
+                    <option value="r2">Round 2</option>
+                    <option value="r3">Round 3</option>
+                </select>
             </div>
             {% endif %}
         </div>
@@ -374,7 +465,35 @@
             <div class="bg-white rounded-lg overflow-hidden">
                 <table class="w-full">
                     {% set is_individual = (competition.event_type.startswith('cp') and competition.event_type != 'cp_team') or competition.event_type.startswith('al') or competition.event_type.startswith('sp') or competition.event_type.startswith('ws_performance') %}
+                    {% set single_event_rounds = event_rounds.get(event_types[0], competition.total_rounds) if event_types else competition.total_rounds %}
                     <thead class="bg-gray-200">
+                        {% if competition.event_type == 'ws_performance' %}
+                        <!-- WS Performance: Two-row header with Round 1/2/3 spanning T/D/S -->
+                        <tr>
+                            <th rowspan="2" class="px-4 py-2 text-left">Rank</th>
+                            <th rowspan="2" class="px-2 py-2 text-center">Photo</th>
+                            <th rowspan="2" class="px-4 py-2 text-left">#</th>
+                            <th rowspan="2" class="px-4 py-2 text-left">Competitor</th>
+                            <th colspan="3" class="px-2 py-2 text-center text-sm bg-blue-200 border-l border-r border-gray-300 col-r1">Round 1</th>
+                            <th colspan="3" class="px-2 py-2 text-center text-sm bg-blue-100 border-r border-gray-300 col-r2">Round 2</th>
+                            <th colspan="3" class="px-2 py-2 text-center text-sm bg-blue-200 border-r border-gray-300 col-r3">Round 3</th>
+                            <th rowspan="2" class="px-4 py-2 text-right">Total</th>
+                        </tr>
+                        <tr>
+                            <!-- Round 1: T, D, S -->
+                            <th class="px-2 py-1 text-center text-xs bg-blue-200 border-l border-gray-300 col-r1" title="Time (seconds)">Time</th>
+                            <th class="px-2 py-1 text-center text-xs bg-blue-200 col-r1" title="Distance (meters)">Dist</th>
+                            <th class="px-2 py-1 text-center text-xs bg-blue-200 border-r border-gray-300 col-r1" title="Speed (km/h)">Speed</th>
+                            <!-- Round 2: T, D, S -->
+                            <th class="px-2 py-1 text-center text-xs bg-blue-100 col-r2" title="Time (seconds)">Time</th>
+                            <th class="px-2 py-1 text-center text-xs bg-blue-100 col-r2" title="Distance (meters)">Dist</th>
+                            <th class="px-2 py-1 text-center text-xs bg-blue-100 border-r border-gray-300 col-r2" title="Speed (km/h)">Speed</th>
+                            <!-- Round 3: T, D, S -->
+                            <th class="px-2 py-1 text-center text-xs bg-blue-200 col-r3" title="Time (seconds)">Time</th>
+                            <th class="px-2 py-1 text-center text-xs bg-blue-200 col-r3" title="Distance (meters)">Dist</th>
+                            <th class="px-2 py-1 text-center text-xs bg-blue-200 border-r border-gray-300 col-r3" title="Speed (km/h)">Speed</th>
+                        </tr>
+                        {% else %}
                         <tr>
                             <th class="px-4 py-3 text-left">Rank</th>
                             <th class="px-2 py-3 text-center">Photo</th>
@@ -384,7 +503,6 @@
                             {% else %}
                             <th class="px-4 py-3 text-left">Team Name</th>
                             {% endif %}
-                            {% set single_event_rounds = event_rounds.get(event_types[0], competition.total_rounds) if event_types else competition.total_rounds %}
                             {% if competition.event_type == 'cp_dsz' %}
                             <!-- CP Individual: Zone Accuracy (1-3), Distance (4-6), Speed (7-9) -->
                             <th class="px-2 py-3 text-center text-sm bg-gray-200 col-za" title="Zone Accuracy Round 1">ZA1</th>
@@ -409,6 +527,7 @@
                             <th class="px-4 py-3 text-right">Avg Speed</th>
                             {% endif %}
                         </tr>
+                        {% endif %}
                     </thead>
                     <tbody>
                         {% for team in teams %}
@@ -437,6 +556,54 @@
                             {% else %}
                             <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
                             {% endif %}
+                            {% if competition.event_type == 'ws_performance' %}
+                            <!-- WS Performance: Display grouped by round (T, D, S for each round) -->
+                            {% for round_num in [1, 2, 3] %}
+                            {% set t_idx = round_num %}
+                            {% set d_idx = round_num + 3 %}
+                            {% set s_idx = round_num + 6 %}
+                            {% set t_score = team.scores|selectattr('round_num', 'equalto', t_idx)|first %}
+                            {% set d_score = team.scores|selectattr('round_num', 'equalto', d_idx)|first %}
+                            {% set s_score = team.scores|selectattr('round_num', 'equalto', s_idx)|first %}
+                            {% set bg_class = 'bg-blue-50' if round_num == 2 else 'bg-blue-100/50' %}
+                            <!-- Time for Round {{ round_num }} -->
+                            <td class="px-1 py-2 text-center {{ bg_class }} col-r{{ round_num }} border-l border-gray-200">
+                                {% if t_score and t_score.score is not none %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ t_idx }}, {{ t_score.score }}, '{{ t_score.video_id|default("") }}', 'ws_performance', '{{ t_score.id }}', 0)"
+                                    class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400" title="Time: {{ t_score.score|round(2) }}s{% if t_score.weighted_score %} | Points: {{ t_score.weighted_score|round(1) }}{% endif %}">
+                                    <span class="font-medium">{{ t_score.score|round(1) }}</span>
+                                </button>
+                                {% else %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ t_idx }}, null, '', 'ws_performance', null, 0)"
+                                    class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400">-</button>
+                                {% endif %}
+                            </td>
+                            <!-- Distance for Round {{ round_num }} -->
+                            <td class="px-1 py-2 text-center {{ bg_class }} col-r{{ round_num }}">
+                                {% if d_score and d_score.score is not none %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ d_idx }}, {{ d_score.score }}, '{{ d_score.video_id|default("") }}', 'ws_performance', '{{ d_score.id }}', 0)"
+                                    class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400" title="Distance: {{ d_score.score|round(0)|int }}m{% if d_score.weighted_score %} | Points: {{ d_score.weighted_score|round(1) }}{% endif %}">
+                                    <span class="font-medium">{{ d_score.score|round(0)|int }}</span>
+                                </button>
+                                {% else %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ d_idx }}, null, '', 'ws_performance', null, 0)"
+                                    class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400">-</button>
+                                {% endif %}
+                            </td>
+                            <!-- Speed for Round {{ round_num }} -->
+                            <td class="px-1 py-2 text-center {{ bg_class }} col-r{{ round_num }} border-r border-gray-200">
+                                {% if s_score and s_score.score is not none %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ s_idx }}, {{ s_score.score }}, '{{ s_score.video_id|default("") }}', 'ws_performance', '{{ s_score.id }}', 0)"
+                                    class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400" title="Speed: {{ s_score.score|round(1) }}km/h{% if s_score.weighted_score %} | Points: {{ s_score.weighted_score|round(1) }}{% endif %}">
+                                    <span class="font-medium">{{ s_score.score|round(1) }}</span>
+                                </button>
+                                {% else %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ s_idx }}, null, '', 'ws_performance', null, 0)"
+                                    class="w-14 h-8 rounded text-xs bg-gray-300 hover:bg-gray-400">-</button>
+                                {% endif %}
+                            </td>
+                            {% endfor %}
+                            {% else %}
                             {% for i in range(1, single_event_rounds + 1) %}
                             {% set round_score = team.scores|selectattr('round_num', 'equalto', i)|first %}
                             <td class="px-2 py-3 text-center {% if competition.event_type == 'cp_dsz' %}{% if i <= 3 %}col-za{% elif i <= 6 %}col-d{% else %}col-s{% endif %}{% endif %}">
@@ -449,12 +616,13 @@
                                 </button>
                                 {% elif round_score and (round_score.video_id or round_score.score is not none) %}
                                 {% set is_cp_penalty = competition.event_type == 'cp_dsz' and round_score.score_data in ['WL', 'DR', 'MR', 'DQ', 'OF', 'OC', 'CD', 'ME'] %}
+                                {% set is_ws_event = competition.event_type == 'ws_performance' %}
                                 <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, {{ round_score.score if round_score.score is not none else 'null' }}, '{{ round_score.video_id }}', '{{ team.category|default("", true) }}', '{{ round_score.id }}', {{ round_score.training_flag|default(0) }})"
-                                    class="inline-flex items-center justify-center gap-1 {% if competition.event_type == 'cp_dsz' %}w-24 h-10{% else %}w-10 h-8{% endif %} rounded text-xs relative {% if is_cp_penalty %}bg-red-700 hover:bg-red-600{% elif round_score.exit_time_penalty %}ring-2 ring-red-500 {% elif round_score.training_flag %}ring-2 ring-purple-500 {% endif %}{% if round_score.score is not none and not is_cp_penalty %}bg-gray-300 hover:bg-gray-400{% elif not is_cp_penalty %}bg-yellow-600 hover:bg-gray-300{% endif %}"
-                                    title="{% if is_cp_penalty %}{{ round_score.score_data }} - Penalty{% elif competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}Raw: {{ round_score.score }} | Weighted: {{ round_score.weighted_score|round(2) }}{% elif round_score.exit_time_penalty %}⏱️ -20% Penalty | {% endif %}{% if round_score.training_flag %}🎓 Training | {% endif %}{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.score_data %} ({{ round_score.score_data }}){% endif %}{% if round_score.scored_by %} by {{ round_score.scored_by }}{% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
+                                    class="inline-flex items-center justify-center gap-1 {% if competition.event_type in ['cp_dsz', 'ws_performance'] %}w-24 h-10{% else %}w-10 h-8{% endif %} rounded text-xs relative {% if is_cp_penalty %}bg-red-700 hover:bg-red-600{% elif round_score.exit_time_penalty %}ring-2 ring-red-500 {% elif round_score.training_flag %}ring-2 ring-purple-500 {% endif %}{% if round_score.score is not none and not is_cp_penalty %}bg-gray-300 hover:bg-gray-400{% elif not is_cp_penalty %}bg-yellow-600 hover:bg-gray-300{% endif %}"
+                                    title="{% if is_cp_penalty %}{{ round_score.score_data }} - Penalty{% elif competition.event_type in ['cp_dsz', 'ws_performance'] and round_score.weighted_score is defined and round_score.weighted_score is not none %}Raw: {{ round_score.score }} | Weighted: {{ round_score.weighted_score|round(2) }}{% elif round_score.exit_time_penalty %}⏱️ -20% Penalty | {% endif %}{% if round_score.training_flag %}🎓 Training | {% endif %}{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.score_data %} ({{ round_score.score_data }}){% endif %}{% if round_score.scored_by %} by {{ round_score.scored_by }}{% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
                                     {% if round_score.exit_time_penalty %}<span class="absolute -top-1 -left-1 text-xs">⏱️</span>{% endif %}
                                     {% if round_score.training_flag %}<span class="absolute -top-1 -right-1 text-xs">🎓</span>{% endif %}
-                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if competition.event_type == 'cp_dsz' and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-gray-700 text-sm font-medium">{% if i <= 3 %}{{ round_score.score|int }}{% else %}{{ round_score.score|round(2) }}{% endif %}</span><span class="text-gray-900 text-sm font-bold ml-1">{{ round_score.weighted_score|round(1) }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
+                                    {% if is_cp_penalty %}{{ round_score.score_data }}{% elif round_score.score is not none %}{% if competition.event_type in ['cp_dsz', 'ws_performance'] and round_score.weighted_score is defined and round_score.weighted_score is not none %}<span class="text-gray-700 text-sm font-medium">{% if is_ws_event %}{% if i <= 3 %}{{ round_score.score|round(1) }}s{% elif i <= 6 %}{{ round_score.score|round(0)|int }}m{% else %}{{ round_score.score|round(1) }}{% endif %}{% elif i <= 3 %}{{ round_score.score|int }}{% else %}{{ round_score.score|round(2) }}{% endif %}</span><span class="text-gray-900 text-sm font-bold ml-1">{{ round_score.weighted_score|round(1) }}</span>{% else %}{{ round_score.score|int }}{% endif %}{% else %}📹{% endif %}
                                 </button>
                                 {% else %}
                                 <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, null, '', '{{ team.category|default("", true) }}', null, 0)"
@@ -504,7 +672,8 @@
                             </td>
                             {% endif %}
                             {% endfor %}
-                            <td class="px-4 py-3 text-right font-bold text-black">{% if competition.event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
+                            {% endif %}
+                            <td class="px-4 py-3 text-right font-bold text-black">{% if competition.event_type in ['cp_dsz', 'ws_performance'] %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
                             {% if competition.event_type.startswith('sp') %}
                             <td class="px-4 py-3 text-right text-blue-400">
                                 {% set completed_scores = team.scores|selectattr('score', 'ne', none)|list %}
@@ -913,7 +1082,9 @@
                     <div>
                         <label class="block text-gray-600 text-sm mb-1">Class</label>
                         <select id="editTeamClass" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300">
+                            {% if not competition.event_type.startswith('cp') %}
                             <option value="beginner">Beginner</option>
+                            {% endif %}
                             <option value="intermediate">Intermediate</option>
                             <option value="advanced">Advanced</option>
                             <option value="open">Open</option>
@@ -1059,30 +1230,30 @@
             <p class="text-gray-600 text-sm mb-4">Set the starting number for each class. Entries will be numbered sequentially within each class.</p>
             <form onsubmit="renumberAll(event)">
                 <div class="space-y-3">
-                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
-                        <label class="text-white font-medium">Open</label>
+                    <div class="flex items-center justify-between bg-gray-100 px-4 py-3 rounded">
+                        <label class="text-black font-medium">Open</label>
                         <input type="number" id="renumberOpen" value="1" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-white border border-gray-300 text-black text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
-                        <label class="text-white font-medium">Advanced</label>
+                    <div class="flex items-center justify-between bg-gray-100 px-4 py-3 rounded">
+                        <label class="text-black font-medium">Advanced</label>
                         <input type="number" id="renumberAdvanced" value="101" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-white border border-gray-300 text-black text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
-                        <label class="text-white font-medium">Intermediate</label>
+                    <div class="flex items-center justify-between bg-gray-100 px-4 py-3 rounded">
+                        <label class="text-black font-medium">Intermediate</label>
                         <input type="number" id="renumberIntermediate" value="201" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-white border border-gray-300 text-black text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
-                    <div class="flex items-center justify-between bg-gray-200 px-4 py-3 rounded">
-                        <label class="text-white font-medium">Beginner</label>
+                    <div class="flex items-center justify-between bg-gray-100 px-4 py-3 rounded">
+                        <label class="text-black font-medium">Beginner</label>
                         <input type="number" id="renumberBeginner" value="301" min="1"
-                            class="w-24 px-3 py-2 rounded bg-gray-300 text-white text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            class="w-24 px-3 py-2 rounded bg-white border border-gray-300 text-black text-center focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 </div>
                 <div class="flex justify-end gap-3 mt-6">
-                    <button type="button" onclick="hideRenumberModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
-                    <button type="submit" class="px-4 py-2 rounded bg-yellow-600 hover:bg-gray-300">Renumber</button>
+                    <button type="button" onclick="hideRenumberModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400 text-black">Cancel</button>
+                    <button type="submit" class="px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-700 text-white">Renumber</button>
                 </div>
             </form>
         </div>
@@ -1598,6 +1769,123 @@
                             <p class="text-gray-600 text-sm mt-1" id="flysightStatus">Processing...</p>
                         </div>
                     </div>
+
+                    <!-- WS Performance FlySight CSV Upload Section -->
+                    <div id="wsFlysightUploadSection" class="hidden border-t border-gray-200 pt-4">
+                        <!-- Task Selection -->
+                        <div class="mb-4">
+                            <label class="block text-gray-600 text-sm mb-2">Select Task:</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button type="button" onclick="selectWsTask('time')" id="wsTaskTimeBtn"
+                                    class="ws-task-btn px-4 py-3 rounded border-2 text-center transition-all bg-blue-100 border-blue-500 text-blue-700">
+                                    <span class="block text-lg">⏱️</span>
+                                    <span class="text-sm font-medium">Time</span>
+                                </button>
+                                <button type="button" onclick="selectWsTask('distance')" id="wsTaskDistanceBtn"
+                                    class="ws-task-btn px-4 py-3 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
+                                    <span class="block text-lg">📏</span>
+                                    <span class="text-sm font-medium">Distance</span>
+                                </button>
+                                <button type="button" onclick="selectWsTask('speed')" id="wsTaskSpeedBtn"
+                                    class="ws-task-btn px-4 py-3 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
+                                    <span class="block text-lg">💨</span>
+                                    <span class="text-sm font-medium">Speed</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Round Selection -->
+                        <div class="mb-4">
+                            <label class="block text-gray-600 text-sm mb-2">Round:</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button type="button" onclick="selectWsRound(1)" id="wsRound1Btn"
+                                    class="ws-round-btn px-4 py-2 rounded border-2 text-center transition-all bg-green-100 border-green-500 text-green-700">
+                                    Round 1
+                                </button>
+                                <button type="button" onclick="selectWsRound(2)" id="wsRound2Btn"
+                                    class="ws-round-btn px-4 py-2 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
+                                    Round 2
+                                </button>
+                                <button type="button" onclick="selectWsRound(3)" id="wsRound3Btn"
+                                    class="ws-round-btn px-4 py-2 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
+                                    Round 3
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- FlySight Upload -->
+                        <div class="mb-4">
+                            <label class="block text-gray-600 text-sm mb-2">Upload FlySight CSV:</label>
+                            <p class="text-gray-500 text-xs mb-2">Competition window: 3000m to 2000m altitude</p>
+                            <input type="file" id="wsFlysightFile" accept=".csv" class="hidden" onchange="handleWsFlysightSelect(event)">
+                            <button type="button" onclick="document.getElementById('wsFlysightFile').click()"
+                                class="w-full px-4 py-3 rounded bg-blue-100 hover:bg-blue-200 text-sm border-2 border-dashed border-blue-400">
+                                <span class="block text-lg mb-1">📊</span>
+                                Select FlySight CSV
+                            </button>
+                        </div>
+
+                        <!-- Selected CSV Display -->
+                        <div id="selectedWsFlysightInfo" class="hidden mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+                            <div class="flex items-center justify-between mb-2">
+                                <span id="selectedWsFlysightName" class="text-sm font-medium text-blue-700"></span>
+                                <button type="button" onclick="clearWsFlysightFile()" class="text-red-400 text-sm hover:underline">Remove</button>
+                            </div>
+                            <div id="wsFlysightResult" class="hidden mt-2">
+                                <!-- All Values Display -->
+                                <div class="grid grid-cols-3 gap-2 text-center mb-3">
+                                    <div id="wsTimeCard" class="bg-white rounded p-2 border-2 border-blue-500">
+                                        <div class="text-xs text-gray-500">Time</div>
+                                        <span class="text-xl font-mono text-blue-600" id="wsFlysightTime">--</span>
+                                        <span class="text-gray-500 text-xs">s</span>
+                                    </div>
+                                    <div id="wsDistanceCard" class="bg-white rounded p-2 border">
+                                        <div class="text-xs text-gray-500">Distance</div>
+                                        <span class="text-xl font-mono text-green-600" id="wsFlysightDistance">--</span>
+                                        <span class="text-gray-500 text-xs">m</span>
+                                    </div>
+                                    <div id="wsSpeedCard" class="bg-white rounded p-2 border">
+                                        <div class="text-xs text-gray-500">Speed</div>
+                                        <span class="text-xl font-mono text-orange-600" id="wsFlysightSpeed">--</span>
+                                        <span class="text-gray-500 text-xs">km/h</span>
+                                    </div>
+                                </div>
+
+                                <!-- Selected Value Highlight -->
+                                <div class="bg-green-100 rounded p-3 border border-green-300 text-center">
+                                    <p class="text-gray-600 text-sm">Saving <span id="wsSelectedTaskLabel" class="font-bold">Time</span> for <span id="wsSelectedRoundLabel" class="font-bold">Round 1</span>:</p>
+                                    <p class="text-3xl font-mono font-bold text-green-700 mt-1" id="wsSelectedValue">--</p>
+                                </div>
+
+                                <!-- Save Button -->
+                                <button type="button" onclick="saveWsFlysightScore()"
+                                    class="w-full mt-3 px-4 py-3 rounded bg-green-600 hover:bg-green-700 text-white font-medium">
+                                    Save Score
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Upload Progress -->
+                        <div id="wsFlysightProgress" class="hidden mt-3">
+                            <div class="bg-gray-200 rounded-full h-2">
+                                <div id="wsFlysightBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                            </div>
+                            <p class="text-gray-600 text-sm mt-1" id="wsFlysightStatus">Processing...</p>
+                        </div>
+
+                        <!-- Ground Reference Points Info -->
+                        <div class="mt-4 pt-4 border-t border-gray-200">
+                            <div class="flex items-center justify-between">
+                                <span class="text-gray-600 text-sm">Ground Reference Points:</span>
+                                <button type="button" onclick="openWsReferencePointsModal()" class="text-blue-600 hover:text-blue-700 text-sm">
+                                    Configure
+                                </button>
+                            </div>
+                            <div id="wsRefPointsStatus" class="text-xs text-gray-500 mt-1">
+                                Not configured - using default competition window
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="flex justify-between items-center mt-6 pt-4 border-t border-gray-200">
@@ -1618,6 +1906,9 @@
                         <span id="modalStatusText" class="text-sm text-gray-500"></span>
                     </div>
                     <div class="flex gap-3">
+                        {% if is_admin %}
+                        <button type="button" onclick="deleteScore()" id="deleteScoreBtn" class="hidden px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Delete Score</button>
+                        {% endif %}
                         <button type="button" onclick="hideRoundModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                         <button type="button" onclick="uploadVideoOnly()" id="uploadOnlyBtn" class="hidden px-4 py-2 rounded bg-blue-600 hover:bg-gray-300">Upload Video Only</button>
                         {% if is_admin %}
@@ -1665,52 +1956,203 @@
         </div>
     </div>
 
+    <!-- WS Performance Ground Reference Points Modal -->
+    <div id="wsRefPointsModal" class="hidden fixed inset-0 bg-black/50 items-center justify-center z-50 overflow-y-auto py-2">
+        <div class="bg-white rounded-lg p-6 w-full max-w-6xl mx-4 my-auto">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-xl font-bold">WS Performance - Ground Reference Points</h2>
+                <button onclick="closeWsRefPointsModal()" class="text-gray-600 hover:text-gray-900 text-2xl">&times;</button>
+            </div>
+
+            <p class="text-gray-600 text-sm mb-3">
+                Click on the map to place 4 ground reference points. Drag markers to adjust position.
+            </p>
+
+            <!-- Location Search -->
+            <div class="flex gap-4 mb-3">
+                <div class="flex-1">
+                    <div class="flex gap-2">
+                        <input type="text" id="wsRefSearchInput" placeholder="Search city, state (e.g., Phoenix, AZ)"
+                            class="flex-1 px-3 py-2 border rounded text-sm" onkeypress="if(event.key === 'Enter') searchWsRefLocation()">
+                        <button onclick="searchWsRefLocation()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm whitespace-nowrap">
+                            Search
+                        </button>
+                    </div>
+                    <p id="wsRefSearchStatus" class="text-gray-500 text-xs mt-1"></p>
+                </div>
+                <!-- Manual coordinate entry - inline -->
+                <div class="flex gap-2 items-start">
+                    <input type="text" id="wsRefLatInput" placeholder="Latitude"
+                        class="w-28 px-2 py-2 border rounded text-sm">
+                    <input type="text" id="wsRefLngInput" placeholder="Longitude"
+                        class="w-28 px-2 py-2 border rounded text-sm">
+                    <button onclick="addWsRefPointManual()"
+                        class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm whitespace-nowrap">
+                        Add Point
+                    </button>
+                </div>
+            </div>
+
+            <!-- Map and Reference Points side by side -->
+            <div class="flex gap-4">
+                <!-- Map -->
+                <div class="flex-1">
+                    <div id="wsRefMap" style="height: 450px; border-radius: 8px; border: 2px solid #e5e7eb;"></div>
+                </div>
+
+                <!-- Reference Points Panel -->
+                <div class="w-72 flex flex-col">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="font-medium text-gray-700">Reference Points</h3>
+                        <span id="wsRefPointsConfigStatus" class="text-sm font-medium text-yellow-600">0/4</span>
+                    </div>
+
+                    <!-- 4 Reference Point Cards -->
+                    <div class="grid grid-cols-1 gap-2 flex-1">
+                        <div id="wsRefPoint1Card" class="bg-gray-100 rounded p-3 border-2 border-dashed border-gray-300">
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-gray-700">Point 1</span>
+                                <button onclick="removeWsRefMarker(0)" class="text-red-500 hover:text-red-700 text-xs hidden" id="wsRefPoint1Remove">Remove</button>
+                            </div>
+                            <div id="wsRefPoint1Coords" class="text-sm text-gray-500 mt-1">Click map to set</div>
+                        </div>
+                        <div id="wsRefPoint2Card" class="bg-gray-100 rounded p-3 border-2 border-dashed border-gray-300">
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-gray-700">Point 2</span>
+                                <button onclick="removeWsRefMarker(1)" class="text-red-500 hover:text-red-700 text-xs hidden" id="wsRefPoint2Remove">Remove</button>
+                            </div>
+                            <div id="wsRefPoint2Coords" class="text-sm text-gray-500 mt-1">Click map to set</div>
+                        </div>
+                        <div id="wsRefPoint3Card" class="bg-gray-100 rounded p-3 border-2 border-dashed border-gray-300">
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-gray-700">Point 3</span>
+                                <button onclick="removeWsRefMarker(2)" class="text-red-500 hover:text-red-700 text-xs hidden" id="wsRefPoint3Remove">Remove</button>
+                            </div>
+                            <div id="wsRefPoint3Coords" class="text-sm text-gray-500 mt-1">Click map to set</div>
+                        </div>
+                        <div id="wsRefPoint4Card" class="bg-gray-100 rounded p-3 border-2 border-dashed border-gray-300">
+                            <div class="flex items-center justify-between">
+                                <span class="font-medium text-gray-700">Point 4</span>
+                                <button onclick="removeWsRefMarker(3)" class="text-red-500 hover:text-red-700 text-xs hidden" id="wsRefPoint4Remove">Remove</button>
+                            </div>
+                            <div id="wsRefPoint4Coords" class="text-sm text-gray-500 mt-1">Click map to set</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 mt-4 pt-4 border-t border-gray-200">
+                <button onclick="closeWsRefPointsModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">
+                    Cancel
+                </button>
+                <button onclick="saveWsReferencePoints()" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white">
+                    Save Reference Points
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet CSS and JS for WS Reference Points Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
     <script>
         const compId = '{{ competition.id }}';
         const isMultiEvent = {{ 'true' if is_multi_event else 'false' }};
         const eventTypes = {{ event_types|tojson|safe }};
+        const EVENT_DISPLAY_NAMES = {{ EVENT_DISPLAY_NAMES|tojson|safe }};
         let selectedVideoFile = null;
         let currentClass = 'all';
-        let currentEvent = 'all';
+        let currentEvent = eventTypes.length > 0 ? eventTypes[0] : '';
+
+        // Helper function to preserve current event/class when reloading
+        function preserveEventAndReload() {
+            // Store current state in sessionStorage
+            sessionStorage.setItem('competition_currentEvent', currentEvent);
+            sessionStorage.setItem('competition_currentClass', currentClass);
+            const classSelector = document.getElementById('multiEventClassSelector');
+            if (classSelector) {
+                sessionStorage.setItem('competition_multiEventClass', classSelector.value);
+            }
+            location.reload();
+        }
+
+        // Restore event/class state on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedEvent = sessionStorage.getItem('competition_currentEvent');
+            const savedClass = sessionStorage.getItem('competition_currentClass');
+            const savedMultiClass = sessionStorage.getItem('competition_multiEventClass');
+
+            // Clear stored values after use
+            sessionStorage.removeItem('competition_currentEvent');
+            sessionStorage.removeItem('competition_currentClass');
+            sessionStorage.removeItem('competition_multiEventClass');
+
+            // Restore state if saved
+            if (savedEvent && eventTypes.includes(savedEvent)) {
+                setTimeout(() => {
+                    showEvent(savedEvent);
+                    if (savedMultiClass) {
+                        filterMultiEventClass(savedMultiClass);
+                    } else if (savedClass) {
+                        showClass(savedClass);
+                    }
+                }, 100);
+            }
+        });
 
         function showEvent(eventType) {
             currentEvent = eventType;
-            // Update event tabs
-            document.querySelectorAll('[id^="event-tab-"]').forEach(tab => {
-                tab.classList.remove('bg-blue-600', 'text-white');
-                tab.classList.add('bg-gray-200');
-            });
-            document.getElementById('event-tab-' + eventType).classList.remove('bg-gray-200');
-            document.getElementById('event-tab-' + eventType).classList.add('bg-blue-600', 'text-white');
+            // Update dropdown selection
+            const eventSelector = document.getElementById('eventSelector');
+            if (eventSelector) {
+                eventSelector.value = eventType;
+            }
 
             // Show/hide event sections
             document.querySelectorAll('.event-section').forEach(section => {
-                if (eventType === 'all') {
+                if (section.dataset.event === eventType) {
                     section.classList.remove('hidden');
                 } else {
-                    if (section.dataset.event === eventType) {
+                    section.classList.add('hidden');
+                }
+            });
+
+            // Reapply class filter for multi-event
+            if (isMultiEvent) {
+                const classSelector = document.getElementById('multiEventClassSelector');
+                if (classSelector) {
+                    filterMultiEventClass(classSelector.value || 'open');
+                }
+            } else {
+                showClass(currentClass);
+            }
+        }
+
+        function filterMultiEventClass(className) {
+            // Update dropdown
+            const selector = document.getElementById('multiEventClassSelector');
+            if (selector) {
+                selector.value = className;
+            }
+
+            // Show/hide class sections within visible events
+            document.querySelectorAll('.event-section').forEach(eventSection => {
+                if (eventSection.classList.contains('hidden')) return;
+
+                eventSection.querySelectorAll('.class-section').forEach(section => {
+                    const sectionClass = section.dataset.class;
+                    if (sectionClass === className) {
                         section.classList.remove('hidden');
                     } else {
                         section.classList.add('hidden');
                     }
-                }
+                });
             });
-
-            // Reapply class filter
-            showClass(currentClass);
         }
 
         function showClass(className) {
             currentClass = className;
-            // Update tabs
-            document.querySelectorAll('[id^="tab-"]').forEach(tab => {
-                if (!tab.id.startsWith('event-tab-')) {
-                    tab.classList.remove('bg-blue-600', 'text-white');
-                    tab.classList.add('bg-gray-200');
-                }
-            });
-            document.getElementById('tab-' + className).classList.remove('bg-gray-200');
-            document.getElementById('tab-' + className).classList.add('bg-blue-600', 'text-white');
 
             // Show/hide class sections
             document.querySelectorAll('.class-section').forEach(section => {
@@ -1790,19 +2232,31 @@
         let bulkEditTeams = [];
 
         function showBulkEditModal() {
-            // Fetch all competitors and populate table
+            // Fetch competitors and filter by current event
             fetch('/admin/competition/{{ competition.id }}/teams')
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        // Filter by current event (for multi-event competitions)
+                        let filteredTeams = data.teams;
+                        if (currentEvent && currentEvent !== 'all') {
+                            filteredTeams = data.teams.filter(team => team.event === currentEvent);
+                        }
                         // Sort by display_order, then by team_number
-                        bulkEditTeams = data.teams.sort((a, b) => {
+                        bulkEditTeams = filteredTeams.sort((a, b) => {
                             const orderA = a.display_order || 0;
                             const orderB = b.display_order || 0;
                             if (orderA !== orderB) return orderA - orderB;
                             return (a.team_number || '').localeCompare(b.team_number || '');
                         });
                         renderBulkEditTable();
+
+                        // Update modal title to show current event
+                        const modalTitle = document.querySelector('#bulkEditModal h2');
+                        if (modalTitle && currentEvent) {
+                            const eventName = EVENT_DISPLAY_NAMES[currentEvent] || currentEvent;
+                            modalTitle.textContent = `Bulk Edit - ${eventName}`;
+                        }
                     }
                 })
                 .catch(err => console.error('Error loading teams:', err));
@@ -1820,9 +2274,14 @@
                 row.dataset.teamId = team.id;
                 row.innerHTML = `
                     <td class="px-2 py-2 text-center">
-                        <div class="flex justify-center gap-1">
-                            <button onclick="moveTeamUp(${index})" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 ${index === 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${index === 0 ? 'disabled' : ''}>▲</button>
-                            <button onclick="moveTeamDown(${index})" class="px-2 py-1 rounded bg-gray-200 hover:bg-gray-300 ${index === bulkEditTeams.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}" ${index === bulkEditTeams.length - 1 ? 'disabled' : ''}>▼</button>
+                        <div class="flex justify-center items-center gap-1">
+                            <input type="number" min="1" value="${index + 1}"
+                                onchange="moveTeamToPosition(${index}, this.value)"
+                                class="w-12 px-1 py-1 text-center border border-gray-300 rounded text-sm">
+                            <div class="flex flex-col">
+                                <button onclick="moveTeamUp(${index})" class="px-1 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-xs ${index === 0 ? 'opacity-50 cursor-not-allowed' : ''}" ${index === 0 ? 'disabled' : ''}>▲</button>
+                                <button onclick="moveTeamDown(${index})" class="px-1 py-0.5 rounded bg-gray-200 hover:bg-gray-300 text-xs ${index === bulkEditTeams.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}" ${index === bulkEditTeams.length - 1 ? 'disabled' : ''}>▼</button>
+                            </div>
                         </div>
                     </td>
                     <td class="px-3 py-2">${team.team_number || ''}</td>
@@ -1830,14 +2289,26 @@
                     <td class="px-3 py-2">${team.members || ''}</td>
                     <td class="px-3 py-2">${team.class || ''}</td>
                     <td class="px-3 py-2 text-center">
-                        ${!hasScores ? `
-                            <button onclick="openEditTeamModal('${team.id}', '${team.team_number || ''}', '${team.team_name || ''}', '${team.class || ''}', '${(team.members || '').replace(/'/g, "\\'")}', '${team.category || ''}', '${team.event || ''}', '${team.photo || ''}')" class="text-blue-600 hover:text-blue-800 text-sm mr-2">Edit</button>
-                            <button onclick="deleteTeam('${team.id}')" class="text-red-600 hover:text-red-800 text-sm">Delete</button>
-                        ` : '<span class="text-gray-400 text-xs">Has scores</span>'}
+                        <button onclick="openEditTeamModal('${team.id}', '${team.team_number || ''}', '${team.team_name || ''}', '${team.class || ''}', '${(team.members || '').replace(/'/g, "\\'")}', '${team.category || ''}', '${team.event || ''}', '${team.photo || ''}')" class="text-blue-600 hover:text-blue-800 text-sm mr-2">Edit</button>
+                        ${!hasScores ? `<button onclick="deleteTeam('${team.id}')" class="text-red-600 hover:text-red-800 text-sm">Delete</button>` : ''}
                     </td>
                 `;
                 tbody.appendChild(row);
             });
+        }
+
+        function moveTeamToPosition(currentIndex, newPosition) {
+            const targetIndex = parseInt(newPosition) - 1;
+            if (isNaN(targetIndex) || targetIndex < 0 || targetIndex >= bulkEditTeams.length || targetIndex === currentIndex) {
+                renderBulkEditTable(); // Re-render to reset invalid input
+                return;
+            }
+
+            // Remove team from current position
+            const [team] = bulkEditTeams.splice(currentIndex, 1);
+            // Insert at new position
+            bulkEditTeams.splice(targetIndex, 0, team);
+            renderBulkEditTable();
         }
 
         function moveTeamUp(index) {
@@ -2005,19 +2476,15 @@
         }
 
         function filterDiscipline(discipline) {
-            // Update tab styles
-            document.querySelectorAll('.discipline-tab').forEach(tab => {
-                tab.classList.remove('bg-blue-600', 'text-white');
-                tab.classList.add('bg-gray-200', 'text-gray-700');
-            });
-            const activeTab = document.getElementById('tab-' + discipline);
-            if (activeTab) {
-                activeTab.classList.remove('bg-gray-200', 'text-gray-700');
-                activeTab.classList.add('bg-blue-600', 'text-white');
+            // Update dropdown selection
+            const selector = document.getElementById('disciplineSelector');
+            if (selector) {
+                selector.value = discipline;
             }
 
             // Show/hide columns based on discipline
-            const allCols = ['col-za', 'col-d', 'col-s'];
+            // Includes: za (Zone Accuracy), t (Time), d (Distance), s (Speed)
+            const allCols = ['col-za', 'col-t', 'col-d', 'col-s'];
 
             if (discipline === 'all') {
                 // Show all columns
@@ -2035,6 +2502,37 @@
                 });
                 // Show selected discipline
                 const showClass = 'col-' + discipline;
+                document.querySelectorAll('.' + showClass).forEach(el => {
+                    el.style.display = '';
+                });
+            }
+        }
+
+        function filterWsRound(round) {
+            // Update dropdown selection
+            const selector = document.getElementById('wsRoundSelector');
+            if (selector) {
+                selector.value = round;
+            }
+
+            // Show/hide columns based on round
+            const allRounds = ['col-r1', 'col-r2', 'col-r3'];
+
+            if (round === 'all') {
+                // Show all rounds
+                allRounds.forEach(cls => {
+                    document.querySelectorAll('.' + cls).forEach(el => {
+                        el.style.display = '';
+                    });
+                });
+            } else {
+                // Hide all, then show selected round
+                allRounds.forEach(cls => {
+                    document.querySelectorAll('.' + cls).forEach(el => {
+                        el.style.display = 'none';
+                    });
+                });
+                const showClass = 'col-' + round;
                 document.querySelectorAll('.' + showClass).forEach(el => {
                     el.style.display = '';
                 });
@@ -2302,7 +2800,7 @@
             document.getElementById('editTeamId').value = teamId;
             document.getElementById('editTeamNumber').value = teamNumber;
             document.getElementById('editTeamName').value = teamName;
-            document.getElementById('editTeamClass').value = teamClass;
+            document.getElementById('editTeamClass').value = (teamClass || '').toLowerCase();
             document.getElementById('editTeamMembers').value = members;
 
             // Handle event field based on multi-event vs single-event
@@ -2361,7 +2859,7 @@
             const data = {
                 team_number: document.getElementById('editTeamNumber').value,
                 team_name: document.getElementById('editTeamName').value,
-                class: document.getElementById('editTeamClass').value,
+                class: document.getElementById('editTeamClass').value.toLowerCase(),
                 members: document.getElementById('editTeamMembers').value
             };
 
@@ -2659,6 +3157,12 @@
                 }
             }
 
+            // Show/hide delete button based on whether score exists
+            const deleteScoreBtn = document.getElementById('deleteScoreBtn');
+            if (deleteScoreBtn) {
+                deleteScoreBtn.style.display = (scoreId && score !== null && score !== undefined) ? 'block' : 'none';
+            }
+
             // Show CF working time penalty checkbox for CF events
             const cfPenaltyLabel = document.getElementById('cfPenaltyLabel');
             const cfPenaltyCheckbox = document.getElementById('cfPenaltyCheckbox');
@@ -2701,14 +3205,23 @@
             const uploadOnlyBtn = document.getElementById('uploadOnlyBtn');
             const scoreInput = document.getElementById('roundScore');
 
-            // Determine event type
-            const isSpeedSkydiving = category === 'sp' || category.startsWith('sp_') ||
-                                     competitionEventType === 'sp' || competitionEventType.startsWith('sp_');
-            const isCp = isCpCompetition || category === 'cp' || category.startsWith('cp_');
-            const isCf = category === 'cf' || category.startsWith('cf_') ||
-                         competitionEventType === 'cf' || competitionEventType.startsWith('cf_');
+            // Determine event type - prioritize the category passed from the button click
+            // The category parameter always takes precedence over competition-level event type
+            const isWsPerformance = category === 'ws_performance';
+            const isSpeedSkydiving = category === 'sp' || category.startsWith('sp_');
+            const isCp = category === 'cp' || category.startsWith('cp_');
+            const isCf = category === 'cf' || category.startsWith('cf_');
 
-            if (isCp && standardScoreSection && cpScoreSection) {
+            // Fallback to competition type only if category is empty
+            const fallbackIsSpeedSkydiving = !category && (competitionEventType === 'sp' || competitionEventType.startsWith('sp_'));
+            const fallbackIsCp = !category && isCpCompetition;
+            const fallbackIsCf = !category && (competitionEventType === 'cf' || competitionEventType.startsWith('cf_'));
+            const fallbackIsWsPerformance = !category && competitionEventType === 'ws_performance';
+
+            // Get WS FlySight section
+            const wsFlysightUploadSection = document.getElementById('wsFlysightUploadSection');
+
+            if ((isCp || fallbackIsCp) && standardScoreSection && cpScoreSection) {
                 // Canopy Piloting - show CP-specific scoring (no video upload)
                 standardScoreSection.classList.add('hidden');
                 cpScoreSection.classList.remove('hidden');
@@ -2716,6 +3229,7 @@
                 videoUploadSection.classList.add('hidden');
                 flysightUploadSection.classList.add('hidden');
                 if (videoPlayerSection) videoPlayerSection.classList.add('hidden');
+                if (wsFlysightUploadSection) wsFlysightUploadSection.classList.add('hidden');
 
                 // Reset CP scoring fields (all gates checked by default)
                 resetCpScoring();
@@ -2741,37 +3255,69 @@
                 }
 
                 document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
-            } else if (isCf && standardScoreSection && cfScoreSection) {
+            } else if ((isCf || fallbackIsCf) && standardScoreSection && cfScoreSection) {
                 // Canopy Formation - show CF-specific scoring
                 standardScoreSection.classList.add('hidden');
                 if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 cfScoreSection.classList.remove('hidden');
                 videoUploadSection.classList.remove('hidden');
                 flysightUploadSection.classList.add('hidden');
+                if (wsFlysightUploadSection) wsFlysightUploadSection.classList.add('hidden');
 
                 // Reset CF scoring fields
                 resetCfScoring();
 
                 document.getElementById('modalStatusText').textContent = 'Enter formations completed and omissions';
                 document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
-            } else if (isSpeedSkydiving) {
-                // Speed Skydiving - show FlySight CSV upload
-                if (standardScoreSection) standardScoreSection.classList.remove('hidden');
+            } else if (isSpeedSkydiving || fallbackIsSpeedSkydiving) {
+                // Speed Skydiving - FlySight CSV upload only (no manual entry)
+                if (standardScoreSection) standardScoreSection.classList.add('hidden');
                 if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 if (cfScoreSection) cfScoreSection.classList.add('hidden');
                 videoUploadSection.classList.add('hidden');
                 flysightUploadSection.classList.remove('hidden');
                 videoPlayerSection.classList.add('hidden');
-                if (scoreInput) {
-                    scoreInput.step = '0.01';
-                    scoreInput.placeholder = 'km/h';
-                    scoreInput.parentElement.querySelector('.text-gray-500 div').textContent = 'Speed (km/h)';
-                    scoreInput.parentElement.querySelector('.text-gray-500 .text-xs').textContent = 'from FlySight data';
-                }
                 document.getElementById('modalStatusText').textContent = 'Upload FlySight CSV to record speed';
+                document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
+                if (wsFlysightUploadSection) wsFlysightUploadSection.classList.add('hidden');
+            } else if (isWsPerformance || fallbackIsWsPerformance) {
+                // WS Performance - FlySight CSV upload only (no manual entry)
+                if (standardScoreSection) standardScoreSection.classList.add('hidden');
+                if (cpScoreSection) cpScoreSection.classList.add('hidden');
+                if (cfScoreSection) cfScoreSection.classList.add('hidden');
+                videoUploadSection.classList.add('hidden');
+                flysightUploadSection.classList.add('hidden');
+                videoPlayerSection.classList.add('hidden');
+                if (wsFlysightUploadSection) wsFlysightUploadSection.classList.remove('hidden');
+
+                // Clear previous WS FlySight state
+                clearWsFlysightFile();
+
+                // Determine task type and display round based on internal round number
+                let taskType = 'time';
+                let displayRound = roundNum;
+                if (roundNum >= 1 && roundNum <= 3) {
+                    taskType = 'time';
+                    displayRound = roundNum;
+                } else if (roundNum >= 4 && roundNum <= 6) {
+                    taskType = 'distance';
+                    displayRound = roundNum - 3;
+                } else if (roundNum >= 7 && roundNum <= 9) {
+                    taskType = 'speed';
+                    displayRound = roundNum - 6;
+                }
+
+                // Auto-select the task and round buttons
+                selectWsTask(taskType);
+                selectWsRound(displayRound);
+
+                const taskLabels = { time: 'Time', distance: 'Distance', speed: 'Speed' };
+                document.getElementById('roundModalTitle').textContent = `WS Performance - ${taskLabels[taskType]} Round ${displayRound}`;
+                document.getElementById('modalStatusText').textContent = 'Select task and round, then upload FlySight CSV';
                 document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
             } else {
                 // Other categories - show standard scoring
+                if (wsFlysightUploadSection) wsFlysightUploadSection.classList.add('hidden');
                 if (standardScoreSection) standardScoreSection.classList.remove('hidden');
                 if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 if (cfScoreSection) cfScoreSection.classList.add('hidden');
@@ -2789,7 +3335,7 @@
             const videoUploadControls = document.getElementById('videoUploadControls');
             const videoAlreadyExistsMsg = document.getElementById('videoAlreadyExistsMsg');
 
-            if (!isSpeedSkydiving) {
+            if (!isSpeedSkydiving && !fallbackIsSpeedSkydiving && !isWsPerformance && !fallbackIsWsPerformance) {
                 if (videoId) {
                     // Show video player with the uploaded video
                     videoPlayerSection.classList.remove('hidden');
@@ -2925,6 +3471,608 @@
             reader.readAsText(file);
         }
 
+        // WS Performance FlySight handling
+        let selectedWsFlysightFile = null;
+        let wsFlysightParsedData = null;
+        let selectedWsTask = 'time';  // 'time', 'distance', 'speed'
+        let selectedWsRound = 1;      // 1, 2, 3
+
+        function selectWsTask(task) {
+            selectedWsTask = task;
+
+            // Update button styles
+            document.querySelectorAll('.ws-task-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-100', 'border-blue-500', 'text-blue-700');
+                btn.classList.add('bg-gray-100', 'border-gray-300', 'text-gray-600');
+            });
+
+            const activeBtn = document.getElementById('wsTask' + task.charAt(0).toUpperCase() + task.slice(1) + 'Btn');
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-gray-100', 'border-gray-300', 'text-gray-600');
+                activeBtn.classList.add('bg-blue-100', 'border-blue-500', 'text-blue-700');
+            }
+
+            // Update card highlights
+            document.getElementById('wsTimeCard').classList.remove('border-2', 'border-blue-500');
+            document.getElementById('wsTimeCard').classList.add('border');
+            document.getElementById('wsDistanceCard').classList.remove('border-2', 'border-green-500');
+            document.getElementById('wsDistanceCard').classList.add('border');
+            document.getElementById('wsSpeedCard').classList.remove('border-2', 'border-orange-500');
+            document.getElementById('wsSpeedCard').classList.add('border');
+
+            if (task === 'time') {
+                document.getElementById('wsTimeCard').classList.remove('border');
+                document.getElementById('wsTimeCard').classList.add('border-2', 'border-blue-500');
+            } else if (task === 'distance') {
+                document.getElementById('wsDistanceCard').classList.remove('border');
+                document.getElementById('wsDistanceCard').classList.add('border-2', 'border-green-500');
+            } else if (task === 'speed') {
+                document.getElementById('wsSpeedCard').classList.remove('border');
+                document.getElementById('wsSpeedCard').classList.add('border-2', 'border-orange-500');
+            }
+
+            updateWsSelectedDisplay();
+        }
+
+        function selectWsRound(round) {
+            selectedWsRound = round;
+
+            // Update button styles
+            document.querySelectorAll('.ws-round-btn').forEach(btn => {
+                btn.classList.remove('bg-green-100', 'border-green-500', 'text-green-700');
+                btn.classList.add('bg-gray-100', 'border-gray-300', 'text-gray-600');
+            });
+
+            const activeBtn = document.getElementById('wsRound' + round + 'Btn');
+            if (activeBtn) {
+                activeBtn.classList.remove('bg-gray-100', 'border-gray-300', 'text-gray-600');
+                activeBtn.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
+            }
+
+            updateWsSelectedDisplay();
+        }
+
+        function updateWsSelectedDisplay() {
+            const taskLabels = { time: 'Time', distance: 'Distance', speed: 'Speed' };
+            const taskUnits = { time: 's', distance: 'm', speed: 'km/h' };
+
+            document.getElementById('wsSelectedTaskLabel').textContent = taskLabels[selectedWsTask];
+            document.getElementById('wsSelectedRoundLabel').textContent = 'Round ' + selectedWsRound;
+
+            if (wsFlysightParsedData) {
+                const value = wsFlysightParsedData[selectedWsTask];
+                document.getElementById('wsSelectedValue').textContent = value + ' ' + taskUnits[selectedWsTask];
+            }
+        }
+
+        function handleWsFlysightSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                selectedWsFlysightFile = file;
+                document.getElementById('selectedWsFlysightName').textContent = file.name;
+                document.getElementById('selectedWsFlysightInfo').classList.remove('hidden');
+
+                // Show progress
+                document.getElementById('wsFlysightProgress').classList.remove('hidden');
+                document.getElementById('wsFlysightStatus').textContent = 'Parsing FlySight data...';
+
+                // Parse CSV on server to get Time, Distance, Speed
+                parseWsFlysightCSV(file);
+            }
+        }
+
+        function clearWsFlysightFile() {
+            selectedWsFlysightFile = null;
+            wsFlysightParsedData = null;
+            document.getElementById('wsFlysightFile').value = '';
+            document.getElementById('selectedWsFlysightInfo').classList.add('hidden');
+            document.getElementById('wsFlysightResult').classList.add('hidden');
+            document.getElementById('wsFlysightProgress').classList.add('hidden');
+        }
+
+        async function parseWsFlysightCSV(file) {
+            // Parse locally for preview (simplified - server does full calculation)
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const text = e.target.result;
+                const lines = text.split('\n');
+
+                let headerIdx = 0;
+                for (let i = 0; i < lines.length; i++) {
+                    if (!lines[i].startsWith('$') && lines[i].trim()) {
+                        headerIdx = i;
+                        break;
+                    }
+                }
+
+                const headers = lines[headerIdx].split(',').map(h => h.trim().toLowerCase());
+                const hMSLIdx = headers.indexOf('hmsl');
+                const velNIdx = headers.indexOf('veln');
+                const velEIdx = headers.indexOf('vele');
+                const timeIdx = headers.indexOf('time');
+                const latIdx = headers.indexOf('lat');
+                const lonIdx = headers.indexOf('lon');
+
+                if (hMSLIdx === -1) {
+                    document.getElementById('wsFlysightStatus').textContent = 'Error: Could not find altitude data (hMSL column)';
+                    return;
+                }
+
+                // Find competition window (3000m to 2000m)
+                let windowPoints = [];
+                let inWindow = false;
+
+                for (let i = headerIdx + 1; i < lines.length; i++) {
+                    const cols = lines[i].split(',');
+                    if (cols.length <= hMSLIdx) continue;
+
+                    const alt = parseFloat(cols[hMSLIdx]);
+                    if (isNaN(alt)) continue;
+
+                    if (!inWindow && alt <= 3000 && alt >= 2000) {
+                        inWindow = true;
+                    }
+
+                    if (inWindow && alt >= 2000) {
+                        windowPoints.push({
+                            time: timeIdx >= 0 ? cols[timeIdx] : '',
+                            lat: latIdx >= 0 ? parseFloat(cols[latIdx]) : 0,
+                            lon: lonIdx >= 0 ? parseFloat(cols[lonIdx]) : 0,
+                            alt: alt,
+                            velN: velNIdx >= 0 ? parseFloat(cols[velNIdx]) : 0,
+                            velE: velEIdx >= 0 ? parseFloat(cols[velEIdx]) : 0
+                        });
+                    }
+
+                    if (inWindow && alt < 2000) {
+                        break;
+                    }
+                }
+
+                if (windowPoints.length < 2) {
+                    document.getElementById('wsFlysightStatus').textContent = 'Error: Could not find competition window (3000m-2000m)';
+                    return;
+                }
+
+                // Calculate metrics (simplified - server does more precise calculation)
+                const timeSeconds = windowPoints.length / 5.0; // Assume 5Hz
+
+                let totalDist = 0;
+                let totalSpeed = 0;
+                for (let i = 1; i < windowPoints.length; i++) {
+                    const p1 = windowPoints[i-1];
+                    const p2 = windowPoints[i];
+
+                    // Haversine distance
+                    const R = 6371000;
+                    const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+                    const dLon = (p2.lon - p1.lon) * Math.PI / 180;
+                    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                              Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+                              Math.sin(dLon/2) * Math.sin(dLon/2);
+                    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                    totalDist += R * c;
+
+                    const horizSpeed = Math.sqrt(p2.velN * p2.velN + p2.velE * p2.velE);
+                    totalSpeed += horizSpeed;
+                }
+
+                const avgSpeedKmh = (totalSpeed / windowPoints.length) * 3.6;
+
+                wsFlysightParsedData = {
+                    time: timeSeconds.toFixed(2),
+                    distance: totalDist.toFixed(0),
+                    speed: avgSpeedKmh.toFixed(2)
+                };
+
+                // Update display
+                document.getElementById('wsFlysightTime').textContent = wsFlysightParsedData.time;
+                document.getElementById('wsFlysightDistance').textContent = wsFlysightParsedData.distance;
+                document.getElementById('wsFlysightSpeed').textContent = wsFlysightParsedData.speed;
+                document.getElementById('wsFlysightResult').classList.remove('hidden');
+                document.getElementById('wsFlysightProgress').classList.add('hidden');
+
+                // Update selected value display
+                updateWsSelectedDisplay();
+            };
+            reader.readAsText(file);
+        }
+
+        async function uploadWsFlysight(roundBase) {
+            if (!selectedWsFlysightFile) {
+                alert('Please select a FlySight CSV file first');
+                return;
+            }
+
+            const teamId = document.getElementById('roundTeamId').value;
+            if (!teamId) {
+                alert('No team selected');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', selectedWsFlysightFile);
+            formData.append('round_base', roundBase);
+
+            document.getElementById('wsFlysightProgress').classList.remove('hidden');
+            document.getElementById('wsFlysightStatus').textContent = 'Uploading and processing...';
+
+            try {
+                const response = await fetch(`/ws-performance/bulk-upload-flysight/${teamId}`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    document.getElementById('wsFlysightStatus').textContent = result.message;
+                    alert(`Round ${roundBase} scores saved!\nTime: ${result.scores.time}s\nDistance: ${result.scores.distance}m\nSpeed: ${result.scores.speed} km/h`);
+                    hideRoundModal();
+                    preserveEventAndReload();
+                } else {
+                    document.getElementById('wsFlysightStatus').textContent = 'Error: ' + result.error;
+                    alert('Error: ' + result.error);
+                }
+            } catch (err) {
+                document.getElementById('wsFlysightStatus').textContent = 'Upload failed';
+                alert('Upload failed: ' + err.message);
+            }
+        }
+
+        async function saveWsFlysightScore() {
+            if (!wsFlysightParsedData) {
+                alert('Please upload a FlySight CSV file first');
+                return;
+            }
+
+            const teamId = document.getElementById('roundTeamId').value;
+            if (!teamId) {
+                alert('No team selected');
+                return;
+            }
+
+            // Map task and round to internal round number
+            // Time: rounds 1-3, Distance: rounds 4-6, Speed: rounds 7-9
+            let internalRound;
+            if (selectedWsTask === 'time') {
+                internalRound = selectedWsRound;
+            } else if (selectedWsTask === 'distance') {
+                internalRound = selectedWsRound + 3;
+            } else if (selectedWsTask === 'speed') {
+                internalRound = selectedWsRound + 6;
+            }
+
+            const score = parseFloat(wsFlysightParsedData[selectedWsTask]);
+            const taskLabels = { time: 'Time', distance: 'Distance', speed: 'Speed' };
+            const taskUnits = { time: 's', distance: 'm', speed: 'km/h' };
+
+            document.getElementById('wsFlysightProgress').classList.remove('hidden');
+            document.getElementById('wsFlysightStatus').textContent = 'Saving score...';
+
+            try {
+                const response = await fetch(`/ws-performance/save-score/${teamId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        round_num: internalRound,
+                        score: score,
+                        task: selectedWsTask
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    document.getElementById('wsFlysightStatus').textContent = 'Score saved!';
+                    alert(`${taskLabels[selectedWsTask]} Round ${selectedWsRound} saved: ${score} ${taskUnits[selectedWsTask]}`);
+                    hideRoundModal();
+                    preserveEventAndReload();
+                } else {
+                    document.getElementById('wsFlysightStatus').textContent = 'Error: ' + result.error;
+                    alert('Error: ' + result.error);
+                }
+            } catch (err) {
+                document.getElementById('wsFlysightStatus').textContent = 'Save failed';
+                alert('Save failed: ' + err.message);
+            }
+        }
+
+        // Ground Reference Points for WS Performance
+        let wsReferencePoints = [];
+        let wsRefMap = null;
+        let wsRefMarkers = [];
+
+        function openWsReferencePointsModal() {
+            document.getElementById('wsRefPointsModal').classList.remove('hidden');
+            document.getElementById('wsRefPointsModal').classList.add('flex');
+
+            // Initialize map if not already done
+            if (!wsRefMap) {
+                initWsRefMap();
+            }
+
+            // Load existing reference points
+            loadWsReferencePoints();
+        }
+
+        function closeWsRefPointsModal() {
+            document.getElementById('wsRefPointsModal').classList.add('hidden');
+            document.getElementById('wsRefPointsModal').classList.remove('flex');
+        }
+
+        function initWsRefMap() {
+            // Initialize Leaflet map centered on a default location
+            wsRefMap = L.map('wsRefMap').setView([38.5, -98.0], 4);  // Center of USA
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(wsRefMap);
+
+            // Add click handler to place markers
+            wsRefMap.on('click', function(e) {
+                if (wsRefMarkers.length < 4) {
+                    addWsRefMarker(e.latlng.lat, e.latlng.lng);
+                } else {
+                    alert('Maximum 4 reference points. Remove one to add a new point.');
+                }
+            });
+        }
+
+        async function searchWsRefLocation() {
+            const searchInput = document.getElementById('wsRefSearchInput');
+            const statusEl = document.getElementById('wsRefSearchStatus');
+            const query = searchInput.value.trim();
+
+            if (!query) {
+                statusEl.textContent = 'Please enter a location to search';
+                statusEl.className = 'text-red-500 text-xs mt-1';
+                return;
+            }
+
+            statusEl.textContent = 'Searching...';
+            statusEl.className = 'text-gray-500 text-xs mt-1';
+
+            try {
+                // Use OpenStreetMap Nominatim geocoding service
+                const encodedQuery = encodeURIComponent(query);
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=5&countrycodes=us`, {
+                    headers: {
+                        'User-Agent': 'VideoLibrary/1.0'
+                    }
+                });
+
+                const results = await response.json();
+
+                if (results && results.length > 0) {
+                    const result = results[0];
+                    const lat = parseFloat(result.lat);
+                    const lng = parseFloat(result.lon);
+
+                    // Pan and zoom to the location
+                    wsRefMap.setView([lat, lng], 14);
+
+                    statusEl.textContent = `Found: ${result.display_name}`;
+                    statusEl.className = 'text-green-600 text-xs mt-1';
+
+                    // Clear the search input
+                    searchInput.value = '';
+                } else {
+                    statusEl.textContent = 'Location not found. Try a different search term.';
+                    statusEl.className = 'text-red-500 text-xs mt-1';
+                }
+            } catch (err) {
+                console.error('Geocoding error:', err);
+                statusEl.textContent = 'Search failed. Please try again.';
+                statusEl.className = 'text-red-500 text-xs mt-1';
+            }
+        }
+
+        function addWsRefMarker(lat, lng, label = null) {
+            const pointNum = wsRefMarkers.length + 1;
+            const pointLabel = label || 'Point ' + pointNum;
+
+            const marker = L.marker([lat, lng], {
+                draggable: true
+            }).addTo(wsRefMap);
+
+            // Store the point number on the marker for reference
+            marker.pointNum = pointNum;
+
+            updateMarkerPopup(marker, pointNum, lat, lng);
+
+            marker.on('dragend', function(e) {
+                const latlng = e.target.getLatLng();
+                updateMarkerPopup(e.target, e.target.pointNum, latlng.lat, latlng.lng);
+                updateWsRefPointsList();
+            });
+
+            wsRefMarkers.push(marker);
+            updateWsRefPointsList();
+        }
+
+        function updateMarkerPopup(marker, pointNum, lat, lng) {
+            marker.bindPopup(`<div class="text-center"><b>Point ${pointNum}</b><br><span class="font-mono text-xs">${lat.toFixed(6)}, ${lng.toFixed(6)}</span></div>`);
+        }
+
+        function removeWsRefMarker(index) {
+            if (wsRefMarkers[index]) {
+                wsRefMap.removeLayer(wsRefMarkers[index]);
+                wsRefMarkers.splice(index, 1);
+
+                // Update point numbers for remaining markers
+                wsRefMarkers.forEach((marker, idx) => {
+                    marker.pointNum = idx + 1;
+                    const latlng = marker.getLatLng();
+                    updateMarkerPopup(marker, idx + 1, latlng.lat, latlng.lng);
+                });
+
+                updateWsRefPointsList();
+            }
+        }
+
+        function updateWsRefPointsList() {
+            // Update all 4 point cards
+            for (let i = 1; i <= 4; i++) {
+                const card = document.getElementById(`wsRefPoint${i}Card`);
+                const coordsEl = document.getElementById(`wsRefPoint${i}Coords`);
+                const removeBtn = document.getElementById(`wsRefPoint${i}Remove`);
+
+                if (wsRefMarkers[i - 1]) {
+                    const latlng = wsRefMarkers[i - 1].getLatLng();
+                    card.className = 'bg-green-50 rounded p-3 border-2 border-green-400';
+                    coordsEl.innerHTML = `<span class="font-mono text-green-700">${latlng.lat.toFixed(6)}, ${latlng.lng.toFixed(6)}</span>`;
+                    removeBtn.classList.remove('hidden');
+                } else {
+                    card.className = 'bg-gray-100 rounded p-3 border-2 border-dashed border-gray-300';
+                    coordsEl.innerHTML = '<span class="text-gray-400">Click map to set</span>';
+                    removeBtn.classList.add('hidden');
+                }
+            }
+
+            // Update status
+            const status = document.getElementById('wsRefPointsConfigStatus');
+            if (wsRefMarkers.length === 4) {
+                status.textContent = '4/4 ✓';
+                status.className = 'text-sm font-medium text-green-600';
+            } else {
+                status.textContent = `${wsRefMarkers.length}/4`;
+                status.className = 'text-sm font-medium text-yellow-600';
+            }
+        }
+
+        async function saveWsReferencePoints() {
+            if (wsRefMarkers.length !== 4) {
+                alert('Please configure exactly 4 reference points');
+                return;
+            }
+
+            const competitionId = '{{ competition.id }}';
+            const points = wsRefMarkers.map((marker, idx) => {
+                const latlng = marker.getLatLng();
+                return {
+                    index: idx,
+                    lat: latlng.lat,
+                    lng: latlng.lng
+                };
+            });
+
+            try {
+                const response = await fetch(`/ws-performance/reference-points/${competitionId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ points: points })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Reference points saved successfully');
+                    document.getElementById('wsRefPointsStatus').textContent = '4 ground reference points configured';
+                    closeWsRefPointsModal();
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (err) {
+                alert('Save failed: ' + err.message);
+            }
+        }
+
+        async function loadWsReferencePoints() {
+            const competitionId = '{{ competition.id }}';
+
+            try {
+                const response = await fetch(`/ws-performance/reference-points/${competitionId}`);
+                const result = await response.json();
+
+                if (result.success && result.points && result.points.length > 0) {
+                    // Clear existing markers
+                    wsRefMarkers.forEach(m => wsRefMap.removeLayer(m));
+                    wsRefMarkers = [];
+
+                    // Add markers for loaded points
+                    result.points.forEach((point, idx) => {
+                        addWsRefMarker(point.lat, point.lng, 'Point ' + (idx + 1));
+                    });
+
+                    // Fit map to show all markers
+                    if (wsRefMarkers.length > 0) {
+                        const group = new L.featureGroup(wsRefMarkers);
+                        wsRefMap.fitBounds(group.getBounds().pad(0.1));
+                    }
+
+                    document.getElementById('wsRefPointsStatus').textContent = '4 ground reference points configured';
+                }
+            } catch (err) {
+                console.error('Error loading reference points:', err);
+            }
+        }
+
+        function addWsRefPointManual() {
+            const lat = parseFloat(document.getElementById('wsRefLatInput').value);
+            const lng = parseFloat(document.getElementById('wsRefLngInput').value);
+
+            if (isNaN(lat) || isNaN(lng)) {
+                alert('Please enter valid latitude and longitude values');
+                return;
+            }
+
+            if (lat < -90 || lat > 90) {
+                alert('Latitude must be between -90 and 90');
+                return;
+            }
+
+            if (lng < -180 || lng > 180) {
+                alert('Longitude must be between -180 and 180');
+                return;
+            }
+
+            if (wsRefMarkers.length >= 4) {
+                alert('Maximum 4 reference points. Remove one to add a new point.');
+                return;
+            }
+
+            addWsRefMarker(lat, lng);
+            wsRefMap.setView([lat, lng], 15);
+
+            // Clear inputs
+            document.getElementById('wsRefLatInput').value = '';
+            document.getElementById('wsRefLngInput').value = '';
+        }
+
+        async function deleteScore() {
+            if (!currentScoreId) {
+                alert('No score to delete');
+                return;
+            }
+
+            const teamId = document.getElementById('roundTeamId').value;
+            const roundNum = document.getElementById('roundNumber').value;
+
+            if (!confirm(`Are you sure you want to delete the score for Round ${roundNum}?\n\nThis action cannot be undone.`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/admin/delete-score/${teamId}/${currentScoreId}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Score deleted successfully');
+                    hideRoundModal();
+                    preserveEventAndReload();
+                } else {
+                    alert('Error: ' + (result.error || 'Failed to delete score'));
+                }
+            } catch (err) {
+                alert('Delete failed: ' + err.message);
+            }
+        }
+
         function hideRoundModal() {
             document.getElementById('roundModal').classList.add('hidden');
             // Stop video playback
@@ -2971,7 +4119,7 @@
                 if (result.success) {
                     alert(result.message);
                     hideRoundModal();
-                    location.reload();
+                    preserveEventAndReload();
                 } else {
                     alert(result.error || 'Failed to award rejump');
                 }
@@ -3468,10 +4616,10 @@
                         document.getElementById('uploadStatus').textContent = 'Score saved!';
                     }
 
-                    // Close modal and reload page after saving
+                    // Close modal and reload page after saving (preserve current event)
                     setTimeout(() => {
                         hideRoundModal();
-                        location.reload();
+                        preserveEventAndReload();
                     }, 500);
                 } else {
                     alert(result.error || 'Failed to save score');
@@ -3820,13 +4968,110 @@
             }
         });
 
-        // Initialize: show first class on page load
+        // Initialize: show first event and class on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // For multi-event, show first event
+            if (isMultiEvent && eventTypes.length > 0) {
+                showEvent(eventTypes[0]);
+            }
+
             const classSelector = document.getElementById('classSelector');
             if (classSelector && classSelector.value) {
                 filterClass(classSelector.value);
             }
+
+            // Start checking for background conversions
+            checkBackgroundConversions();
         });
+
+        // ============================================
+        // Floating Conversion Status Indicator
+        // ============================================
+        let conversionCheckInterval = null;
+
+        async function checkBackgroundConversions() {
+            try {
+                const response = await fetch('/conversion/all');
+                const jobs = await response.json();
+
+                const jobIds = Object.keys(jobs);
+                const activeJobs = jobIds.filter(id => !['completed', 'failed'].includes(jobs[id].status));
+
+                updateFloatingIndicator(jobs, activeJobs.length);
+
+                if (activeJobs.length > 0 && !conversionCheckInterval) {
+                    conversionCheckInterval = setInterval(checkBackgroundConversions, 3000);
+                } else if (activeJobs.length === 0 && conversionCheckInterval) {
+                    clearInterval(conversionCheckInterval);
+                    conversionCheckInterval = null;
+                }
+            } catch (error) {
+                console.error('Error checking conversions:', error);
+            }
+        }
+
+        function updateFloatingIndicator(jobs, activeCount) {
+            let indicator = document.getElementById('floatingConversionIndicator');
+
+            const jobIds = Object.keys(jobs);
+            if (jobIds.length === 0) {
+                if (indicator) indicator.remove();
+                return;
+            }
+
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'floatingConversionIndicator';
+                indicator.className = 'fixed bottom-4 right-4 bg-gray-800 text-white rounded-lg shadow-lg p-4 max-w-sm z-50';
+                document.body.appendChild(indicator);
+            }
+
+            const jobsHtml = jobIds.slice(0, 3).map(jobId => {
+                const job = jobs[jobId];
+                let statusIcon = '⏳';
+                let statusClass = 'text-gray-400';
+
+                if (job.status === 'completed') {
+                    statusIcon = '✓';
+                    statusClass = 'text-green-400';
+                } else if (job.status === 'failed') {
+                    statusIcon = '✗';
+                    statusClass = 'text-red-400';
+                } else if (job.status === 'converting' || job.status === 'generating_thumbnail') {
+                    statusIcon = '⚙️';
+                    statusClass = 'text-yellow-400';
+                }
+
+                return `<div class="text-sm ${statusClass} truncate">${statusIcon} ${job.title || job.filename}</div>`;
+            }).join('');
+
+            const moreCount = jobIds.length > 3 ? `<div class="text-xs text-gray-400">+${jobIds.length - 3} more</div>` : '';
+
+            indicator.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <span class="font-medium">${activeCount > 0 ? 'Converting...' : 'Conversions'}</span>
+                    <button onclick="clearAndHideConversions()" class="text-gray-400 hover:text-white text-xs">
+                        ${activeCount === 0 ? 'Clear' : 'Hide'}
+                    </button>
+                </div>
+                ${jobsHtml}
+                ${moreCount}
+                ${activeCount > 0 ? `<div class="mt-2 w-full bg-gray-600 rounded-full h-1">
+                    <div class="bg-yellow-500 h-1 rounded-full animate-pulse" style="width: 60%"></div>
+                </div>` : ''}
+            `;
+        }
+
+        async function clearAndHideConversions() {
+            try {
+                await fetch('/conversion/clear-completed', { method: 'POST' });
+                const indicator = document.getElementById('floatingConversionIndicator');
+                if (indicator) indicator.remove();
+                checkBackgroundConversions();
+            } catch (error) {
+                console.error('Error clearing conversions:', error);
+            }
+        }
     </script>
 </body>
 </html>

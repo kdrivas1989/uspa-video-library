@@ -23,7 +23,7 @@
 
     <div class="container mx-auto px-4 py-8">
         <!-- Stats -->
-        <div class="grid md:grid-cols-3 gap-6 mb-8">
+        <div class="grid md:grid-cols-4 gap-6 mb-8">
             <div class="bg-gray-800 rounded-lg p-6">
                 <p class="text-4xl font-bold text-blue-400">{{ total_videos }}</p>
                 <p class="text-gray-400">Total Videos</p>
@@ -33,11 +33,37 @@
                 <p class="text-gray-400">Total Views</p>
             </div>
             <div class="bg-gray-800 rounded-lg p-6">
+                <p class="text-gray-400 text-sm mb-2">Auto-categorize from filenames</p>
+                <div class="flex items-center gap-2 mb-2">
+                    <select id="autoCategorizeScope" class="bg-gray-700 text-white text-sm px-2 py-1 rounded">
+                        <option value="uncategorized">Uncategorized Only</option>
+                        <option value="all">All Files (PIN required)</option>
+                    </select>
+                </div>
+                <button onclick="autoCategorize()" id="autoCategorizeBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg text-sm">
+                    Auto-Categorize
+                </button>
+                <p id="autoCategorizeMessage" class="text-sm mt-2 hidden"></p>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6">
                 <p class="text-gray-400 text-sm mb-3">Fix Dropbox URLs for streaming</p>
                 <button onclick="fixDropboxUrls()" class="bg-orange-600 hover:bg-orange-700 px-4 py-2 rounded-lg text-sm">
                     Fix Dropbox URLs
                 </button>
                 <p id="fixUrlsMessage" class="text-sm mt-2 hidden"></p>
+            </div>
+        </div>
+
+        <!-- Background Conversion Status -->
+        <div id="conversionStatusPanel" class="bg-gray-800 rounded-lg p-6 mb-8 hidden">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Background Conversions</h2>
+                <button onclick="clearCompletedConversions()" class="text-sm text-gray-400 hover:text-white">
+                    Clear Completed
+                </button>
+            </div>
+            <div id="conversionJobsList" class="space-y-3">
+                <!-- Jobs will be inserted here -->
             </div>
         </div>
 
@@ -418,6 +444,7 @@
 
             let uploaded = 0;
             let failed = 0;
+            let backgroundJobs = 0;
             const results = [];
 
             for (let i = 0; i < files.length; i++) {
@@ -435,6 +462,7 @@
                 formData.append('subcategory', subcategory);
                 formData.append('event', event);
                 formData.append('title', file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+                formData.append('background', 'true');
 
                 try {
                     const response = await fetch('/admin/upload-video', {
@@ -444,8 +472,15 @@
                     const result = await response.json();
 
                     if (result.success) {
-                        uploaded++;
-                        results.push({ name: file.name, success: true, converted: result.converted });
+                        if (result.background) {
+                            backgroundJobs++;
+                            results.push({ name: file.name, success: true, background: true, jobId: result.job_id });
+                            // Start polling for this job
+                            startConversionPolling();
+                        } else {
+                            uploaded++;
+                            results.push({ name: file.name, success: true, converted: result.converted });
+                        }
                     } else {
                         failed++;
                         results.push({ name: file.name, success: false, error: result.error });
@@ -458,20 +493,27 @@
 
             progressDiv.classList.add('hidden');
             resultsDiv.classList.remove('hidden');
+
+            let statusMsg = '';
+            if (uploaded > 0) statusMsg += `${uploaded} uploaded`;
+            if (backgroundJobs > 0) statusMsg += `${statusMsg ? ', ' : ''}${backgroundJobs} converting in background`;
+            if (failed > 0) statusMsg += `${statusMsg ? ', ' : ''}${failed} failed`;
+
             resultsDiv.innerHTML = `
                 <div class="bg-gray-700 rounded-lg p-4">
-                    <p class="font-semibold mb-2">${uploaded} uploaded, ${failed} failed</p>
+                    <p class="font-semibold mb-2">${statusMsg}</p>
                     <div class="max-h-32 overflow-y-auto text-sm">
                         ${results.map(r => `
-                            <div class="${r.success ? 'text-green-400' : 'text-red-400'}">
-                                ${r.success ? '✓' : '✗'} ${r.name} ${r.converted ? '(converted)' : ''} ${r.error ? '- ' + r.error : ''}
+                            <div class="${r.success ? (r.background ? 'text-yellow-400' : 'text-green-400') : 'text-red-400'}">
+                                ${r.success ? (r.background ? '⏳' : '✓') : '✗'} ${r.name} ${r.background ? '(converting...)' : ''} ${r.converted ? '(converted)' : ''} ${r.error ? '- ' + r.error : ''}
                             </div>
                         `).join('')}
                     </div>
                 </div>
             `;
 
-            if (uploaded > 0) {
+            // Only auto-reload if there were direct uploads and no background jobs
+            if (uploaded > 0 && backgroundJobs === 0) {
                 setTimeout(() => location.reload(), 2000);
             }
         }
@@ -498,6 +540,81 @@
                 msgDiv.textContent = 'Error: ' + error.message;
                 msgDiv.className = 'text-sm mt-2 text-red-400';
             }
+        }
+
+        // Auto-categorize videos
+        async function autoCategorize() {
+            const btn = document.getElementById('autoCategorizeBtn');
+            const msgDiv = document.getElementById('autoCategorizeMessage');
+            const scope = document.getElementById('autoCategorizeScope').value;
+
+            let adminPin = '';
+
+            // If processing all files, require PIN
+            if (scope === 'all') {
+                adminPin = prompt('Enter admin PIN to re-categorize ALL files:\n\nWarning: This will overwrite existing categories!');
+                if (!adminPin) {
+                    msgDiv.textContent = 'Cancelled - PIN required for all files';
+                    msgDiv.className = 'text-sm mt-2 text-yellow-400';
+                    msgDiv.classList.remove('hidden');
+                    return;
+                }
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Processing...';
+            msgDiv.textContent = scope === 'all' ? 'Analyzing ALL files...' : 'Analyzing uncategorized files...';
+            msgDiv.className = 'text-sm mt-2 text-yellow-400';
+            msgDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/auto-categorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        only_uncategorized: scope !== 'all',
+                        admin_pin: adminPin
+                    })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    let message = result.message;
+                    if (result.details && result.details.length > 0) {
+                        message += '\n\nUpdated:';
+                        result.details.slice(0, 10).forEach(d => {
+                            message += `\n- ${d.title}: ${d.changes.join(', ')}`;
+                        });
+                        if (result.details.length > 10) {
+                            message += `\n... and ${result.details.length - 10} more`;
+                        }
+                    }
+                    msgDiv.textContent = result.message;
+                    msgDiv.className = 'text-sm mt-2 text-green-400';
+
+                    if (result.updated > 0) {
+                        // Show details in a modal or alert
+                        let detailsText = `Updated ${result.updated} video(s):\n\n`;
+                        result.details.slice(0, 20).forEach(d => {
+                            detailsText += `${d.title}:\n  ${d.changes.join('\n  ')}\n\n`;
+                        });
+                        if (result.details.length > 20) {
+                            detailsText += `... and ${result.details.length - 20} more`;
+                        }
+                        alert(detailsText);
+                        setTimeout(() => location.reload(), 1000);
+                    }
+                } else {
+                    msgDiv.textContent = result.error || 'Error auto-categorizing';
+                    msgDiv.className = 'text-sm mt-2 text-red-400';
+                }
+            } catch (error) {
+                msgDiv.textContent = 'Error: ' + error.message;
+                msgDiv.className = 'text-sm mt-2 text-red-400';
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Auto-Categorize';
         }
 
         // Auto-detect category and subcategory from folder path
@@ -1048,6 +1165,120 @@
             } catch (error) {
                 alert('Error updating video: ' + error.message);
             }
+        });
+
+        // ============================================
+        // Background Conversion Tracking
+        // ============================================
+        let conversionPollingInterval = null;
+
+        function startConversionPolling() {
+            if (conversionPollingInterval) return; // Already polling
+            conversionPollingInterval = setInterval(pollConversionStatus, 2000);
+            pollConversionStatus(); // Immediate first poll
+        }
+
+        function stopConversionPolling() {
+            if (conversionPollingInterval) {
+                clearInterval(conversionPollingInterval);
+                conversionPollingInterval = null;
+            }
+        }
+
+        async function pollConversionStatus() {
+            try {
+                const response = await fetch('/conversion/all');
+                const jobs = await response.json();
+
+                const panel = document.getElementById('conversionStatusPanel');
+                const list = document.getElementById('conversionJobsList');
+
+                const jobIds = Object.keys(jobs);
+                if (jobIds.length === 0) {
+                    panel.classList.add('hidden');
+                    stopConversionPolling();
+                    return;
+                }
+
+                panel.classList.remove('hidden');
+
+                // Check if all jobs are done
+                const activeJobs = jobIds.filter(id => !['completed', 'failed'].includes(jobs[id].status));
+                if (activeJobs.length === 0) {
+                    stopConversionPolling();
+                }
+
+                // Render jobs
+                list.innerHTML = jobIds.map(jobId => {
+                    const job = jobs[jobId];
+                    let statusClass = 'text-gray-400';
+                    let statusIcon = '⏳';
+                    let progressBar = '';
+
+                    if (job.status === 'completed') {
+                        statusClass = 'text-green-400';
+                        statusIcon = '✓';
+                    } else if (job.status === 'failed') {
+                        statusClass = 'text-red-400';
+                        statusIcon = '✗';
+                    } else if (job.status === 'converting') {
+                        statusClass = 'text-yellow-400';
+                        statusIcon = '⚙️';
+                        progressBar = `<div class="w-full bg-gray-600 rounded-full h-2 mt-2">
+                            <div class="bg-yellow-500 h-2 rounded-full transition-all" style="width: ${job.progress || 0}%"></div>
+                        </div>`;
+                    } else if (job.status === 'generating_thumbnail') {
+                        statusClass = 'text-blue-400';
+                        statusIcon = '🖼️';
+                        progressBar = `<div class="w-full bg-gray-600 rounded-full h-2 mt-2">
+                            <div class="bg-blue-500 h-2 rounded-full transition-all" style="width: ${job.progress || 0}%"></div>
+                        </div>`;
+                    }
+
+                    const statusLabels = {
+                        'queued': 'Queued',
+                        'converting': 'Converting...',
+                        'generating_thumbnail': 'Generating thumbnail...',
+                        'completed': 'Completed',
+                        'failed': 'Failed'
+                    };
+
+                    return `
+                        <div class="bg-gray-700 rounded-lg p-3">
+                            <div class="flex justify-between items-start">
+                                <div class="flex-1 min-w-0">
+                                    <p class="font-medium text-white truncate">${job.title || job.filename}</p>
+                                    <p class="text-sm ${statusClass}">
+                                        ${statusIcon} ${statusLabels[job.status] || job.status}
+                                        ${job.error ? ` - ${job.error}` : ''}
+                                    </p>
+                                    ${progressBar}
+                                </div>
+                                ${job.status === 'completed' ? `
+                                    <a href="/video/${job.video_id}" target="_blank" class="text-blue-400 hover:text-blue-300 text-sm ml-3">View</a>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            } catch (error) {
+                console.error('Error polling conversion status:', error);
+            }
+        }
+
+        async function clearCompletedConversions() {
+            try {
+                await fetch('/conversion/clear-completed', { method: 'POST' });
+                pollConversionStatus();
+            } catch (error) {
+                console.error('Error clearing completed conversions:', error);
+            }
+        }
+
+        // Check for active conversions on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            pollConversionStatus();
         });
     </script>
 </body>

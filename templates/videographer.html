@@ -726,6 +726,98 @@
             currentTeams = [];
             currentTeam = null;
         }
+
+        // ============================================
+        // Floating Conversion Status Indicator
+        // ============================================
+        let conversionCheckInterval = null;
+
+        async function checkBackgroundConversions() {
+            try {
+                const response = await fetch('/conversion/all');
+                const jobs = await response.json();
+
+                const jobIds = Object.keys(jobs);
+                const activeJobs = jobIds.filter(id => !['completed', 'failed'].includes(jobs[id].status));
+
+                updateFloatingIndicator(jobs, activeJobs.length);
+
+                if (activeJobs.length > 0 && !conversionCheckInterval) {
+                    conversionCheckInterval = setInterval(checkBackgroundConversions, 3000);
+                } else if (activeJobs.length === 0 && conversionCheckInterval) {
+                    clearInterval(conversionCheckInterval);
+                    conversionCheckInterval = null;
+                }
+            } catch (error) {
+                console.error('Error checking conversions:', error);
+            }
+        }
+
+        function updateFloatingIndicator(jobs, activeCount) {
+            let indicator = document.getElementById('floatingConversionIndicator');
+
+            const jobIds = Object.keys(jobs);
+            if (jobIds.length === 0) {
+                if (indicator) indicator.remove();
+                return;
+            }
+
+            if (!indicator) {
+                indicator = document.createElement('div');
+                indicator.id = 'floatingConversionIndicator';
+                indicator.className = 'fixed bottom-4 right-4 bg-gray-800 text-white rounded-lg shadow-lg p-4 max-w-sm z-50';
+                document.body.appendChild(indicator);
+            }
+
+            const jobsHtml = jobIds.slice(0, 3).map(jobId => {
+                const job = jobs[jobId];
+                let statusIcon = '⏳';
+                let statusClass = 'text-gray-400';
+
+                if (job.status === 'completed') {
+                    statusIcon = '✓';
+                    statusClass = 'text-green-400';
+                } else if (job.status === 'failed') {
+                    statusIcon = '✗';
+                    statusClass = 'text-red-400';
+                } else if (job.status === 'converting' || job.status === 'generating_thumbnail') {
+                    statusIcon = '⚙️';
+                    statusClass = 'text-yellow-400';
+                }
+
+                return `<div class="text-sm ${statusClass} truncate">${statusIcon} ${job.title || job.filename}</div>`;
+            }).join('');
+
+            const moreCount = jobIds.length > 3 ? `<div class="text-xs text-gray-400">+${jobIds.length - 3} more</div>` : '';
+
+            indicator.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <span class="font-medium">${activeCount > 0 ? 'Converting...' : 'Conversions'}</span>
+                    <button onclick="clearAndHideConversions()" class="text-gray-400 hover:text-white text-xs">
+                        ${activeCount === 0 ? 'Clear' : 'Hide'}
+                    </button>
+                </div>
+                ${jobsHtml}
+                ${moreCount}
+                ${activeCount > 0 ? `<div class="mt-2 w-full bg-gray-600 rounded-full h-1">
+                    <div class="bg-yellow-500 h-1 rounded-full animate-pulse" style="width: 60%"></div>
+                </div>` : ''}
+            `;
+        }
+
+        async function clearAndHideConversions() {
+            try {
+                await fetch('/conversion/clear-completed', { method: 'POST' });
+                const indicator = document.getElementById('floatingConversionIndicator');
+                if (indicator) indicator.remove();
+                checkBackgroundConversions();
+            } catch (error) {
+                console.error('Error clearing conversions:', error);
+            }
+        }
+
+        // Check for conversions on page load
+        document.addEventListener('DOMContentLoaded', checkBackgroundConversions);
     </script>
 </body>
 </html>
