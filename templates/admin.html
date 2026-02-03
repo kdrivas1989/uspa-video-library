@@ -508,8 +508,10 @@
         function chooseFromDropbox() {
             Dropbox.choose({
                 success: function(files) {
-                    // Get the direct link (change dl=0 to raw=1 for streaming)
-                    let url = files[0].link.replace('?dl=0', '?raw=1');
+                    // Convert to streaming URL (use dl.dropboxusercontent.com)
+                    let url = files[0].link
+                        .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+                        .replace('?dl=0', '');
                     document.getElementById('videoUrl').value = url;
 
                     // Auto-fill title from filename
@@ -609,7 +611,7 @@
             let errors = [];
 
             for (const file of pendingFiles) {
-                const url = file.link.replace('?dl=0', '?raw=1');
+                const url = file.link.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '');
                 const title = file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' ');
 
                 try {

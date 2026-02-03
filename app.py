@@ -923,28 +923,45 @@ def get_video_details(video_id):
     return jsonify(video)
 
 
+def convert_dropbox_url_for_streaming(url):
+    """Convert Dropbox URL to direct streaming format."""
+    if not url:
+        return url
+    # Convert www.dropbox.com to dl.dropboxusercontent.com for streaming
+    if 'www.dropbox.com' in url:
+        url = url.replace('www.dropbox.com', 'dl.dropboxusercontent.com')
+    elif 'dropbox.com' in url and 'dl.dropboxusercontent.com' not in url:
+        url = url.replace('dropbox.com', 'dl.dropboxusercontent.com')
+    # Remove query parameters that force download
+    url = url.replace('?dl=0', '').replace('?dl=1', '').replace('?raw=1', '')
+    url = url.replace('&dl=0', '').replace('&dl=1', '').replace('&raw=1', '')
+    return url
+
+
 @app.route('/admin/fix-dropbox-urls', methods=['POST'])
 @admin_required
 def fix_dropbox_urls():
-    """Fix Dropbox URLs to use raw=1 instead of dl=1 for streaming."""
+    """Fix Dropbox URLs for proper streaming playback."""
     fixed = 0
     try:
         if USE_SUPABASE:
-            # Get all videos and filter for dl=1 in URL
+            # Get all videos with Dropbox URLs
             result = supabase.table('videos').select('id, url').execute()
             for video in result.data:
-                if video.get('url') and 'dl=1' in video['url']:
-                    new_url = video['url'].replace('dl=1', 'raw=1')
-                    supabase.table('videos').update({'url': new_url}).eq('id', video['id']).execute()
-                    fixed += 1
+                if video.get('url') and 'dropbox.com' in video['url']:
+                    new_url = convert_dropbox_url_for_streaming(video['url'])
+                    if new_url != video['url']:
+                        supabase.table('videos').update({'url': new_url}).eq('id', video['id']).execute()
+                        fixed += 1
         else:
             db = get_sqlite_db()
-            cursor = db.execute("SELECT id, url FROM videos WHERE url LIKE '%dl=1%'")
+            cursor = db.execute("SELECT id, url FROM videos WHERE url LIKE '%dropbox.com%'")
             videos = cursor.fetchall()
             for video in videos:
-                new_url = video['url'].replace('dl=1', 'raw=1')
-                db.execute("UPDATE videos SET url = ? WHERE id = ?", (new_url, video['id']))
-                fixed += 1
+                new_url = convert_dropbox_url_for_streaming(video['url'])
+                if new_url != video['url']:
+                    db.execute("UPDATE videos SET url = ? WHERE id = ?", (new_url, video['id']))
+                    fixed += 1
             db.commit()
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
