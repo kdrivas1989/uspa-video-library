@@ -622,6 +622,7 @@ def import_folder():
     folder_path = data.get('folder_path', '').strip()
     category = data.get('category', '')
     subcategory = data.get('subcategory', '')
+    event = data.get('event', '').strip()
     convert = data.get('convert', True)
 
     if not folder_path or not os.path.isdir(folder_path):
@@ -688,7 +689,8 @@ def import_folder():
                 'created_at': datetime.now().isoformat(),
                 'views': 0,
                 'video_type': 'local',
-                'local_file': local_file
+                'local_file': local_file,
+                'event': event
             })
 
             imported += 1

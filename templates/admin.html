@@ -43,7 +43,8 @@
                     <div class="flex gap-2">
                         <input type="text" id="folderPath"
                             class="flex-1 px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                            placeholder="/path/to/video/folder">
+                            placeholder="/path/to/video/folder"
+                            oninput="detectCategoryFromPath(this.value)">
                         {% if dropbox_app_key %}
                         <button type="button" onclick="chooseFolderFromDropbox()"
                             class="bg-blue-500 hover:bg-blue-600 px-4 py-2 rounded-lg text-sm whitespace-nowrap">
@@ -69,6 +70,17 @@
                         class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
                         <option value="">Select</option>
                     </select>
+                </div>
+                <div class="w-64">
+                    <label class="block text-gray-300 mb-2">Event</label>
+                    <input type="text" id="importEvent" list="importEventList"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="e.g., 2024 USPA Nationals">
+                    <datalist id="importEventList">
+                        {% for event in events %}
+                        <option value="{{ event }}">
+                        {% endfor %}
+                    </datalist>
                 </div>
                 <button type="submit"
                     class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-semibold transition">
@@ -349,6 +361,118 @@
         const categories = {{ categories | tojson }};
         let pendingFiles = []; // Store files selected from Dropbox
 
+        // Auto-detect category and subcategory from folder path
+        function detectCategoryFromPath(path) {
+            if (!path) return;
+
+            const pathLower = path.toLowerCase();
+            const categorySelect = document.getElementById('importCategory');
+            let detectedCategory = '';
+            let detectedSubcategory = '';
+
+            // Category detection patterns
+            const categoryPatterns = {
+                'cp': ['canopy piloting', '/cp/', '_cp_', ' cp ', 'cp_', '_cp'],
+                'fs': ['formation skydiving', '/fs/', '_fs_', ' fs ', 'fs_', '_fs'],
+                'cf': ['canopy formation', '/cf/', '_cf_', ' cf ', 'cf_', '_cf'],
+                'ae': ['artistic', 'freestyle', 'freefly', '/ae/', '_ae_', ' ae '],
+                'ws': ['wingsuit', '/ws/', '_ws_', ' ws ', 'ws_', '_ws'],
+                'al': ['accuracy', 'landing', '/al/', '_al_', ' al ']
+            };
+
+            // Subcategory detection patterns
+            const subcategoryPatterns = {
+                'cp': {
+                    'freestyle': ['freestyle', 'free style'],
+                    'speed': ['speed'],
+                    'distance': ['distance'],
+                    'zone_accuracy': ['zone', 'accuracy']
+                },
+                'fs': {
+                    '4way_fs': ['4way', '4-way', '4 way'],
+                    '4way_vfs': ['vfs', 'vertical'],
+                    '2way_mfs': ['2way', '2-way', 'mfs'],
+                    '8way': ['8way', '8-way', '8 way'],
+                    '10way': ['10way', '10-way', '10 way'],
+                    '16way': ['16way', '16-way', '16 way']
+                },
+                'cf': {
+                    '4way': ['4way', '4-way', '4 way'],
+                    '2way': ['2way', '2-way', '2 way']
+                },
+                'ae': {
+                    'freestyle': ['freestyle', 'free style'],
+                    'freefly': ['freefly', 'free fly']
+                }
+            };
+
+            // Detect category
+            for (const [catId, patterns] of Object.entries(categoryPatterns)) {
+                for (const pattern of patterns) {
+                    if (pathLower.includes(pattern)) {
+                        detectedCategory = catId;
+                        break;
+                    }
+                }
+                if (detectedCategory) break;
+            }
+
+            // Set category if detected
+            if (detectedCategory) {
+                categorySelect.value = detectedCategory;
+                updateImportSubcategories();
+
+                // Detect subcategory
+                if (subcategoryPatterns[detectedCategory]) {
+                    for (const [subId, patterns] of Object.entries(subcategoryPatterns[detectedCategory])) {
+                        for (const pattern of patterns) {
+                            if (pathLower.includes(pattern)) {
+                                detectedSubcategory = subId;
+                                break;
+                            }
+                        }
+                        if (detectedSubcategory) break;
+                    }
+
+                    // Set subcategory after a brief delay (to allow dropdown to populate)
+                    if (detectedSubcategory) {
+                        setTimeout(() => {
+                            document.getElementById('importSubcategory').value = detectedSubcategory;
+                        }, 50);
+                    }
+                }
+            }
+
+            // Also try to detect event name from path
+            detectEventFromPath(path);
+        }
+
+        // Try to extract event name from path
+        function detectEventFromPath(path) {
+            const eventInput = document.getElementById('importEvent');
+            if (!eventInput || eventInput.value) return; // Don't override if already set
+
+            // Look for year patterns like "2024" or "25"
+            const pathParts = path.split(/[\/\\]/);
+            const eventKeywords = ['nationals', 'championship', 'world', 'uspa', 'competition', 'meet', 'open'];
+
+            for (const part of pathParts) {
+                const partLower = part.toLowerCase();
+                // Check if folder name contains a year and/or event keyword
+                const hasYear = /20\d{2}|\b\d{2}\b/.test(part);
+                const hasKeyword = eventKeywords.some(k => partLower.includes(k));
+
+                if (hasYear || hasKeyword) {
+                    // Clean up the folder name to use as event
+                    const eventName = part.replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim();
+                    if (eventName.length > 5) {
+                        eventInput.value = eventName;
+                        return;
+                    }
+                }
+            }
+        }
+
         // Dropbox Chooser - Single file
         function chooseFromDropbox() {
             Dropbox.choose({
@@ -544,6 +668,7 @@
             const folderPath = document.getElementById('folderPath').value.trim();
             const category = document.getElementById('importCategory').value;
             const subcategory = document.getElementById('importSubcategory').value;
+            const event = document.getElementById('importEvent').value.trim();
 
             if (!folderPath || !category) {
                 alert('Please enter folder path and select category');
@@ -560,7 +685,7 @@
                 const response = await fetch('/admin/import-folder', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ folder_path: folderPath, category, subcategory, convert: true })
+                    body: JSON.stringify({ folder_path: folderPath, category, subcategory, event, convert: true })
                 });
 
                 const result = await response.json();
