@@ -3090,9 +3090,9 @@ def get_training_videos(comp_id):
 
 @app.route('/admin/competition/<comp_id>/teams', methods=['GET'])
 @admin_required
-def get_competition_teams(comp_id):
+def api_get_competition_teams(comp_id):
     """Get all teams for a competition with their score status."""
-    teams = get_teams_for_competition(comp_id)
+    teams = get_competition_teams(comp_id)
 
     # Add has_scores flag to each team
     for team in teams:
