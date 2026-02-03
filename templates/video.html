@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ video.title }} - USPA Video Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
 </head>
 <body class="bg-gray-900 text-white min-h-screen">
     <nav class="bg-gray-800 p-4 sticky top-0 z-10">
@@ -27,11 +29,38 @@
     </nav>
 
     <div class="container mx-auto px-4 py-8">
+        <!-- Competition Context Banner (when opened from competition) -->
+        {% if competition_context %}
+        <div class="bg-blue-900/50 border border-blue-700 rounded-lg p-4 mb-6 flex items-center justify-between">
+            <div>
+                <span class="text-blue-400 font-medium">Judging:</span>
+                <span class="text-white ml-2">{{ competition_context.team_name }} - Round {{ competition_context.round_num }}</span>
+                <span class="text-gray-400 ml-2">({{ competition_context.competition_name }})</span>
+            </div>
+            <div class="flex items-center gap-3">
+                {% if is_admin %}
+                <button onclick="showQuickScoreModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-medium">
+                    Enter Score
+                </button>
+                {% endif %}
+                <a href="/competition/{{ competition_context.competition_id }}" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm">
+                    ← Back to Competition
+                </a>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Breadcrumb -->
         <div class="mb-6">
             <a href="/" class="text-blue-400 hover:underline">Home</a>
             <span class="text-gray-500 mx-2">/</span>
+            {% if competition_context %}
+            <a href="/competitions" class="text-blue-400 hover:underline">Competitions</a>
+            <span class="text-gray-500 mx-2">/</span>
+            <a href="/competition/{{ competition_context.competition_id }}" class="text-blue-400 hover:underline">{{ competition_context.competition_name }}</a>
+            {% else %}
             <a href="/category/{{ video.category }}" class="text-blue-400 hover:underline">{{ category.name }}</a>
+            {% endif %}
             <span class="text-gray-500 mx-2">/</span>
             <span class="text-gray-300 truncate">{{ video.title }}</span>
         </div>
@@ -49,7 +78,7 @@
                             <p class="text-white text-xl mt-2">Freeze Frame</p>
                         </div>
                     </div>
-                    <video controls class="w-full h-full" poster="{{ video.thumbnail }}" id="videoPlayer" playsinline preload="metadata">
+                    <video controls class="w-full h-full" poster="{{ video.thumbnail }}" id="videoPlayer" playsinline preload="metadata" tabindex="-1">
                         {% if '.webm' in video.video_src|lower %}
                         <source src="{{ video.video_src }}" type="video/webm">
                         {% elif '.ogg' in video.video_src|lower or '.ogv' in video.video_src|lower %}
@@ -81,10 +110,42 @@
                             <button onclick="setSpeed(0.5)" class="speed-btn px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm" data-speed="0.5">50%</button>
                             <button onclick="setSpeed(0.75)" class="speed-btn px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm" data-speed="0.75">75%</button>
                             <button onclick="setSpeed(1)" class="speed-btn px-3 py-1 rounded bg-blue-600 text-sm" data-speed="1">100%</button>
+                            <span class="text-gray-600 mx-2">|</span>
+                            <button onclick="startTimer()" id="timerBtn"
+                                class="px-4 py-1 rounded bg-green-600 hover:bg-green-700 text-sm font-medium">
+                                Start (X)
+                            </button>
+                            <button onclick="resetTimer()"
+                                class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                Reset
+                            </button>
+                            <span id="timerDisplay" class="text-xl font-mono font-bold text-gray-400 ml-2">--:--</span>
+                            <span id="timerStatus" class="text-sm text-gray-500"></span>
+                            <span id="flysightTimeCompare" class="text-sm text-gray-500 hidden ml-2">
+                                / FlySight: <span id="flysightTimeDisplay" class="text-cyan-400 font-mono">--.-s</span>
+                            </span>
                         </div>
                         <div class="text-gray-500 text-sm">
                             <span id="currentSpeed">1x</span> playback
                         </div>
+                    </div>
+                    <!-- Video Start Position -->
+                    <div class="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between flex-wrap gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-gray-400 text-sm">Video Start:</span>
+                            <span id="startTimeDisplay" class="font-mono text-cyan-400">{{ video.start_time|default(0, true) }}s</span>
+                            <button onclick="goToStartTime()" class="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs">
+                                Go to Start
+                            </button>
+                            <span class="text-gray-600 mx-1">|</span>
+                            <button onclick="setCurrentAsStart()" class="px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-xs">
+                                Set Current as Start
+                            </button>
+                            <button onclick="clearStartTime()" class="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs">
+                                Clear
+                            </button>
+                        </div>
+                        <span id="startTimeSaveStatus" class="text-xs text-gray-500"></span>
                     </div>
                     <!-- Scoring Timeline -->
                     <div class="mt-4 pt-4 border-t border-gray-700">
@@ -116,6 +177,37 @@
                                 <span class="text-gray-400">Total:</span>
                                 <span id="totalScore" class="text-yellow-400 font-bold ml-2">0</span>
                             </div>
+                        </div>
+                        <!-- Save Score Button -->
+                        <div id="saveScoreSection" class="hidden mt-3 pt-3 border-t border-gray-700">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    {% if competition_context %}
+                                    <span class="text-gray-400 text-sm">Round {{ competition_context.round_num }}</span>
+                                    <input type="hidden" id="scoreRoundLabel" value="Round {{ competition_context.round_num }}">
+                                    {% else %}
+                                    <input type="text" id="scoreRoundLabel" placeholder="Round #"
+                                        class="w-24 px-3 py-1 rounded bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    {% endif %}
+                                    <button onclick="saveCurrentScore()" class="px-4 py-1 rounded bg-green-600 hover:bg-green-700 text-sm font-medium">
+                                        Save Score
+                                    </button>
+                                </div>
+                                <span id="saveScoreStatus" class="text-sm text-gray-500"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Saved Scores Display -->
+                    <div class="mt-4 pt-4 border-t border-gray-700">
+                        <div class="flex items-center justify-between mb-3">
+                            <span class="text-gray-400 text-sm font-medium">Saved Scores (Practice)</span>
+                            <button onclick="clearSavedScores()" class="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs">
+                                Clear All
+                            </button>
+                        </div>
+                        <div id="savedScoresList" class="space-y-2 max-h-48 overflow-y-auto">
+                            <div class="text-gray-500 text-sm text-center py-2">No saved scores yet</div>
                         </div>
                     </div>
 
@@ -152,32 +244,40 @@
                             </select>
                             <span id="durationLabel" class="text-gray-400 text-sm">35s working time</span>
                         </div>
-                        <div class="flex items-center gap-3">
-                            <button onclick="startTimer()" id="timerBtn"
-                                class="px-4 py-1 rounded bg-green-600 hover:bg-green-700 text-sm font-medium">
-                                Start (X)
-                            </button>
-                            <button onclick="resetTimer()"
-                                class="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-sm">
-                                Reset
-                            </button>
-                        </div>
                     </div>
-                    <div class="flex items-center justify-between mt-3">
-                        <div id="speedInfo" class="text-xs text-gray-500 hidden">
-                            10-Way Speed: X to start, X again to stop. Max score: 35.00s. Freeze 6s after completion.
-                        </div>
-                        <div class="flex items-center gap-2 ml-auto">
-                            <span id="timerDisplay" class="text-2xl font-mono font-bold text-gray-400">--:--</span>
-                            <span id="timerStatus" class="text-sm text-gray-500"></span>
-                        </div>
+                    <div id="speedInfo" class="text-xs text-gray-500 hidden mt-2">
+                        10-Way Speed: X to start, X again to stop. Max score: 35.00s. Freeze 6s after completion.
                     </div>
 
                     <!-- Wingsuit FlySight Upload (hidden by default) -->
                     <div id="wingsuitSection" class="hidden mt-4 pt-4 border-t border-gray-700">
+                        <!-- Competition/Library Mode Toggle -->
+                        <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-700">
+                            <span class="text-gray-400 text-sm font-medium">Judging Mode</span>
+                            <div class="flex items-center gap-4">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="wsMode" value="library" checked
+                                        class="w-4 h-4 text-blue-600" onchange="updateWsMode()">
+                                    <span class="text-gray-300 text-sm">Library (Practice)</span>
+                                </label>
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="radio" name="wsMode" value="competition"
+                                        class="w-4 h-4 text-green-600" onchange="updateWsMode()">
+                                    <span class="text-gray-300 text-sm">Competition</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div id="wsCompetitionWarning" class="hidden mb-3 p-2 bg-red-900/50 border border-red-700 rounded text-sm text-red-300">
+                            ⚠️ Competition mode requires FlySight data. Please upload CSV file.
+                        </div>
                         <div class="flex items-center justify-between mb-3">
                             <span class="text-gray-400 text-sm font-medium">FlySight Data</span>
                             <div class="flex items-center gap-2">
+                                <label class="text-gray-500 text-xs">Ground Elev:</label>
+                                <input type="number" id="groundElevation" placeholder="0"
+                                    class="w-20 px-2 py-1 rounded bg-gray-700 text-white text-xs text-right"
+                                    onchange="recalculateFlySight()">
+                                <span class="text-gray-500 text-xs">m MSL</span>
                                 <input type="file" id="flysightFile" accept=".csv" class="hidden" onchange="parseFlySight(event)">
                                 <button onclick="document.getElementById('flysightFile').click()"
                                     class="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-sm">
@@ -204,6 +304,24 @@
                                 <div id="altitudeWindow" class="font-mono text-white">7500 ft</div>
                             </div>
                         </div>
+
+                        <!-- Lower Exit Rule Toggle -->
+                        <div class="mt-3 flex items-center gap-2">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <input type="checkbox" id="lowerExitRule" checked
+                                    class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500"
+                                    onchange="recalculateFlySight()">
+                                <span class="text-gray-400 text-sm">Lower exit rule (5000 ft window if exit ≤ 11,500 ft)</span>
+                            </label>
+                        </div>
+
+                        <!-- FlySight Graph Button -->
+                        <div id="flysightGraphSection" class="hidden mt-4">
+                            <button onclick="openFlySightModal()"
+                                class="w-full px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-sm font-medium">
+                                📊 View Altitude Profile & Confirm Working Time
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Wingsuit Compulsory Scoring (hidden by default) -->
@@ -213,8 +331,8 @@
                             <div class="flex items-center gap-2">
                                 <span class="text-gray-500 text-xs">Judges:</span>
                                 <select id="wsCompJudgeCount" onchange="toggleWsCompJudgeMode()" class="px-2 py-1 rounded bg-gray-700 text-white text-xs">
-                                    <option value="1">Single</option>
-                                    <option value="3" selected>3 Panel</option>
+                                    <option value="1" selected>Single</option>
+                                    <option value="3">3 Panel</option>
                                 </select>
                             </div>
                         </div>
@@ -224,13 +342,13 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-gray-400 text-sm">Style Score</span>
                             </div>
-                            <div id="wsStyleSingleJudge" class="hidden flex items-center gap-2">
+                            <div id="wsStyleSingleJudge" class="flex items-center gap-2">
                                 <input type="number" id="wsStyleSingle" min="0" max="10" step="0.1" placeholder="Score"
                                     class="w-24 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsCompulsory()">
                                 <span class="text-gray-400">=</span>
                                 <span id="wsStyleAvgSingle" class="text-yellow-400 font-bold">0.0</span>
                             </div>
-                            <div id="wsStylePanelJudge" class="flex items-center gap-2 flex-wrap">
+                            <div id="wsStylePanelJudge" class="hidden flex items-center gap-2 flex-wrap">
                                 <input type="number" id="wsStyleJ1" min="0" max="10" step="0.1" placeholder="J1"
                                     class="w-16 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsCompulsory()">
                                 <input type="number" id="wsStyleJ2" min="0" max="10" step="0.1" placeholder="J2"
@@ -287,6 +405,14 @@
                                 <span class="text-gray-400">Final Grips: </span>
                                 <span id="wsFinalGrips" class="text-green-400 font-bold">0</span>
                             </div>
+                        </div>
+                        <!-- Save Compulsory Score -->
+                        <div class="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
+                            <input type="text" id="wsCompRoundLabel" placeholder="Round #"
+                                class="w-24 px-3 py-1 rounded bg-gray-700 text-white text-sm">
+                            <button onclick="saveWsCompulsoryScore()" class="px-4 py-1 rounded bg-green-600 hover:bg-green-700 text-sm font-medium">
+                                Save Score
+                            </button>
                         </div>
                     </div>
 
@@ -407,8 +533,8 @@
                             <div class="flex items-center gap-2">
                                 <span class="text-gray-500 text-xs">Judges:</span>
                                 <select id="wsFreeJudgeCount" onchange="toggleWsFreeJudgeMode()" class="px-2 py-1 rounded bg-gray-700 text-white text-xs">
-                                    <option value="1">Single</option>
-                                    <option value="3" selected>3 Panel</option>
+                                    <option value="1" selected>Single</option>
+                                    <option value="3">3 Panel</option>
                                 </select>
                             </div>
                         </div>
@@ -418,13 +544,13 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-gray-400 text-sm">Style</span>
                             </div>
-                            <div id="wsFreeStyleSingle" class="hidden flex items-center gap-2">
+                            <div id="wsFreeStyleSingle" class="flex items-center gap-2">
                                 <input type="number" id="wsFreeStyleSingleInput" min="0" max="10" step="0.1" placeholder="Score"
                                     class="w-24 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsFree()">
                                 <span class="text-gray-400">=</span>
                                 <span id="wsFreeStyleAvgSingle" class="text-yellow-400 font-bold">0.0</span>
                             </div>
-                            <div id="wsFreeStylePanel" class="flex items-center gap-2 flex-wrap">
+                            <div id="wsFreeStylePanel" class="hidden flex items-center gap-2 flex-wrap">
                                 <input type="number" id="wsFreeStyleJ1" min="0" max="10" step="0.1" placeholder="J1"
                                     class="w-16 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsFree()">
                                 <input type="number" id="wsFreeStyleJ2" min="0" max="10" step="0.1" placeholder="J2"
@@ -441,13 +567,13 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-gray-400 text-sm">Dive Plan</span>
                             </div>
-                            <div id="wsFreeDiveSingle" class="hidden flex items-center gap-2">
+                            <div id="wsFreeDiveSingle" class="flex items-center gap-2">
                                 <input type="number" id="wsFreeDiveSingleInput" min="0" max="10" step="0.1" placeholder="Score"
                                     class="w-24 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsFree()">
                                 <span class="text-gray-400">=</span>
                                 <span id="wsFreeDiveAvgSingle" class="text-yellow-400 font-bold">0.0</span>
                             </div>
-                            <div id="wsFreeDivePanel" class="flex items-center gap-2 flex-wrap">
+                            <div id="wsFreeDivePanel" class="hidden flex items-center gap-2 flex-wrap">
                                 <input type="number" id="wsFreeDiveJ1" min="0" max="10" step="0.1" placeholder="J1"
                                     class="w-16 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsFree()">
                                 <input type="number" id="wsFreeDiveJ2" min="0" max="10" step="0.1" placeholder="J2"
@@ -464,13 +590,13 @@
                             <div class="flex items-center justify-between mb-2">
                                 <span class="text-gray-400 text-sm">Camerawork</span>
                             </div>
-                            <div id="wsFreeCamSingle" class="hidden flex items-center gap-2">
+                            <div id="wsFreeCamSingle" class="flex items-center gap-2">
                                 <input type="number" id="wsFreeCamSingleInput" min="0" max="10" step="0.1" placeholder="Score"
                                     class="w-24 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsFree()">
                                 <span class="text-gray-400">=</span>
                                 <span id="wsFreeCamAvgSingle" class="text-yellow-400 font-bold">0.0</span>
                             </div>
-                            <div id="wsFreeCamPanel" class="flex items-center gap-2 flex-wrap">
+                            <div id="wsFreeCamPanel" class="hidden flex items-center gap-2 flex-wrap">
                                 <input type="number" id="wsFreeCamJ1" min="0" max="10" step="0.1" placeholder="J1"
                                     class="w-16 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center" onchange="calculateWsFree()">
                                 <input type="number" id="wsFreeCamJ2" min="0" max="10" step="0.1" placeholder="J2"
@@ -494,6 +620,14 @@
                                 <span class="text-gray-500 mx-1">|</span>
                                 <span class="text-gray-400">Cam: </span><span id="wsFreeCamFinal" class="text-green-400 font-bold">0.0</span>
                             </div>
+                        </div>
+                        <!-- Save Free Round Score -->
+                        <div class="mt-3 pt-3 border-t border-gray-700 flex items-center justify-between">
+                            <input type="text" id="wsFreeRoundLabel" placeholder="Round #"
+                                class="w-24 px-3 py-1 rounded bg-gray-700 text-white text-sm">
+                            <button onclick="saveWsFreeScore()" class="px-4 py-1 rounded bg-green-600 hover:bg-green-700 text-sm font-medium">
+                                Save Score
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -583,6 +717,98 @@
         const video = document.getElementById('videoPlayer');
         const frameTime = 1/30; // Assuming 30fps, adjust if needed
 
+        // Make body focusable and focus it on load to receive keyboard events
+        document.body.tabIndex = -1;
+        document.body.focus();
+
+        // Ensure keyboard shortcuts work - click anywhere outside inputs to enable
+        document.body.addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA') {
+                // Blur any focused input to enable keyboard shortcuts
+                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) {
+                    document.activeElement.blur();
+                }
+                // Also blur the video element if it has focus
+                if (video) video.blur();
+                // Focus body to receive keyboard events
+                document.body.focus();
+            }
+        });
+
+        // Prevent video from stealing focus
+        if (video) {
+            video.addEventListener('focus', () => {
+                video.blur();
+                document.body.focus();
+            });
+            video.addEventListener('click', (e) => {
+                // Let the click through for play/pause but blur after
+                setTimeout(() => {
+                    video.blur();
+                    document.body.focus();
+                }, 10);
+            });
+        }
+
+        // Video start time (set by videographer)
+        let videoStartTime = {{ video.start_time|default(0, true) }};
+        const videoId = '{{ video.id }}';
+
+        // Apply start time when video loads
+        video.addEventListener('loadedmetadata', () => {
+            if (videoStartTime > 0 && video.currentTime < videoStartTime) {
+                video.currentTime = videoStartTime;
+            }
+        });
+
+        function goToStartTime() {
+            video.currentTime = videoStartTime;
+        }
+
+        function setCurrentAsStart() {
+            const currentTime = parseFloat(video.currentTime.toFixed(2));
+            videoStartTime = currentTime;
+            document.getElementById('startTimeDisplay').textContent = currentTime + 's';
+            saveStartTime(currentTime);
+        }
+
+        function clearStartTime() {
+            videoStartTime = 0;
+            document.getElementById('startTimeDisplay').textContent = '0s';
+            saveStartTime(0);
+        }
+
+        function saveStartTime(time) {
+            const statusEl = document.getElementById('startTimeSaveStatus');
+            statusEl.textContent = 'Saving...';
+            statusEl.classList.remove('text-green-400', 'text-red-400');
+            statusEl.classList.add('text-gray-500');
+
+            fetch(`/api/video/${videoId}/set-start-time`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_time: time })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    statusEl.textContent = 'Saved!';
+                    statusEl.classList.remove('text-gray-500');
+                    statusEl.classList.add('text-green-400');
+                    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+                } else {
+                    statusEl.textContent = 'Error: ' + (data.error || 'Failed to save');
+                    statusEl.classList.remove('text-gray-500');
+                    statusEl.classList.add('text-red-400');
+                }
+            })
+            .catch(err => {
+                statusEl.textContent = 'Error saving';
+                statusEl.classList.remove('text-gray-500');
+                statusEl.classList.add('text-red-400');
+            });
+        }
+
         // Playback speed control
         function setSpeed(speed) {
             video.playbackRate = speed;
@@ -600,95 +826,196 @@
             });
         }
 
-        // Keyboard controls
-        document.addEventListener('keydown', (e) => {
-            // Ignore if typing in an input
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        // Click outside inputs to unfocus them for keyboard shortcuts
+        document.getElementById('videoContainer').addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
+                document.activeElement.blur();
+            }
+        });
+
+        // Keyboard controls - use capture phase to intercept before video element handles them
+        window.addEventListener('keydown', (e) => {
+            // Ignore if typing in an input or select
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+                return;
+            }
+
+            // Handle our custom shortcuts
+            const handled = handleKeyboardShortcut(e);
+            if (handled) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true); // true = capture phase
+
+        function handleKeyboardShortcut(e) {
+            if (!video) {
+                return false;
+            }
 
             switch(e.code) {
                 case 'Space':
-                    e.preventDefault();
                     if (video.paused) {
                         video.play();
                     } else {
                         video.pause();
                     }
-                    break;
+                    return true;
                 case 'ArrowLeft':
-                    e.preventDefault();
                     video.pause();
                     video.currentTime = Math.max(0, video.currentTime - frameTime);
-                    break;
+                    return true;
                 case 'ArrowRight':
-                    e.preventDefault();
                     video.pause();
                     video.currentTime = Math.min(video.duration, video.currentTime + frameTime);
-                    break;
+                    return true;
                 case 'Digit1':
                     setSpeed(0.25);
-                    break;
+                    return true;
                 case 'Digit2':
                     setSpeed(0.5);
-                    break;
+                    return true;
                 case 'Digit3':
                     setSpeed(0.75);
-                    break;
+                    return true;
                 case 'Digit4':
                     setSpeed(1);
-                    break;
+                    return true;
                 case 'KeyX':
-                    e.preventDefault();
-                    if (timerRunning) {
+                    if (isCountUpEvent) {
+                        // Wingsuit: First X starts timer, subsequent X adds points
+                        if (!timerRunning) {
+                            startTimer();
+                        } else {
+                            addScore('x');
+                        }
+                    } else if (timerRunning) {
                         // Score a point while timer is running
                         addScore('x');
                     } else {
                         // Start timer when not running
                         startTimer();
                     }
-                    break;
+                    return true;
                 case 'KeyC':
-                    e.preventDefault();
                     addScore('c');
-                    break;
+                    return true;
                 case 'KeyQ':
-                    e.preventDefault();
                     addScore('q');
-                    break;
+                    return true;
                 case 'KeyP':
-                    e.preventDefault();
                     bustToPoint();
-                    break;
+                    return true;
                 case 'KeyB':
-                    e.preventDefault();
                     pointToBust();
-                    break;
+                    return true;
                 case 'KeyN':
-                    e.preventDefault();
                     toggleNV();
-                    break;
+                    return true;
+                default:
+                    return false;
             }
-        });
+        }
 
         // Scoring functionality
         let scoringTimeline = [];
         let scoringTypes = []; // Track actual types for corrections
+        let scoringTimes = []; // Track timestamps relative to timer start
+        let timerStartTime = 0; // When timer was started
         let xCount = 0;
         let cCount = 0;
         let qCount = 0;
         let nvPenalty = false;
 
         function addScore(type) {
+            // Record timestamp relative to timer start
+            let timestamp = '--';
+            if (timerStartTime > 0) {
+                const elapsed = (Date.now() - timerStartTime) / 1000;
+                timestamp = elapsed.toFixed(1);
+            }
+
             scoringTypes.push(type);
+            scoringTimes.push(timestamp);
+
             if (type === 'x') {
-                scoringTimeline.push('-');
                 xCount++;
             } else if (type === 'c') {
-                scoringTimeline.push('<span class="text-red-500">0</span>');
                 cCount++;
             } else if (type === 'q') {
-                scoringTimeline.push('<span class="text-orange-400">Q</span>');
                 qCount++;
             }
+            updateScoringDisplay();
+        }
+
+        function changeScoreType(index, newType) {
+            const oldType = scoringTypes[index];
+            if (oldType === newType) return;
+
+            // Update counts
+            if (oldType === 'x') xCount--;
+            else if (oldType === 'c') cCount--;
+            else if (oldType === 'q') qCount--;
+
+            if (newType === 'x') xCount++;
+            else if (newType === 'c') cCount++;
+            else if (newType === 'q') qCount++;
+
+            scoringTypes[index] = newType;
+            updateScoringDisplay();
+        }
+
+        function showScoreEditMenu(index, event) {
+            event.stopPropagation();
+            // Remove any existing menus
+            const existingMenu = document.getElementById('scoreEditMenu');
+            if (existingMenu) existingMenu.remove();
+
+            const currentType = scoringTypes[index];
+            const menu = document.createElement('div');
+            menu.id = 'scoreEditMenu';
+            menu.className = 'absolute bg-gray-700 rounded shadow-lg p-2 z-50';
+            menu.style.left = event.clientX + 'px';
+            menu.style.top = event.clientY + 'px';
+
+            const options = [
+                { type: 'x', label: 'Point (X)', color: 'text-green-400' },
+                { type: 'c', label: 'Bust (C)', color: 'text-red-400' },
+                { type: 'q', label: 'Omission (Q)', color: 'text-orange-400' }
+            ];
+
+            menu.innerHTML = options.map(opt => `
+                <button onclick="changeScoreType(${index}, '${opt.type}'); document.getElementById('scoreEditMenu').remove();"
+                    class="block w-full text-left px-3 py-1 rounded hover:bg-gray-600 text-sm ${opt.type === currentType ? 'bg-gray-600' : ''} ${opt.color}">
+                    ${opt.label}
+                </button>
+            `).join('') + `
+                <button onclick="deleteScore(${index}); document.getElementById('scoreEditMenu').remove();"
+                    class="block w-full text-left px-3 py-1 rounded hover:bg-gray-600 text-sm text-red-500 mt-1 border-t border-gray-600 pt-1">
+                    Delete
+                </button>
+            `;
+
+            document.body.appendChild(menu);
+
+            // Close menu when clicking elsewhere
+            setTimeout(() => {
+                document.addEventListener('click', function closeMenu() {
+                    const m = document.getElementById('scoreEditMenu');
+                    if (m) m.remove();
+                    document.removeEventListener('click', closeMenu);
+                });
+            }, 10);
+        }
+
+        function deleteScore(index) {
+            const type = scoringTypes[index];
+            if (type === 'x') xCount--;
+            else if (type === 'c') cCount--;
+            else if (type === 'q') qCount--;
+
+            scoringTypes.splice(index, 1);
+            scoringTimes.splice(index, 1);
             updateScoringDisplay();
         }
 
@@ -743,10 +1070,29 @@
 
         function updateScoringDisplay() {
             const timeline = document.getElementById('scoringTimeline');
-            if (scoringTimeline.length === 0) {
+            if (scoringTypes.length === 0) {
                 timeline.innerHTML = '<span class="text-gray-500">Press X, C, or Q to score...</span>';
             } else {
-                timeline.innerHTML = scoringTimeline.join(' ');
+                // Generate clickable timeline with timestamps
+                const timelineHtml = scoringTypes.map((type, idx) => {
+                    let display, color;
+                    if (type === 'x') {
+                        display = '-';
+                        color = 'text-green-400 hover:bg-green-900';
+                    } else if (type === 'c') {
+                        display = '0';
+                        color = 'text-red-400 hover:bg-red-900';
+                    } else {
+                        display = 'x';
+                        color = 'text-orange-400 hover:bg-orange-900';
+                    }
+                    const time = scoringTimes[idx];
+                    return `<span class="cursor-pointer px-1 rounded ${color} relative group" onclick="showScoreEditMenu(${idx}, event)" title="Click to edit (${time}s)">
+                        ${display}
+                        <span class="absolute -top-5 left-1/2 transform -translate-x-1/2 text-[10px] text-gray-500 opacity-0 group-hover:opacity-100">${time}s</span>
+                    </span>`;
+                }).join(' ');
+                timeline.innerHTML = timelineHtml;
             }
 
             document.getElementById('xCount').textContent = xCount;
@@ -774,6 +1120,8 @@
         function clearScoring() {
             scoringTimeline = [];
             scoringTypes = [];
+            scoringTimes = [];
+            timerStartTime = 0;
             xCount = 0;
             cCount = 0;
             qCount = 0;
@@ -781,8 +1129,206 @@
             document.getElementById('nvBtn').classList.remove('bg-red-600', 'hover:bg-red-700');
             document.getElementById('nvBtn').classList.add('bg-gray-700', 'hover:bg-gray-600');
             document.getElementById('nvIndicator').classList.add('hidden');
+            document.getElementById('saveScoreSection').classList.add('hidden');
             updateScoringDisplay();
         }
+
+        // Score saving functionality
+        // videoId already defined above
+        let savedScores = [];
+
+        function loadSavedScores() {
+            const stored = localStorage.getItem('practiceScores_' + videoId);
+            if (stored) {
+                savedScores = JSON.parse(stored);
+            }
+            displaySavedScores();
+        }
+
+        function saveCurrentScore() {
+            const roundLabel = document.getElementById('scoreRoundLabel').value || 'Round ' + (savedScores.length + 1);
+            const eventType = document.getElementById('eventType').value;
+            const workingTime = document.getElementById('timerDisplay').textContent;
+
+            const scoreData = {
+                id: Date.now(),
+                round: roundLabel,
+                event: eventType,
+                points: xCount,
+                busts: cCount,
+                omissions: qCount,
+                nv: nvPenalty,
+                total: nvPenalty ? 0 : (xCount - qCount),
+                workingTime: workingTime,
+                timeline: scoringTypes.join(''),
+                timestamp: new Date().toLocaleString()
+            };
+
+            savedScores.push(scoreData);
+            localStorage.setItem('practiceScores_' + videoId, JSON.stringify(savedScores));
+
+            document.getElementById('saveScoreStatus').textContent = 'Saved!';
+            document.getElementById('saveScoreStatus').classList.remove('text-gray-500');
+            document.getElementById('saveScoreStatus').classList.add('text-green-400');
+            setTimeout(() => {
+                document.getElementById('saveScoreStatus').textContent = '';
+                document.getElementById('saveScoreStatus').classList.remove('text-green-400');
+            }, 2000);
+
+            document.getElementById('scoreRoundLabel').value = '';
+            displaySavedScores();
+        }
+
+        function displaySavedScores() {
+            const container = document.getElementById('savedScoresList');
+
+            if (savedScores.length === 0) {
+                container.innerHTML = '<div class="text-gray-500 text-sm text-center py-2">No saved scores yet</div>';
+                return;
+            }
+
+            container.innerHTML = savedScores.map((score, idx) => {
+                // Different display for different score types
+                if (score.type === 'wingsuit') {
+                    // Wingsuit Compulsory
+                    return `
+                        <div class="bg-gray-800 rounded p-3 flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3">
+                                    <span class="font-medium text-white">${score.round}</span>
+                                    <span class="text-xs text-gray-500">WS Compulsory</span>
+                                    <span class="text-xs text-gray-500">${score.workingTime}</span>
+                                </div>
+                                <div class="text-xs text-gray-400 mt-1">
+                                    Style: <span class="text-yellow-400">${score.style}</span> |
+                                    Grips: <span class="text-yellow-400">${score.grips}</span>
+                                    ${score.nv ? '<span class="text-red-500 ml-2">NV</span>' : ''}
+                                </div>
+                            </div>
+                            <button onclick="deleteSavedScore(${score.id})" class="text-red-400 hover:text-red-300 text-xs">×</button>
+                        </div>
+                    `;
+                } else if (score.type === 'wingsuit-free') {
+                    // Wingsuit Free Round
+                    return `
+                        <div class="bg-gray-800 rounded p-3 flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3">
+                                    <span class="font-medium text-white">${score.round}</span>
+                                    <span class="text-xs text-gray-500">WS Free</span>
+                                    <span class="text-xs text-gray-500">${score.workingTime}</span>
+                                </div>
+                                <div class="text-xs text-gray-400 mt-1">
+                                    Style: <span class="text-yellow-400">${score.style}</span> |
+                                    Dive: <span class="text-yellow-400">${score.dive}</span> |
+                                    Cam: <span class="text-yellow-400">${score.camerawork}</span>
+                                    ${score.nv ? '<span class="text-red-500 ml-2">NV</span>' : ''}
+                                </div>
+                            </div>
+                            <button onclick="deleteSavedScore(${score.id})" class="text-red-400 hover:text-red-300 text-xs">×</button>
+                        </div>
+                    `;
+                } else {
+                    // Formation Skydiving (X/C/Q scoring)
+                    return `
+                        <div class="bg-gray-800 rounded p-3 flex items-center justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-3">
+                                    <span class="font-medium text-white">${score.round}</span>
+                                    <span class="text-xs text-gray-500">${score.event}</span>
+                                    <span class="text-xs text-gray-500">${score.workingTime}</span>
+                                </div>
+                                <div class="text-xs text-gray-400 mt-1">
+                                    <span class="text-green-400">${score.points}X</span> |
+                                    <span class="text-red-400">${score.busts}C</span> |
+                                    <span class="text-orange-400">${score.omissions}Q</span>
+                                    ${score.nv ? '<span class="text-red-500 ml-2">NV</span>' : ''}
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="text-xl font-bold ${score.nv ? 'text-red-400' : (score.total > 0 ? 'text-green-400' : 'text-yellow-400')}">${score.total}</span>
+                                <button onclick="deleteSavedScore(${score.id})" class="text-red-400 hover:text-red-300 text-xs">×</button>
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
+        }
+
+        function deleteSavedScore(scoreId) {
+            savedScores = savedScores.filter(s => s.id !== scoreId);
+            localStorage.setItem('practiceScores_' + videoId, JSON.stringify(savedScores));
+            displaySavedScores();
+        }
+
+        function clearSavedScores() {
+            if (!confirm('Clear all saved scores for this video?')) return;
+            savedScores = [];
+            localStorage.removeItem('practiceScores_' + videoId);
+            displaySavedScores();
+        }
+
+        function showSaveScoreSection() {
+            document.getElementById('saveScoreSection').classList.remove('hidden');
+        }
+
+        function saveWsCompulsoryScore() {
+            const roundLabel = document.getElementById('wsCompRoundLabel').value || 'Compulsory ' + (savedScores.length + 1);
+            const workingTime = document.getElementById('timerDisplay').textContent;
+            const finalStyle = document.getElementById('wsFinalStyle').textContent;
+            const finalGrips = document.getElementById('wsFinalGrips').textContent;
+
+            const scoreData = {
+                id: Date.now(),
+                round: roundLabel,
+                event: 'ws-compulsory',
+                type: 'wingsuit',
+                style: parseFloat(finalStyle),
+                grips: parseInt(finalGrips),
+                nv: wsCompulsoryNV,
+                workingTime: workingTime,
+                timestamp: new Date().toLocaleString()
+            };
+
+            savedScores.push(scoreData);
+            localStorage.setItem('practiceScores_' + videoId, JSON.stringify(savedScores));
+            document.getElementById('wsCompRoundLabel').value = '';
+            displaySavedScores();
+        }
+
+        function saveWsFreeScore() {
+            const roundLabel = document.getElementById('wsFreeRoundLabel').value || 'Free Round ' + (savedScores.length + 1);
+            const workingTime = document.getElementById('timerDisplay').textContent;
+            const styleScore = document.getElementById('wsFreeStyleFinal').textContent;
+            const diveScore = document.getElementById('wsFreeDiveFinal').textContent;
+            const camScore = document.getElementById('wsFreeCamFinal').textContent;
+
+            const scoreData = {
+                id: Date.now(),
+                round: roundLabel,
+                event: 'ws-free',
+                type: 'wingsuit-free',
+                style: parseFloat(styleScore),
+                dive: parseFloat(diveScore),
+                camerawork: parseFloat(camScore),
+                nv: wsFreeNV,
+                workingTime: workingTime,
+                timestamp: new Date().toLocaleString()
+            };
+
+            savedScores.push(scoreData);
+            localStorage.setItem('practiceScores_' + videoId, JSON.stringify(savedScores));
+            document.getElementById('wsFreeRoundLabel').value = '';
+            displaySavedScores();
+        }
+
+        // Load saved scores on page load
+        loadSavedScores();
+
+        // Prevent video from capturing keyboard events by removing focus
+        video.addEventListener('focus', () => {
+            video.blur();
+        });
 
         // Timer functionality
         let timerInterval = null;
@@ -790,8 +1336,12 @@
         let timeRemaining = 0;
         let elapsedTime = 0;
         let isSpeedEvent = false;
+        let isCountUpEvent = false; // For Wingsuit - counts up like a stopwatch
         let speedCompleted = false;
         let freezeTimeout = null;
+
+        // Initialize event type on page load (after timer variables are declared)
+        updateEventType();
 
         function updateEventType() {
             const select = document.getElementById('eventType');
@@ -801,6 +1351,7 @@
 
             isSpeedEvent = (eventType === '10way');
             const isWingsuit = (eventType === 'ws-compulsory' || eventType === 'ws-free');
+            isCountUpEvent = isWingsuit; // Wingsuit uses count-up timer like speed events
 
             // Hide all special sections first
             document.getElementById('speedInfo').classList.add('hidden');
@@ -820,13 +1371,18 @@
                 document.getElementById('speedInfo').classList.remove('hidden');
                 document.getElementById('timerBtn').textContent = 'Start (X)';
             } else if (isWingsuit) {
-                document.getElementById('durationLabel').textContent = 'FlySight timing';
+                document.getElementById('durationLabel').textContent = 'X to start/stop working time';
+                document.getElementById('speedInfo').textContent = 'Wingsuit: Press X to start timing when working time begins, X again to stop.';
+                document.getElementById('speedInfo').classList.remove('hidden');
+                document.getElementById('timerBtn').textContent = 'Start (X)';
                 document.getElementById('wingsuitSection').classList.remove('hidden');
                 if (eventType === 'ws-compulsory') {
                     document.getElementById('wsCompulsorySection').classList.remove('hidden');
                 } else {
                     document.getElementById('wsFreeSection').classList.remove('hidden');
                 }
+                // Set up mode-specific defaults
+                updateWsMode();
             } else {
                 document.getElementById('durationLabel').textContent = duration + 's working time';
             }
@@ -843,9 +1399,93 @@
         function startTimer() {
             if (isSpeedEvent) {
                 startSpeedTimer();
+            } else if (isCountUpEvent) {
+                startCountUpTimer();
             } else {
                 startCountdownTimer();
             }
+        }
+
+        function startCountUpTimer() {
+            // Count-up stopwatch for Wingsuit events - X only starts, never stops manually
+            if (timerRunning) {
+                // Already running, do nothing (X now adds points instead)
+                return;
+            }
+
+            // Competition mode: require FlySight data
+            if (wsCompetitionMode && (!flysightData || flysightData.length === 0)) {
+                document.getElementById('wsCompetitionWarning').classList.remove('hidden');
+                document.getElementById('timerStatus').textContent = 'FlySight required';
+                document.getElementById('timerStatus').classList.remove('text-gray-500', 'text-green-400');
+                document.getElementById('timerStatus').classList.add('text-red-400');
+                return;
+            }
+
+            // Start the timer
+            elapsedTime = 0;
+            timerRunning = true;
+            timerStartTime = Date.now(); // Record start time for scoring timestamps
+
+            document.getElementById('timerBtn').textContent = 'Running...';
+            document.getElementById('timerBtn').classList.remove('bg-green-600', 'hover:bg-green-700');
+            document.getElementById('timerBtn').classList.add('bg-yellow-600', 'cursor-not-allowed');
+            document.getElementById('timerStatus').textContent = 'Timing...';
+            document.getElementById('timerStatus').classList.remove('text-gray-500', 'text-yellow-400');
+            document.getElementById('timerStatus').classList.add('text-green-400');
+
+            document.getElementById('freezeOverlay').classList.add('hidden');
+            video.play();
+
+            timerInterval = setInterval(() => {
+                elapsedTime += 10;
+                updateCountUpDisplay();
+
+                // Auto-stop when working time is reached (if FlySight data loaded)
+                if (wsWorkingTime > 0) {
+                    const currentSeconds = elapsedTime / 1000;
+                    if (currentSeconds >= wsWorkingTime) {
+                        stopCountUpTimer();
+                    }
+                }
+            }, 10);
+        }
+
+        function stopCountUpTimer() {
+            if (!timerRunning) return;
+
+            clearInterval(timerInterval);
+            timerInterval = null;
+            timerRunning = false;
+
+            const finalTime = (elapsedTime / 1000).toFixed(2);
+            document.getElementById('timerBtn').textContent = 'Start (X)';
+            document.getElementById('timerBtn').classList.remove('bg-yellow-600', 'cursor-not-allowed');
+            document.getElementById('timerBtn').classList.add('bg-green-600', 'hover:bg-green-700');
+
+            // Show comparison between judge time and FlySight time
+            let statusText = `Judge: ${finalTime}s`;
+            if (wsWorkingTime > 0) {
+                const diff = (parseFloat(finalTime) - wsWorkingTime).toFixed(2);
+                const diffSign = diff >= 0 ? '+' : '';
+                statusText += ` (${diffSign}${diff}s vs FlySight)`;
+            }
+            document.getElementById('timerStatus').textContent = statusText;
+            document.getElementById('timerStatus').classList.remove('text-green-400');
+            document.getElementById('timerStatus').classList.add('text-yellow-400');
+            document.getElementById('freezeOverlay').classList.remove('hidden');
+            video.pause();
+            // Show save score section
+            showSaveScoreSection();
+        }
+
+        function updateCountUpDisplay() {
+            const seconds = Math.floor(elapsedTime / 1000);
+            const centiseconds = Math.floor((elapsedTime % 1000) / 10);
+            const display = `${seconds.toString().padStart(2, '0')}.${centiseconds.toString().padStart(2, '0')}`;
+            document.getElementById('timerDisplay').textContent = display;
+            document.getElementById('timerDisplay').classList.remove('text-gray-400');
+            document.getElementById('timerDisplay').classList.add('text-white');
         }
 
         function startCountdownTimer() {
@@ -857,6 +1497,7 @@
             const duration = getEventDuration();
             timeRemaining = duration;
             timerRunning = true;
+            timerStartTime = Date.now(); // Record start time for scoring timestamps
 
             document.getElementById('timerBtn').textContent = 'Stop (X)';
             document.getElementById('timerBtn').classList.remove('bg-green-600', 'hover:bg-green-700');
@@ -881,6 +1522,8 @@
                     document.getElementById('timerStatus').classList.add('text-yellow-400');
                     document.getElementById('timerDisplay').classList.add('text-yellow-400');
                     document.getElementById('freezeOverlay').classList.remove('hidden');
+                    // Show save score section
+                    showSaveScoreSection();
                 }
             }, 1000);
         }
@@ -979,6 +1622,8 @@
             timeRemaining = 0;
             elapsedTime = 0;
             speedCompleted = false;
+            timerRunning = false;
+            timerStartTime = 0;
             document.getElementById('timerDisplay').textContent = '--:--';
             document.getElementById('timerDisplay').classList.remove('text-yellow-400', 'text-white');
             document.getElementById('timerDisplay').classList.add('text-gray-400');
@@ -986,6 +1631,9 @@
             document.getElementById('timerStatus').classList.remove('text-green-400', 'text-yellow-400', 'text-red-400');
             document.getElementById('timerStatus').classList.add('text-gray-500');
             document.getElementById('freezeOverlay').classList.add('hidden');
+            document.getElementById('timerBtn').textContent = 'Start (X)';
+            document.getElementById('timerBtn').classList.remove('bg-red-600', 'hover:bg-red-700', 'bg-blue-600', 'hover:bg-blue-700');
+            document.getElementById('timerBtn').classList.add('bg-green-600', 'hover:bg-green-700');
         }
 
         function updateTimerDisplay() {
@@ -998,8 +1646,71 @@
         }
 
         // FlySight CSV Parsing
-        let flysightData = null;
+        let flysightDataRaw = null; // Raw MSL data
+        let flysightData = null;    // Adjusted for ground elevation (AGL)
         let wsWorkingTime = 0;
+        let wsCompetitionMode = false; // false = library/practice, true = competition
+
+        function updateWsMode() {
+            const selectedMode = document.querySelector('input[name="wsMode"]:checked').value;
+            wsCompetitionMode = (selectedMode === 'competition');
+
+            const warningEl = document.getElementById('wsCompetitionWarning');
+
+            if (wsCompetitionMode) {
+                // Competition mode: require FlySight data
+                if (!flysightData || flysightData.length === 0) {
+                    warningEl.classList.remove('hidden');
+                    // Clear any default working time
+                    document.getElementById('flysightWorkingTime').textContent = '--.- s';
+                    document.getElementById('upperBoundary').textContent = '-- ft';
+                    document.getElementById('lowerBoundary').textContent = '-- ft';
+                    wsWorkingTime = 0;
+                } else {
+                    warningEl.classList.add('hidden');
+                }
+            } else {
+                // Library mode: FlySight optional, use default if not provided
+                warningEl.classList.add('hidden');
+                if (!flysightData || flysightData.length === 0) {
+                    setDefaultWorkingTime();
+                }
+            }
+        }
+
+        function setDefaultWorkingTime() {
+            // Library mode default: 12,000 ft AGL upper boundary, 90s working time
+            const defaultUpperBoundary = 12000; // ft AGL
+            // Check lower exit rule toggle (though 12,000 ft > 11,500 ft so normally 7500 ft)
+            const lowerExitRuleEnabled = document.getElementById('lowerExitRule').checked;
+            const altWindow = (lowerExitRuleEnabled && defaultUpperBoundary <= 11500) ? 5000 : 7500;
+            const defaultLowerBoundary = defaultUpperBoundary - altWindow;
+            const defaultWorkingTime = 90; // 90 seconds for library/practice mode
+
+            document.getElementById('upperBoundary').textContent = defaultUpperBoundary.toLocaleString() + ' ft';
+            document.getElementById('upperBoundary').classList.remove('text-red-400', 'text-yellow-400');
+            document.getElementById('upperBoundary').classList.add('text-green-400');
+            document.getElementById('lowerBoundary').textContent = defaultLowerBoundary.toLocaleString() + ' ft';
+            document.getElementById('altitudeWindow').textContent = altWindow.toLocaleString() + ' ft';
+            document.getElementById('flysightWorkingTime').textContent = defaultWorkingTime + ' s (default)';
+            document.getElementById('flysightTimeDisplay').textContent = defaultWorkingTime + 's';
+            document.getElementById('flysightTimeCompare').classList.remove('hidden');
+            wsWorkingTime = defaultWorkingTime; // Auto-stop at 90 seconds in library mode
+        }
+
+        function recalculateFlySight() {
+            if (!flysightDataRaw || flysightDataRaw.length === 0) return;
+
+            // Ground elevation is in meters, convert to feet (altitudes are stored in feet)
+            const groundElevMeters = parseFloat(document.getElementById('groundElevation').value) || 0;
+            const groundElevFeet = groundElevMeters * 3.28084;
+            flysightData = flysightDataRaw.map(d => ({
+                time: d.time,
+                alt: d.alt - groundElevFeet,
+                velD: d.velD || 0
+            }));
+            calculateWorkingTime();
+        }
 
         function parseFlySight(event) {
             const file = event.target.files[0];
@@ -1011,23 +1722,27 @@
                 const lines = csv.split('\n');
 
                 // Find header row and data
+                // FlySight v1 uses: time,lat,lon,hMSL,velN,velE,velD,...
+                // FlySight v2 may use different column names
                 let headerIndex = -1;
                 for (let i = 0; i < lines.length; i++) {
-                    if (lines[i].toLowerCase().includes('time') && lines[i].toLowerCase().includes('alt')) {
+                    const line = lines[i].toLowerCase();
+                    if (line.includes('time') && (line.includes('alt') || line.includes('hmsl') || line.includes('msl') || line.includes('elev'))) {
                         headerIndex = i;
                         break;
                     }
                 }
 
                 if (headerIndex === -1) {
-                    document.getElementById('flysightStatus').textContent = 'Invalid CSV format';
+                    document.getElementById('flysightStatus').textContent = 'Invalid CSV format - needs time and altitude columns';
                     document.getElementById('flysightStatus').classList.add('text-red-400');
                     return;
                 }
 
                 const headers = lines[headerIndex].split(',').map(h => h.trim().toLowerCase());
-                const timeCol = headers.findIndex(h => h === 'time' || h === 'time(s)');
-                const altCol = headers.findIndex(h => h === 'hmsl' || h === 'alt' || h === 'altitude' || h.includes('alt'));
+                const timeCol = headers.findIndex(h => h === 'time' || h === 'time(s)' || h.includes('time'));
+                const altCol = headers.findIndex(h => h === 'hmsl' || h === 'alt' || h === 'altitude' || h.includes('alt') || h.includes('msl') || h.includes('elev'));
+                const velDCol = headers.findIndex(h => h === 'veld' || h === 'veldown' || h === 'vel_d');
 
                 if (timeCol === -1 || altCol === -1) {
                     document.getElementById('flysightStatus').textContent = 'Missing time/altitude columns';
@@ -1037,15 +1752,40 @@
 
                 // Parse data rows
                 const data = [];
+                let baseTime = null;
+
                 for (let i = headerIndex + 1; i < lines.length; i++) {
-                    const cols = lines[i].split(',');
+                    const line = lines[i].trim();
+                    // Skip empty lines and units row (starts with comma or contains only units like (deg))
+                    if (!line || line.startsWith(',') || line.includes('(deg)') || line.includes('(m)') || line.includes('(m/s)')) {
+                        continue;
+                    }
+
+                    const cols = line.split(',');
                     if (cols.length > Math.max(timeCol, altCol)) {
-                        const time = parseFloat(cols[timeCol]);
+                        let time;
+                        const timeStr = cols[timeCol];
+
+                        // Check if time is ISO format (contains T or Z) or numeric
+                        if (timeStr.includes('T') || timeStr.includes('Z')) {
+                            // ISO timestamp - convert to seconds from first timestamp
+                            const timestamp = new Date(timeStr).getTime();
+                            if (isNaN(timestamp)) continue;
+                            if (baseTime === null) baseTime = timestamp;
+                            time = (timestamp - baseTime) / 1000;
+                        } else {
+                            // Numeric time in seconds
+                            time = parseFloat(timeStr);
+                            if (isNaN(time)) continue;
+                        }
+
                         const alt = parseFloat(cols[altCol]);
-                        if (!isNaN(time) && !isNaN(alt)) {
+                        const velD = velDCol !== -1 ? parseFloat(cols[velDCol]) : 0;
+
+                        if (!isNaN(alt)) {
                             // Convert meters to feet if needed (FlySight usually reports in meters)
                             const altFt = alt < 5000 ? alt * 3.28084 : alt; // Assume meters if < 5000
-                            data.push({ time, alt: altFt });
+                            data.push({ time, alt: altFt, velD: velD });
                         }
                     }
                 }
@@ -1056,11 +1796,25 @@
                     return;
                 }
 
-                flysightData = data;
-                calculateWorkingTime();
-                document.getElementById('flysightStatus').textContent = `Loaded ${data.length} points`;
+                flysightDataRaw = data; // Store raw MSL data
+                recalculateFlySight();  // Apply ground elevation and calculate
+
+                // Show working time in status
+                let statusText = `${data.length} pts`;
+                if (wsWorkingTime > 0) {
+                    statusText += ` | WT: ${wsWorkingTime}s`;
+                }
+                document.getElementById('flysightStatus').textContent = statusText;
                 document.getElementById('flysightStatus').classList.remove('text-red-400');
                 document.getElementById('flysightStatus').classList.add('text-green-400');
+
+                // Make sure wingsuitSection is visible to show the detailed data
+                document.getElementById('wingsuitSection').classList.remove('hidden');
+
+                // Hide competition warning since FlySight data is now loaded
+                document.getElementById('wsCompetitionWarning').classList.add('hidden');
+                document.getElementById('timerStatus').textContent = '';
+                document.getElementById('timerStatus').classList.remove('text-red-400');
             };
             reader.readAsText(file);
         }
@@ -1068,19 +1822,35 @@
         function calculateWorkingTime() {
             if (!flysightData || flysightData.length === 0) return;
 
-            // Find max altitude (upper boundary)
-            const maxAlt = Math.max(...flysightData.map(d => d.alt));
-            const altWindow = 7500; // 7500 ft window
-            const lowerBoundary = maxAlt - altWindow;
-
-            // Find first crossing of upper boundary (going down)
+            // Find upper boundary: altitude when vertical velocity first reaches 10 m/s after exit
+            let upperBoundaryAlt = null;
             let upperCrossTime = null;
-            for (let i = 1; i < flysightData.length; i++) {
-                if (flysightData[i-1].alt >= maxAlt - 100 && flysightData[i].alt < maxAlt - 100) {
+            for (let i = 0; i < flysightData.length; i++) {
+                if (flysightData[i].velD >= 10) { // velD >= 10 m/s
+                    upperBoundaryAlt = flysightData[i].alt;
                     upperCrossTime = flysightData[i].time;
                     break;
                 }
             }
+
+            // If no velD data or never reaches 10 m/s, fall back to max altitude
+            if (upperBoundaryAlt === null) {
+                upperBoundaryAlt = Math.max(...flysightData.map(d => d.alt));
+                // Find when altitude drops 100ft below max as fallback
+                for (let i = 1; i < flysightData.length; i++) {
+                    if (flysightData[i].alt < upperBoundaryAlt - 100) {
+                        upperCrossTime = flysightData[i].time;
+                        break;
+                    }
+                }
+            }
+
+            // WS Acrobatic altitude window rules:
+            // Normal: 7500 ft below upper boundary
+            // If lower exit rule enabled and exit altitude <= 11,500 ft AGL (3505m): 5000 ft below upper boundary
+            const lowerExitRuleEnabled = document.getElementById('lowerExitRule').checked;
+            const altWindow = (lowerExitRuleEnabled && upperBoundaryAlt <= 11500) ? 5000 : 7500;
+            const lowerBoundary = upperBoundaryAlt - altWindow;
 
             // Find first crossing of lower boundary
             let lowerCrossTime = null;
@@ -1092,13 +1862,31 @@
             }
 
             // Update display
-            document.getElementById('upperBoundary').textContent = Math.round(maxAlt).toLocaleString() + ' ft';
+            // WS Acrobatic altitude limits (FAI/IPC rules):
+            // Min exit: 3658m = 12,000ft, Max exit: 3810m = 12,500ft
+            const upperLimitMin = 12000; // Minimum exit altitude
+            const upperLimitMax = 12500; // Maximum exit altitude
+            const upperEl = document.getElementById('upperBoundary');
+            upperEl.textContent = Math.round(upperBoundaryAlt).toLocaleString() + ' ft';
+            upperEl.classList.remove('text-white', 'text-green-400', 'text-red-400', 'text-yellow-400');
+            if (upperBoundaryAlt >= upperLimitMin && upperBoundaryAlt <= upperLimitMax) {
+                upperEl.classList.add('text-green-400'); // Within limits
+            } else if (upperBoundaryAlt < upperLimitMin) {
+                upperEl.classList.add('text-yellow-400'); // Below minimum (too low)
+            } else {
+                upperEl.classList.add('text-red-400'); // Above maximum (too high)
+            }
+
             document.getElementById('lowerBoundary').textContent = Math.round(lowerBoundary).toLocaleString() + ' ft';
             document.getElementById('altitudeWindow').textContent = altWindow.toLocaleString() + ' ft';
 
             if (upperCrossTime !== null && lowerCrossTime !== null) {
-                wsWorkingTime = (lowerCrossTime - upperCrossTime).toFixed(1);
+                wsWorkingTime = parseFloat((lowerCrossTime - upperCrossTime).toFixed(1));
                 document.getElementById('flysightWorkingTime').textContent = wsWorkingTime + ' s';
+
+                // Show FlySight time next to judge timer for comparison
+                document.getElementById('flysightTimeDisplay').textContent = wsWorkingTime + 's';
+                document.getElementById('flysightTimeCompare').classList.remove('hidden');
 
                 // Set timer duration for freeze frame
                 const eventType = document.getElementById('eventType').value;
@@ -1107,13 +1895,331 @@
                 }
             } else {
                 document.getElementById('flysightWorkingTime').textContent = 'N/A';
+                document.getElementById('flysightTimeCompare').classList.add('hidden');
+                wsWorkingTime = 0;
             }
+
+            // Draw the altitude graph
+            drawFlySightGraph(upperBoundaryAlt, lowerBoundary, upperCrossTime, lowerCrossTime);
+        }
+
+        // FlySight Graph Modal
+        let flysightModalChart = null;
+        let detectedUpperCrossTime = null;
+        let confirmedWorkingTime = null;
+        let cropStart = 0;
+        let cropEnd = 0;
+        let croppedFlysightData = null;
+
+        function drawFlySightGraph(upperBoundaryAlt, lowerBoundary, upperCrossTime, lowerCrossTime) {
+            if (!flysightData || flysightData.length === 0) {
+                document.getElementById('flysightGraphSection').classList.add('hidden');
+                return;
+            }
+            document.getElementById('flysightGraphSection').classList.remove('hidden');
+            detectedUpperCrossTime = upperCrossTime;
+        }
+
+        function openFlySightModal() {
+            if (!flysightData || flysightData.length === 0) return;
+
+            const modal = document.getElementById('flysightModal');
+            modal.classList.remove('hidden');
+
+            // Reset crop values
+            cropStart = 0;
+            cropEnd = 0;
+            const maxTime = flysightData[flysightData.length - 1].time;
+
+            // Set up crop sliders
+            document.getElementById('cropStartSlider').max = maxTime / 2;
+            document.getElementById('cropStartSlider').value = 0;
+            document.getElementById('cropStartInput').value = 0;
+            document.getElementById('cropEndSlider').max = maxTime / 2;
+            document.getElementById('cropEndSlider').value = 0;
+            document.getElementById('cropEndInput').value = 0;
+
+            // Apply initial crop and draw
+            updateCropPreview();
+        }
+
+        function closeFlySightModal() {
+            document.getElementById('flysightModal').classList.add('hidden');
+            if (flysightModalChart) {
+                flysightModalChart.destroy();
+                flysightModalChart = null;
+            }
+        }
+
+        function updateCropFromInput(type) {
+            if (type === 'start') {
+                const val = parseFloat(document.getElementById('cropStartInput').value) || 0;
+                document.getElementById('cropStartSlider').value = val;
+            } else {
+                const val = parseFloat(document.getElementById('cropEndInput').value) || 0;
+                document.getElementById('cropEndSlider').value = val;
+            }
+            updateCropPreview();
+        }
+
+        function updateCropPreview() {
+            cropStart = parseFloat(document.getElementById('cropStartSlider').value) || 0;
+            cropEnd = parseFloat(document.getElementById('cropEndSlider').value) || 0;
+
+            document.getElementById('cropStartInput').value = cropStart.toFixed(1);
+            document.getElementById('cropEndInput').value = cropEnd.toFixed(1);
+
+            // Apply crop to data
+            const maxTime = flysightData[flysightData.length - 1].time;
+            const endTime = maxTime - cropEnd;
+
+            croppedFlysightData = flysightData.filter(d => d.time >= cropStart && d.time <= endTime);
+
+            if (croppedFlysightData.length === 0) {
+                document.getElementById('modalWorkingTime').textContent = 'No data';
+                return;
+            }
+
+            // Recalculate working time for cropped data
+            recalculateCroppedWorkingTime();
+        }
+
+        function recalculateCroppedWorkingTime() {
+            if (!croppedFlysightData || croppedFlysightData.length === 0) return;
+
+            // Find upper boundary (velD >= 10)
+            let upperBoundaryAlt = null;
+            let upperCrossTime = null;
+            for (let i = 0; i < croppedFlysightData.length; i++) {
+                if (croppedFlysightData[i].velD >= 10) {
+                    upperBoundaryAlt = croppedFlysightData[i].alt;
+                    upperCrossTime = croppedFlysightData[i].time;
+                    break;
+                }
+            }
+
+            // Fallback to max altitude
+            if (upperBoundaryAlt === null) {
+                upperBoundaryAlt = Math.max(...croppedFlysightData.map(d => d.alt));
+                for (let i = 1; i < croppedFlysightData.length; i++) {
+                    if (croppedFlysightData[i].alt < upperBoundaryAlt - 100) {
+                        upperCrossTime = croppedFlysightData[i].time;
+                        break;
+                    }
+                }
+            }
+
+            // WS Acrobatic altitude window rules:
+            // Normal: 7500 ft below upper boundary
+            // If lower exit rule enabled and exit altitude <= 11,500 ft AGL: 5000 ft below upper boundary
+            const lowerExitRuleEnabled = document.getElementById('lowerExitRule').checked;
+            const altWindow = (lowerExitRuleEnabled && upperBoundaryAlt <= 11500) ? 5000 : 7500;
+            const lowerBoundary = upperBoundaryAlt - altWindow;
+
+            // Find lower boundary crossing
+            let lowerCrossTime = null;
+            for (let i = 1; i < croppedFlysightData.length; i++) {
+                if (croppedFlysightData[i-1].alt > lowerBoundary && croppedFlysightData[i].alt <= lowerBoundary) {
+                    lowerCrossTime = croppedFlysightData[i].time;
+                    break;
+                }
+            }
+
+            // Update modal displays
+            document.getElementById('modalUpperBoundary').textContent = Math.round(upperBoundaryAlt).toLocaleString() + ' ft';
+            document.getElementById('modalLowerBoundary').textContent = Math.round(lowerBoundary).toLocaleString() + ' ft';
+
+            const startTime = croppedFlysightData[0].time;
+            const endTime = croppedFlysightData[croppedFlysightData.length - 1].time;
+            document.getElementById('modalDataRange').textContent = startTime.toFixed(1) + 's - ' + endTime.toFixed(1) + 's';
+
+            // Set up working time slider
+            const slider = document.getElementById('workingTimeStartSlider');
+            slider.min = startTime;
+            slider.max = endTime;
+            slider.value = upperCrossTime || startTime;
+            slider.step = 0.1;
+            document.getElementById('workingTimeStartDisplay').textContent = (upperCrossTime || startTime).toFixed(1) + 's';
+
+            if (upperCrossTime !== null && lowerCrossTime !== null) {
+                const wt = parseFloat((lowerCrossTime - upperCrossTime).toFixed(1));
+                document.getElementById('modalWorkingTime').textContent = wt + ' s';
+            } else {
+                document.getElementById('modalWorkingTime').textContent = 'N/A';
+            }
+
+            // Color upper boundary
+            const upperEl = document.getElementById('modalUpperBoundary');
+            upperEl.classList.remove('text-green-400', 'text-red-400', 'text-yellow-400');
+            if (upperBoundaryAlt >= 12000 && upperBoundaryAlt <= 12500) {
+                upperEl.classList.add('text-green-400');
+            } else if (upperBoundaryAlt < 12000) {
+                upperEl.classList.add('text-yellow-400');
+            } else {
+                upperEl.classList.add('text-red-400');
+            }
+
+            // Draw chart
+            drawModalChart(upperBoundaryAlt, lowerBoundary, upperCrossTime);
+        }
+
+        function adjustWorkingTimeStart(value) {
+            const newStartTime = parseFloat(value);
+            document.getElementById('workingTimeStartDisplay').textContent = newStartTime.toFixed(1) + 's';
+
+            // Find altitude at new start time
+            let startAlt = null;
+            for (let i = 0; i < croppedFlysightData.length; i++) {
+                if (croppedFlysightData[i].time >= newStartTime) {
+                    startAlt = croppedFlysightData[i].alt;
+                    break;
+                }
+            }
+            if (startAlt === null) return;
+
+            // WS Acrobatic altitude window: 5000 ft if lower exit rule enabled and exit <= 11,500 ft, else 7500 ft
+            const lowerExitRuleEnabled = document.getElementById('lowerExitRule').checked;
+            const altWindow = (lowerExitRuleEnabled && startAlt <= 11500) ? 5000 : 7500;
+            const newLowerBoundary = startAlt - altWindow;
+
+            // Find lower boundary crossing
+            let lowerCrossTime = null;
+            for (let i = 1; i < croppedFlysightData.length; i++) {
+                if (croppedFlysightData[i-1].alt > newLowerBoundary && croppedFlysightData[i].alt <= newLowerBoundary) {
+                    lowerCrossTime = croppedFlysightData[i].time;
+                    break;
+                }
+            }
+
+            // Update displays
+            document.getElementById('modalUpperBoundary').textContent = Math.round(startAlt).toLocaleString() + ' ft';
+            document.getElementById('modalLowerBoundary').textContent = Math.round(newLowerBoundary).toLocaleString() + ' ft';
+
+            if (lowerCrossTime !== null && lowerCrossTime > newStartTime) {
+                const wt = parseFloat((lowerCrossTime - newStartTime).toFixed(1));
+                document.getElementById('modalWorkingTime').textContent = wt + ' s';
+            } else {
+                document.getElementById('modalWorkingTime').textContent = 'N/A';
+            }
+
+            // Color upper boundary
+            const upperEl = document.getElementById('modalUpperBoundary');
+            upperEl.classList.remove('text-green-400', 'text-red-400', 'text-yellow-400');
+            if (startAlt >= 12000 && startAlt <= 12500) {
+                upperEl.classList.add('text-green-400');
+            } else if (startAlt < 12000) {
+                upperEl.classList.add('text-yellow-400');
+            } else {
+                upperEl.classList.add('text-red-400');
+            }
+
+            // Update chart
+            drawModalChart(startAlt, newLowerBoundary, newStartTime);
+        }
+
+        function drawModalChart(upperBoundaryAlt, lowerBoundary, upperCrossTime) {
+            if (!croppedFlysightData || croppedFlysightData.length === 0) return;
+
+            const labels = croppedFlysightData.map(d => d.time.toFixed(1));
+            const altitudes = croppedFlysightData.map(d => d.alt);
+            const velocities = croppedFlysightData.map(d => d.velD);
+
+            if (flysightModalChart) {
+                flysightModalChart.destroy();
+            }
+
+            const ctx = document.getElementById('flysightModalChart').getContext('2d');
+            flysightModalChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Altitude (ft AGL)',
+                        data: altitudes,
+                        borderColor: 'rgb(59, 130, 246)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true,
+                        tension: 0.1,
+                        pointRadius: 0,
+                        yAxisID: 'y'
+                    }, {
+                        label: 'Vertical Vel (m/s)',
+                        data: velocities,
+                        borderColor: 'rgb(168, 85, 247)',
+                        backgroundColor: 'transparent',
+                        borderDash: [5, 5],
+                        tension: 0.1,
+                        pointRadius: 0,
+                        yAxisID: 'y1'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { display: true, position: 'top', labels: { color: '#9ca3af', font: { size: 11 } } },
+                        annotation: {
+                            annotations: {
+                                upperLine: {
+                                    type: 'line', yMin: upperBoundaryAlt, yMax: upperBoundaryAlt, yScaleID: 'y',
+                                    borderColor: 'rgb(34, 197, 94)', borderWidth: 2, borderDash: [5, 5],
+                                    label: { display: true, content: 'Upper: ' + Math.round(upperBoundaryAlt) + ' ft', position: 'start', backgroundColor: 'rgba(34, 197, 94, 0.8)', color: 'white', font: { size: 10 } }
+                                },
+                                lowerLine: {
+                                    type: 'line', yMin: lowerBoundary, yMax: lowerBoundary, yScaleID: 'y',
+                                    borderColor: 'rgb(239, 68, 68)', borderWidth: 2, borderDash: [5, 5],
+                                    label: { display: true, content: 'Lower: ' + Math.round(lowerBoundary) + ' ft', position: 'start', backgroundColor: 'rgba(239, 68, 68, 0.8)', color: 'white', font: { size: 10 } }
+                                },
+                                startLine: {
+                                    type: 'line',
+                                    xMin: upperCrossTime ? labels.indexOf(upperCrossTime.toFixed(1)) : 0,
+                                    xMax: upperCrossTime ? labels.indexOf(upperCrossTime.toFixed(1)) : 0,
+                                    borderColor: 'rgb(6, 182, 212)', borderWidth: 3,
+                                    label: { display: true, content: 'Start', position: 'start', backgroundColor: 'rgba(6, 182, 212, 0.8)', color: 'white', font: { size: 10 } }
+                                },
+                                velThreshold: {
+                                    type: 'line', yMin: 10, yMax: 10, yScaleID: 'y1',
+                                    borderColor: 'rgba(168, 85, 247, 0.5)', borderWidth: 1, borderDash: [2, 2]
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'Time (s)', color: '#9ca3af' }, ticks: { color: '#9ca3af', maxTicksLimit: 15 }, grid: { color: 'rgba(75, 85, 99, 0.3)' } },
+                        y: { type: 'linear', position: 'left', title: { display: true, text: 'Altitude (ft AGL)', color: '#9ca3af' }, ticks: { color: '#9ca3af' }, grid: { color: 'rgba(75, 85, 99, 0.3)' } },
+                        y1: { type: 'linear', position: 'right', title: { display: true, text: 'Vel (m/s)', color: '#a855f7' }, ticks: { color: '#a855f7' }, grid: { display: false }, min: -10, max: 40 }
+                    }
+                }
+            });
+        }
+
+        function confirmWorkingTime() {
+            // Get the confirmed working time from modal
+            const wtText = document.getElementById('modalWorkingTime').textContent;
+            const wt = parseFloat(wtText);
+
+            if (!isNaN(wt) && wt > 0) {
+                wsWorkingTime = wt;
+                confirmedWorkingTime = wt;
+
+                // Update main display
+                document.getElementById('flysightWorkingTime').textContent = wt + ' s';
+                document.getElementById('flysightTimeDisplay').textContent = wt + 's';
+                document.getElementById('flysightStatus').textContent = `Confirmed | WT: ${wt}s`;
+
+                // Update upper/lower boundary from modal
+                document.getElementById('upperBoundary').textContent = document.getElementById('modalUpperBoundary').textContent;
+                document.getElementById('lowerBoundary').textContent = document.getElementById('modalLowerBoundary').textContent;
+            }
+
+            closeFlySightModal();
         }
 
         // Wingsuit Compulsory Scoring
         let wsCompulsoryNV = false;
-        let wsCompSingleJudge = false;
-        let wsFreeSingleJudge = false;
+        let wsCompSingleJudge = true;  // Default to single judge for practice
+        let wsFreeSingleJudge = true;  // Default to single judge for practice
 
         function toggleWsCompJudgeMode() {
             const count = document.getElementById('wsCompJudgeCount').value;
@@ -1508,6 +2614,190 @@
             const teamTotal = myScore + partnerScore;
             document.getElementById('speedTeamTotal').textContent = teamTotal.toFixed(2) + ' km/h';
         }
+    </script>
+    {% endif %}
+
+    <!-- FlySight Modal -->
+    <div id="flysightModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-xl w-full max-w-5xl max-h-[90vh] overflow-auto">
+            <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                <h3 class="text-lg font-bold text-white">FlySight Altitude Profile</h3>
+                <button onclick="closeFlySightModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-4">
+                <!-- Crop Controls -->
+                <div class="grid grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="text-gray-400 text-sm block mb-1">Crop Start (seconds from beginning)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="cropStartSlider" min="0" max="100" value="0"
+                                class="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                oninput="updateCropPreview()">
+                            <input type="number" id="cropStartInput" value="0" step="0.1" min="0"
+                                class="w-20 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center"
+                                onchange="updateCropFromInput('start')">
+                            <span class="text-gray-500 text-sm">s</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="text-gray-400 text-sm block mb-1">Crop End (seconds from end)</label>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="cropEndSlider" min="0" max="100" value="0"
+                                class="flex-1 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                oninput="updateCropPreview()">
+                            <input type="number" id="cropEndInput" value="0" step="0.1" min="0"
+                                class="w-20 px-2 py-1 rounded bg-gray-700 text-white text-sm text-center"
+                                onchange="updateCropFromInput('end')">
+                            <span class="text-gray-500 text-sm">s</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Working Time Adjustment -->
+                <div class="bg-gray-900 rounded-lg p-3 mb-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-gray-400 text-sm">Working Time Start (velD ≥ 10 m/s)</span>
+                        <div class="flex items-center gap-2">
+                            <input type="range" id="workingTimeStartSlider" min="0" max="100" value="0"
+                                class="w-48 h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer"
+                                oninput="adjustWorkingTimeStart(this.value)">
+                            <span id="workingTimeStartDisplay" class="text-cyan-400 font-mono text-sm w-20">0.0s</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-4 text-center">
+                        <div>
+                            <div class="text-gray-500 text-xs">Upper Boundary</div>
+                            <div id="modalUpperBoundary" class="text-green-400 font-mono">-- ft</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500 text-xs">Lower Boundary</div>
+                            <div id="modalLowerBoundary" class="text-red-400 font-mono">-- ft</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500 text-xs">Working Time</div>
+                            <div id="modalWorkingTime" class="text-yellow-400 font-mono text-xl font-bold">--.- s</div>
+                        </div>
+                        <div>
+                            <div class="text-gray-500 text-xs">Data Range</div>
+                            <div id="modalDataRange" class="text-gray-400 font-mono text-sm">0s - 0s</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Graph -->
+                <div class="bg-gray-900 rounded-lg p-2" style="height: 400px;">
+                    <canvas id="flysightModalChart"></canvas>
+                </div>
+
+                <!-- Legend -->
+                <div class="flex items-center justify-center gap-6 mt-3 text-xs">
+                    <span class="text-blue-400">━ Altitude (ft AGL)</span>
+                    <span class="text-purple-400">╌ Vertical Vel (m/s)</span>
+                    <span class="text-green-400">┅ Upper Boundary</span>
+                    <span class="text-red-400">┅ Lower Boundary</span>
+                    <span class="text-cyan-400">│ Start Time</span>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 border-t border-gray-700 flex items-center justify-between">
+                <div class="text-gray-500 text-sm">
+                    Review the altitude profile and adjust working time start if needed.
+                </div>
+                <div class="flex items-center gap-3">
+                    <button onclick="closeFlySightModal()" class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                        Cancel
+                    </button>
+                    <button onclick="confirmWorkingTime()" class="px-6 py-2 rounded bg-green-600 hover:bg-green-700 text-sm font-bold">
+                        ✓ Agree & Confirm
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if competition_context and is_admin %}
+    <!-- Quick Score Modal (for competition judging) -->
+    <div id="quickScoreModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-sm mx-4">
+            <h2 class="text-xl font-bold mb-2">Enter Score</h2>
+            <p class="text-gray-400 text-sm mb-4">{{ competition_context.team_name }} - Round {{ competition_context.round_num }}</p>
+
+            <div class="mb-4">
+                <label class="block text-gray-400 text-sm mb-2">Score</label>
+                <input type="number" id="quickScoreInput" step="1" min="0"
+                    value="{{ competition_context.current_score if competition_context.current_score is not none else '' }}"
+                    class="w-full px-4 py-3 rounded bg-gray-700 text-white text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="--" autofocus>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button onclick="hideQuickScoreModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">
+                    Cancel
+                </button>
+                <button onclick="saveQuickScore()" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700 font-medium">
+                    Save Score
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const competitionContext = {
+            competitionId: '{{ competition_context.competition_id }}',
+            teamId: '{{ competition_context.team_id }}',
+            roundNum: {{ competition_context.round_num }}
+        };
+
+        function showQuickScoreModal() {
+            document.getElementById('quickScoreModal').classList.remove('hidden');
+            document.getElementById('quickScoreInput').focus();
+        }
+
+        function hideQuickScoreModal() {
+            document.getElementById('quickScoreModal').classList.add('hidden');
+        }
+
+        async function saveQuickScore() {
+            const scoreInput = document.getElementById('quickScoreInput').value;
+            if (scoreInput === '' || scoreInput === null) {
+                alert('Please enter a score');
+                return;
+            }
+
+            const score = parseFloat(scoreInput);
+
+            try {
+                const response = await fetch('/videographer/team/' + competitionContext.teamId + '/score', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        round_num: competitionContext.roundNum,
+                        score: score,
+                        video_id: '{{ video.id }}'
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('Score saved!');
+                    hideQuickScoreModal();
+                    // Optionally redirect back to competition
+                    // window.location.href = '/competition/' + competitionContext.competitionId;
+                } else {
+                    alert(result.error || 'Failed to save score');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        // Allow Enter to save score in modal
+        document.getElementById('quickScoreInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                saveQuickScore();
+            }
+        });
     </script>
     {% endif %}
 </body>

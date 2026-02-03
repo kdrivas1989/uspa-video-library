@@ -56,10 +56,9 @@ CATEGORIES = {
         'name': 'Canopy Piloting',
         'abbrev': 'CP',
         'description': 'Chapters 12-13 - Canopy Piloting competition videos',
+        'individual': True,
         'subcategories': [
-            {'id': 'speed', 'name': 'Speed'},
-            {'id': 'distance', 'name': 'Distance'},
-            {'id': 'zone_accuracy', 'name': 'Zone Accuracy'},
+            {'id': 'dsz', 'name': 'Distance/Speed/Zone Accuracy'},
             {'id': 'freestyle', 'name': 'Freestyle'}
         ]
     },
@@ -182,6 +181,10 @@ def init_db():
             cursor.execute('ALTER TABLE videos ADD COLUMN jump_num TEXT')
         except:
             pass
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN start_time REAL DEFAULT 0')
+        except:
+            pass
 
         # Competitions tables
         cursor.execute('''
@@ -189,11 +192,18 @@ def init_db():
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 event_type TEXT NOT NULL,
+                event_types TEXT,
                 total_rounds INTEGER DEFAULT 10,
                 created_at TEXT NOT NULL,
                 status TEXT DEFAULT 'active'
             )
         ''')
+
+        # Add event_types column if it doesn't exist (for existing databases)
+        try:
+            cursor.execute('ALTER TABLE competitions ADD COLUMN event_types TEXT')
+        except:
+            pass
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS competition_teams (
@@ -304,8 +314,8 @@ def save_video(video_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO videos (id, title, description, url, thumbnail, category, subcategory, tags, duration, created_at, views, video_type, local_file, event, team, round_num, jump_num)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO videos (id, title, description, url, thumbnail, category, subcategory, tags, duration, created_at, views, video_type, local_file, event, team, round_num, jump_num, start_time)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (video_data['id'], video_data['title'], video_data.get('description', ''),
               video_data.get('url', ''), video_data.get('thumbnail'), video_data['category'],
               video_data.get('subcategory', ''), video_data.get('tags', ''),
@@ -313,7 +323,7 @@ def save_video(video_data):
               video_data.get('views', 0), video_data.get('video_type', 'url'),
               video_data.get('local_file', ''), video_data.get('event', ''),
               video_data.get('team', ''), video_data.get('round_num', ''),
-              video_data.get('jump_num', '')))
+              video_data.get('jump_num', ''), video_data.get('start_time', 0)))
         db.commit()
 
 
@@ -441,11 +451,11 @@ def save_competition(comp_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO competitions (id, name, event_type, total_rounds, created_at, status)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO competitions (id, name, event_type, event_types, total_rounds, created_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (comp_data['id'], comp_data['name'], comp_data['event_type'],
-              comp_data.get('total_rounds', 10), comp_data['created_at'],
-              comp_data.get('status', 'active')))
+              comp_data.get('event_types', ''), comp_data.get('total_rounds', 10),
+              comp_data['created_at'], comp_data.get('status', 'active')))
         db.commit()
 
 
@@ -875,10 +885,34 @@ def video(video_id):
 
     cat = CATEGORIES.get(video['category'], {})
 
+    # Check for competition context (when opened from competition page)
+    competition_context = None
+    comp_id = request.args.get('competition')
+    team_id = request.args.get('team')
+    round_num = request.args.get('round')
+
+    if comp_id and team_id and round_num:
+        competition = get_competition(comp_id)
+        team = get_team(team_id)
+        if competition and team:
+            # Get current score for this round
+            scores = get_team_scores(team_id)
+            round_score = next((s for s in scores if s['round_num'] == int(round_num)), None)
+            competition_context = {
+                'competition_id': comp_id,
+                'competition_name': competition['name'],
+                'team_id': team_id,
+                'team_name': team['team_name'],
+                'team_number': team['team_number'],
+                'round_num': round_num,
+                'current_score': round_score.get('score') if round_score else None
+            }
+
     return render_template('video.html',
                          video=video,
                          category=cat,
                          related_videos=related_videos,
+                         competition_context=competition_context,
                          is_admin=session.get('role') == 'admin')
 
 
@@ -1440,6 +1474,25 @@ def edit_video(video_id):
     return jsonify({'success': True, 'message': 'Video updated'})
 
 
+@app.route('/api/video/<video_id>/set-start-time', methods=['POST'])
+def set_video_start_time(video_id):
+    """Set the start time for a video (videographer/judge access)."""
+    data = request.json
+
+    video = get_video(video_id)
+    if not video:
+        return jsonify({'error': 'Video not found'}), 404
+
+    start_time = float(data.get('start_time', 0))
+    if start_time < 0:
+        start_time = 0
+
+    video['start_time'] = start_time
+    save_video(video)
+
+    return jsonify({'success': True, 'message': 'Start time saved', 'start_time': start_time})
+
+
 @app.route('/search')
 def search():
     """Search videos."""
@@ -1502,6 +1555,17 @@ def events_list():
 def competitions_list():
     """Show all competitions."""
     competitions = get_all_competitions()
+
+    # Parse event_types for each competition for display
+    for comp in competitions:
+        if comp.get('event_types'):
+            try:
+                comp['parsed_event_types'] = json.loads(comp['event_types'])
+            except:
+                comp['parsed_event_types'] = [comp.get('event_type', 'fs')]
+        else:
+            comp['parsed_event_types'] = [comp.get('event_type', 'fs')]
+
     return render_template('competitions.html',
                          competitions=competitions,
                          categories=CATEGORIES,
@@ -1515,32 +1579,97 @@ def competition_page(comp_id):
     if not competition:
         return "Competition not found", 404
 
+    # Parse event_types from JSON
+    event_types = []
+    if competition.get('event_types'):
+        try:
+            event_types = json.loads(competition['event_types'])
+        except:
+            event_types = [competition.get('event_type', 'fs')]
+    else:
+        event_types = [competition.get('event_type', 'fs')]
+
+    competition['parsed_event_types'] = event_types
+    is_multi_event = len(event_types) > 1
+
     teams = get_competition_teams(comp_id)
 
-    # Group teams by class
-    teams_by_class = {
-        'beginner': [],
-        'intermediate': [],
-        'advanced': [],
-        'open': []
-    }
-    for team in teams:
-        team_class = team.get('class', 'open').lower()
-        if team_class in teams_by_class:
+    # For multi-event competitions, group by event first, then by class
+    # For single-event, just group by class
+    if is_multi_event:
+        teams_by_event = {}
+        for event_type in event_types:
+            teams_by_event[event_type] = {
+                'beginner': [],
+                'intermediate': [],
+                'advanced': [],
+                'open': []
+            }
+
+        for team in teams:
+            team_class = team.get('class', 'open').lower()
+            team_event = team.get('event', event_types[0])  # Default to first event
+
             # Get scores for this team
             team['scores'] = get_team_scores(team['id'])
             team['total_score'] = sum(s.get('score', 0) or 0 for s in team['scores'])
-            teams_by_class[team_class].append(team)
 
-    # Sort each class by total score descending
-    for class_name in teams_by_class:
-        teams_by_class[class_name].sort(key=lambda t: t['total_score'], reverse=True)
+            # Add to appropriate event/class bucket
+            if team_event in teams_by_event:
+                if team_class in teams_by_event[team_event]:
+                    teams_by_event[team_event][team_class].append(team)
+                else:
+                    teams_by_event[team_event]['open'].append(team)
+            else:
+                # Unknown event, add to first event's open class
+                teams_by_event[event_types[0]]['open'].append(team)
 
-    return render_template('competition.html',
-                         competition=competition,
-                         teams_by_class=teams_by_class,
-                         categories=CATEGORIES,
-                         is_admin=session.get('role') == 'admin')
+        # Sort each class within each event by total score descending
+        for event_type in teams_by_event:
+            for class_name in teams_by_event[event_type]:
+                teams_by_event[event_type][class_name].sort(key=lambda t: t['total_score'], reverse=True)
+
+        return render_template('competition.html',
+                             competition=competition,
+                             teams_by_event=teams_by_event,
+                             teams_by_class={'beginner': [], 'intermediate': [], 'advanced': [], 'open': []},
+                             is_multi_event=True,
+                             event_types=event_types,
+                             categories=CATEGORIES,
+                             is_admin=session.get('role') == 'admin')
+    else:
+        # Single event - group by class only
+        teams_by_class = {
+            'beginner': [],
+            'intermediate': [],
+            'advanced': [],
+            'open': []
+        }
+        for team in teams:
+            team_class = team.get('class', 'open').lower()
+            if team_class in teams_by_class:
+                # Get scores for this team
+                team['scores'] = get_team_scores(team['id'])
+                team['total_score'] = sum(s.get('score', 0) or 0 for s in team['scores'])
+                teams_by_class[team_class].append(team)
+            else:
+                # Unknown class, default to open
+                team['scores'] = get_team_scores(team['id'])
+                team['total_score'] = sum(s.get('score', 0) or 0 for s in team['scores'])
+                teams_by_class['open'].append(team)
+
+        # Sort each class by total score descending
+        for class_name in teams_by_class:
+            teams_by_class[class_name].sort(key=lambda t: t['total_score'], reverse=True)
+
+        return render_template('competition.html',
+                             competition=competition,
+                             teams_by_class=teams_by_class,
+                             teams_by_event={},
+                             is_multi_event=False,
+                             event_types=event_types,
+                             categories=CATEGORIES,
+                             is_admin=session.get('role') == 'admin')
 
 
 @app.route('/admin/competition/create', methods=['POST'])
@@ -1550,11 +1679,21 @@ def create_competition():
     data = request.json
 
     name = data.get('name', '').strip()
-    event_type = data.get('event_type', 'fs')
+    event_types = data.get('event_types', [])  # Array of event types
+    event_type = data.get('event_type', 'fs')  # Legacy single event type
     total_rounds = int(data.get('total_rounds', 10))
 
     if not name:
         return jsonify({'error': 'Competition name is required'}), 400
+
+    # If event_types array provided, use that; otherwise use single event_type
+    if event_types and isinstance(event_types, list):
+        event_types_json = json.dumps(event_types)
+        # Set primary event_type to first in list for backward compatibility
+        event_type = event_types[0] if event_types else event_type
+    else:
+        # Single event - store as array for consistency
+        event_types_json = json.dumps([event_type])
 
     comp_id = str(uuid.uuid4())[:8]
 
@@ -1562,6 +1701,7 @@ def create_competition():
         'id': comp_id,
         'name': name,
         'event_type': event_type,
+        'event_types': event_types_json,
         'total_rounds': total_rounds,
         'created_at': datetime.now().isoformat(),
         'status': 'active'
@@ -1747,6 +1887,59 @@ def delete_team(team_id):
     return jsonify({'success': True, 'message': 'Team deleted'})
 
 
+@app.route('/admin/team/<team_id>/round/<int:round_num>/remove-video', methods=['POST'])
+@admin_required
+def remove_round_video(team_id, round_num):
+    """Remove video from a round (admin only)."""
+    team = get_team(team_id)
+    if not team:
+        return jsonify({'error': 'Team not found'}), 404
+
+    # Find the score record for this round
+    existing_scores = get_team_scores(team_id)
+    existing = next((s for s in existing_scores if s['round_num'] == round_num), None)
+
+    if not existing:
+        return jsonify({'error': 'No score record found for this round'}), 404
+
+    if not existing.get('video_id'):
+        return jsonify({'error': 'No video linked to this round'}), 400
+
+    # Optionally delete the video file
+    delete_file = request.json.get('delete_file', False) if request.json else False
+    video_id = existing['video_id']
+
+    if delete_file and video_id:
+        video = get_video(video_id)
+        if video:
+            # Delete local file if exists
+            if video.get('local_file'):
+                local_path = os.path.join(VIDEOS_FOLDER, video['local_file'])
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+            # Delete thumbnail if exists
+            if video.get('thumbnail') and video['thumbnail'].startswith('/static/videos/'):
+                thumb_path = os.path.join(VIDEOS_FOLDER, os.path.basename(video['thumbnail']))
+                if os.path.exists(thumb_path):
+                    os.remove(thumb_path)
+            # Delete from database
+            delete_video_db(video_id)
+
+    # Update the score record to remove video_id
+    save_score({
+        'id': existing['id'],
+        'competition_id': team['competition_id'],
+        'team_id': team_id,
+        'round_num': round_num,
+        'score': existing.get('score'),
+        'score_data': existing.get('score_data', ''),
+        'video_id': '',  # Clear video link
+        'created_at': existing['created_at']
+    })
+
+    return jsonify({'success': True, 'message': 'Video removed from round', 'deleted_file': delete_file})
+
+
 @app.route('/admin/team/<team_id>/score', methods=['POST'])
 @admin_required
 def save_team_score(team_id):
@@ -1803,11 +1996,17 @@ def get_video_info(video_id):
     elif video.get('url'):
         video_url = video['url']
 
+    # Handle None start_time (from older records)
+    start_time = video.get('start_time')
+    if start_time is None:
+        start_time = 0
+
     return jsonify({
         'id': video_id,
         'title': video.get('title', ''),
         'url': video_url,
-        'local_file': video.get('local_file', '')
+        'local_file': video.get('local_file', ''),
+        'start_time': start_time
     })
 
 
@@ -1970,12 +2169,53 @@ def videographer_get_video_info(video_id):
     elif video.get('url'):
         video_url = video['url']
 
+    # Handle None start_time (from older records)
+    start_time = video.get('start_time')
+    if start_time is None:
+        start_time = 0
+
     return jsonify({
         'id': video_id,
         'title': video.get('title', ''),
         'url': video_url,
-        'local_file': video.get('local_file', '')
+        'local_file': video.get('local_file', ''),
+        'start_time': start_time
     })
+
+
+@app.route('/videographer')
+def videographer_upload_page():
+    """Videographer upload page with event/team/round selection."""
+    competitions = get_all_competitions()
+    return render_template('videographer.html',
+                         competitions=competitions,
+                         categories=CATEGORIES)
+
+
+@app.route('/api/competitions')
+def api_get_competitions():
+    """API endpoint to get all competitions."""
+    competitions = get_all_competitions()
+    return jsonify(competitions)
+
+
+@app.route('/api/competition/<comp_id>/teams')
+def api_get_competition_teams(comp_id):
+    """API endpoint to get teams for a competition."""
+    teams = get_competition_teams(comp_id)
+    # Also get scores for each team to show which rounds have videos
+    for team in teams:
+        team['scores'] = get_team_scores(team['id'])
+    return jsonify(teams)
+
+
+@app.route('/api/competition/<comp_id>')
+def api_get_competition(comp_id):
+    """API endpoint to get competition details."""
+    competition = get_competition(comp_id)
+    if not competition:
+        return jsonify({'error': 'Competition not found'}), 404
+    return jsonify(competition)
 
 
 if __name__ == '__main__':

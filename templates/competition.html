@@ -12,6 +12,7 @@
             <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
             <div class="flex items-center gap-4">
                 <a href="/competitions" class="text-gray-400 hover:text-white">Competitions</a>
+                <a href="/videographer" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Videographer Upload</a>
                 {% if is_admin %}
                 <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
                 {% endif %}
@@ -24,8 +25,17 @@
         <div class="flex justify-between items-start mb-8">
             <div>
                 <h1 class="text-3xl font-bold mb-2">{{ competition.name }}</h1>
-                <div class="text-gray-400 flex gap-4">
+                <div class="text-gray-400 flex flex-wrap gap-4 items-center">
+                    {% if is_multi_event %}
+                    <span class="flex flex-wrap gap-1">
+                        Events:
+                        {% for et in event_types %}
+                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded ml-1">{{ et|upper }}</span>
+                        {% endfor %}
+                    </span>
+                    {% else %}
                     <span>Event: {{ competition.event_type|upper }}</span>
+                    {% endif %}
                     <span>Rounds: {{ competition.total_rounds }}</span>
                     <span class="{% if competition.status == 'active' %}text-green-400{% else %}text-gray-500{% endif %}">
                         {{ competition.status }}
@@ -64,6 +74,20 @@
             </span>
         </div>
 
+        {% if is_multi_event %}
+        <!-- Event Tabs (for multi-event competitions) -->
+        <div class="flex gap-2 mb-4 border-b border-gray-700 pb-2">
+            <button onclick="showEvent('all')" id="event-tab-all" class="px-4 py-2 rounded-t-lg bg-blue-600 text-white">
+                All Events
+            </button>
+            {% for et in event_types %}
+            <button onclick="showEvent('{{ et }}')" id="event-tab-{{ et }}" class="px-4 py-2 rounded-t-lg bg-gray-700 hover:bg-gray-600">
+                {{ et|upper }}
+            </button>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <!-- Class Tabs -->
         <div class="flex gap-2 mb-6 border-b border-gray-700 pb-2">
             <button onclick="showClass('all')" id="tab-all" class="px-4 py-2 rounded-t-lg bg-blue-600 text-white">
@@ -83,19 +107,117 @@
             </button>
         </div>
 
-        <!-- Teams Tables by Class -->
+        {% if is_multi_event %}
+        <!-- Multi-Event Competition: Teams organized by Event then Class -->
+        {% for event_type, classes in teams_by_event.items() %}
+        <div class="event-section mb-8" data-event="{{ event_type }}">
+            <h2 class="text-2xl font-bold mb-4 text-blue-400">{{ event_type|upper }}</h2>
+            {% for class_name, teams in classes.items() %}
+            <div id="event-{{ event_type }}-class-{{ class_name }}" class="class-section mb-6" data-class="{{ class_name }}">
+                <h3 class="text-lg font-bold mb-3 capitalize text-gray-300">{{ class_name }} Class</h3>
+                {% if teams %}
+                <div class="bg-gray-800 rounded-lg overflow-hidden">
+                    <table class="w-full">
+                        {% set is_individual = event_type.startswith('cp') or event_type.startswith('al') or event_type.startswith('sp') %}
+                        <thead class="bg-gray-700">
+                            <tr>
+                                <th class="px-4 py-3 text-left">Rank</th>
+                                <th class="px-2 py-3 text-center">Photo</th>
+                                <th class="px-4 py-3 text-left">#</th>
+                                {% if is_individual %}
+                                <th class="px-4 py-3 text-left">Competitor</th>
+                                {% else %}
+                                <th class="px-4 py-3 text-left">Team Name</th>
+                                {% endif %}
+                                {% for i in range(1, competition.total_rounds + 1) %}
+                                <th class="px-2 py-3 text-center text-sm">R{{ i }}</th>
+                                {% endfor %}
+                                <th class="px-4 py-3 text-right">Total</th>
+                                {% if is_admin %}
+                                <th class="px-4 py-3 text-right">Actions</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for team in teams %}
+                            <tr class="border-t border-gray-700 hover:bg-gray-750">
+                                <td class="px-4 py-3 font-bold text-yellow-400">{{ loop.index }}</td>
+                                <td class="px-2 py-3 text-center">
+                                    {% if team.photo %}
+                                    <img src="{{ team.photo }}" alt="{{ team.team_name }}"
+                                        class="w-10 h-10 rounded-full object-cover cursor-pointer mx-auto"
+                                        onclick="showPhotoModal('{{ team.photo }}', '{{ team.team_name }}', '{{ team.members|default("", true)|replace("'", "\\'") }}')">
+                                    {% else %}
+                                    <div class="w-10 h-10 rounded-full bg-gray-600 flex items-center justify-center mx-auto text-gray-400 text-xs cursor-pointer"
+                                        onclick="showPhotoModal('', '{{ team.team_name }}', '{{ team.members|default("", true)|replace("'", "\\'") }}')">
+                                        --
+                                    </div>
+                                    {% endif %}
+                                </td>
+                                <td class="px-4 py-3">{{ team.team_number }}</td>
+                                {% if is_individual %}
+                                <td class="px-4 py-3 font-medium">{{ team.members or team.team_name }}</td>
+                                {% else %}
+                                <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
+                                {% endif %}
+                                {% for i in range(1, competition.total_rounds + 1) %}
+                                {% set round_score = team.scores|selectattr('round_num', 'equalto', i)|first %}
+                                <td class="px-2 py-3 text-center">
+                                    {% if round_score and round_score.video_id %}
+                                <a href="/video/{{ round_score.video_id }}?competition={{ competition.id }}&team={{ team.id }}&round={{ i }}"
+                                    class="inline-flex items-center justify-center w-10 h-8 rounded text-sm {% if round_score.score is not none %}bg-green-600 hover:bg-green-700{% else %}bg-yellow-600 hover:bg-yellow-700{% endif %}"
+                                    title="{% if round_score.score is not none %}Scored: {{ round_score.score }} - Click to view{% else %}Video uploaded - Click to judge{% endif %}">
+                                    {% if round_score.score is not none %}{{ round_score.score|int }}{% else %}📹{% endif %}
+                                </a>
+                                {% else %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, null, '', '{{ team.event|default("", true) }}')"
+                                    class="w-10 h-8 rounded text-sm bg-gray-600 hover:bg-gray-500"
+                                    title="No video - Click to upload">
+                                    -
+                                </button>
+                                {% endif %}
+                                </td>
+                                {% endfor %}
+                                <td class="px-4 py-3 text-right font-bold text-green-400">{{ team.total_score|int }}</td>
+                                {% if is_admin %}
+                                <td class="px-4 py-3 text-right space-x-2">
+                                    <button onclick="openEditTeamModal('{{ team.id }}', '{{ team.team_number }}', '{{ team.team_name }}', '{{ team.class }}', '{{ team.members|default("", true) }}', '{{ team.category|default("", true) }}', '{{ team.event|default("", true) }}', '{{ team.photo|default("", true) }}')" class="text-blue-400 hover:text-blue-300 text-sm">Edit</button>
+                                    <button onclick="deleteTeam('{{ team.id }}')" class="text-red-400 hover:text-red-300 text-sm">Delete</button>
+                                </td>
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-gray-500 text-center py-4 bg-gray-800 rounded-lg text-sm">
+                    No teams in this class
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <!-- Single-Event Competition: Teams organized by Class only -->
         {% for class_name, teams in teams_by_class.items() %}
         <div id="class-{{ class_name }}" class="class-section mb-8">
             <h2 class="text-xl font-bold mb-4 capitalize">{{ class_name }} Class</h2>
             {% if teams %}
             <div class="bg-gray-800 rounded-lg overflow-hidden">
                 <table class="w-full">
+                    {% set is_individual = competition.event_type.startswith('cp') or competition.event_type.startswith('al') or competition.event_type.startswith('sp') %}
                     <thead class="bg-gray-700">
                         <tr>
                             <th class="px-4 py-3 text-left">Rank</th>
                             <th class="px-2 py-3 text-center">Photo</th>
                             <th class="px-4 py-3 text-left">#</th>
+                            {% if is_individual %}
+                            <th class="px-4 py-3 text-left">Competitor</th>
+                            {% else %}
                             <th class="px-4 py-3 text-left">Team Name</th>
+                            {% endif %}
                             {% for i in range(1, competition.total_rounds + 1) %}
                             <th class="px-2 py-3 text-center text-sm">R{{ i }}</th>
                             {% endfor %}
@@ -122,15 +244,27 @@
                                 {% endif %}
                             </td>
                             <td class="px-4 py-3">{{ team.team_number }}</td>
+                            {% if is_individual %}
+                            <td class="px-4 py-3 font-medium">{{ team.members or team.team_name }}</td>
+                            {% else %}
                             <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
+                            {% endif %}
                             {% for i in range(1, competition.total_rounds + 1) %}
                             {% set round_score = team.scores|selectattr('round_num', 'equalto', i)|first %}
                             <td class="px-2 py-3 text-center">
-                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, {{ round_score.score if round_score and round_score.score is not none else 'null' }}, '{{ round_score.video_id if round_score else '' }}', '{{ team.category|default("", true) }}')"
-                                    class="w-10 h-8 rounded text-sm {% if round_score and round_score.score is not none %}bg-green-600 hover:bg-green-700{% elif round_score and round_score.video_id %}bg-yellow-600 hover:bg-yellow-700{% else %}bg-gray-600 hover:bg-gray-500{% endif %}"
-                                    title="{% if round_score and round_score.score is not none %}Scored: {{ round_score.score }}{% elif round_score and round_score.video_id %}Video uploaded - needs scoring{% else %}No video{% endif %}">
-                                    {% if round_score and round_score.score is not none %}{{ round_score.score|int }}{% elif round_score and round_score.video_id %}📹{% else %}-{% endif %}
+                                {% if round_score and round_score.video_id %}
+                                <a href="/video/{{ round_score.video_id }}?competition={{ competition.id }}&team={{ team.id }}&round={{ i }}"
+                                    class="inline-flex items-center justify-center w-10 h-8 rounded text-sm {% if round_score.score is not none %}bg-green-600 hover:bg-green-700{% else %}bg-yellow-600 hover:bg-yellow-700{% endif %}"
+                                    title="{% if round_score.score is not none %}Scored: {{ round_score.score }} - Click to view{% else %}Video uploaded - Click to judge{% endif %}">
+                                    {% if round_score.score is not none %}{{ round_score.score|int }}{% else %}📹{% endif %}
+                                </a>
+                                {% else %}
+                                <button onclick="openRoundModal('{{ team.id }}', '{{ team.team_name }}', {{ i }}, null, '', '{{ team.category|default("", true) }}')"
+                                    class="w-10 h-8 rounded text-sm bg-gray-600 hover:bg-gray-500"
+                                    title="No video - Click to upload">
+                                    -
                                 </button>
+                                {% endif %}
                             </td>
                             {% endfor %}
                             <td class="px-4 py-3 text-right font-bold text-green-400">{{ team.total_score|int }}</td>
@@ -152,6 +286,7 @@
             {% endif %}
         </div>
         {% endfor %}
+        {% endif %}
     </div>
 
     <!-- Add Team Modal -->
@@ -181,6 +316,16 @@
                             <option value="open" selected>Open</option>
                         </select>
                     </div>
+                    {% if is_multi_event %}
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Event</label>
+                        <select id="teamEvent" class="w-full px-4 py-2 rounded bg-gray-700 text-white" required>
+                            {% for et in event_types %}
+                            <option value="{{ et }}">{{ et|upper }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% else %}
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Category</label>
                         <select id="teamCategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
@@ -200,10 +345,11 @@
                     </div>
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Event Name</label>
-                        <input type="text" id="teamEvent"
+                        <input type="text" id="teamEventName"
                             class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="2024 USPA Nationals">
                     </div>
+                    {% endif %}
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Team Members</label>
                         <input type="text" id="teamMembers"
@@ -245,6 +391,16 @@
                             <option value="open">Open</option>
                         </select>
                     </div>
+                    {% if is_multi_event %}
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">Event</label>
+                        <select id="editTeamEvent" class="w-full px-4 py-2 rounded bg-gray-700 text-white" required>
+                            {% for et in event_types %}
+                            <option value="{{ et }}">{{ et|upper }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% else %}
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Category</label>
                         <select id="editTeamCategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
@@ -264,10 +420,11 @@
                     </div>
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Event Name</label>
-                        <input type="text" id="editTeamEvent"
+                        <input type="text" id="editTeamEventName"
                             class="w-full px-4 py-2 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                             placeholder="2024 USPA Nationals">
                     </div>
+                    {% endif %}
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Team Members</label>
                         <input type="text" id="editTeamMembers"
@@ -360,13 +517,37 @@
                         </div>
                         <div class="flex items-center justify-between text-sm">
                             <span class="text-green-400">📹 Video ready for judging</span>
-                            <a href="#" id="viewVideoFullLink" target="_blank" class="text-blue-400 hover:underline">Open full player →</a>
+                            <div class="flex items-center gap-3">
+                                <a href="#" id="viewVideoFullLink" target="_blank" class="text-blue-400 hover:underline">Open full player →</a>
+                                {% if is_admin %}
+                                <button type="button" onclick="showRemoveVideoConfirm()" class="text-red-400 hover:text-red-300 text-sm">Remove Video</button>
+                                {% endif %}
+                            </div>
                         </div>
+                        <!-- Remove Video Confirmation (hidden by default) -->
+                        {% if is_admin %}
+                        <div id="removeVideoConfirm" class="hidden mt-3 p-3 bg-red-900/30 border border-red-700 rounded-lg">
+                            <p class="text-sm text-gray-300 mb-3">Remove this video from the round? This will allow a new video to be uploaded.</p>
+                            <label class="flex items-center gap-2 text-sm text-gray-400 mb-3 cursor-pointer">
+                                <input type="checkbox" id="deleteVideoFile" class="w-4 h-4">
+                                <span>Also delete the video file permanently</span>
+                            </label>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="removeVideoFromRound()" class="px-3 py-1.5 rounded bg-red-600 hover:bg-red-700 text-sm">
+                                    Remove Video
+                                </button>
+                                <button type="button" onclick="hideRemoveVideoConfirm()" class="px-3 py-1.5 rounded bg-gray-600 hover:bg-gray-500 text-sm">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
 
                     <!-- Score Entry (for judges only) -->
                     {% if is_admin %}
-                    <div class="bg-gray-900 rounded-lg p-4">
+                    <!-- Standard Score Entry (non-CP events) -->
+                    <div id="standardScoreSection" class="bg-gray-900 rounded-lg p-4">
                         <label class="block text-gray-400 text-sm mb-2">Score</label>
                         <div class="flex items-center gap-4">
                             <input type="number" id="roundScore" step="1" min="0"
@@ -378,47 +559,204 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- CP Scoring Section (Canopy Piloting events) -->
+                    <div id="cpScoreSection" class="hidden bg-gray-900 rounded-lg p-4">
+                        <!-- CP Event Type Selector -->
+                        <div class="mb-4">
+                            <label class="block text-gray-400 text-sm mb-2">CP Event</label>
+                            <div class="grid grid-cols-3 gap-2">
+                                <button type="button" onclick="setCpEvent('speed')" id="cpEventSpeed"
+                                    class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm font-medium cp-event-btn">
+                                    Speed
+                                </button>
+                                <button type="button" onclick="setCpEvent('distance')" id="cpEventDistance"
+                                    class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm font-medium cp-event-btn">
+                                    Distance
+                                </button>
+                                <button type="button" onclick="setCpEvent('zone')" id="cpEventZone"
+                                    class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-sm font-medium cp-event-btn">
+                                    Zone Accuracy
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Speed Event Scoring (70m course) -->
+                        <div id="cpSpeedSection" class="hidden">
+                            <label class="block text-gray-400 text-sm mb-2">Time (seconds)</label>
+                            <div class="flex items-center gap-4">
+                                <input type="number" id="cpSpeedTime" step="0.001" min="0"
+                                    class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="0.000" onchange="calculateCpScore()">
+                                <div class="text-gray-500 text-sm">
+                                    <div>70m course</div>
+                                    <div class="text-xs">to thousandths</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Distance Event Scoring (50m pond) -->
+                        <div id="cpDistanceSection" class="hidden">
+                            <label class="block text-gray-400 text-sm mb-2">Distance (meters)</label>
+                            <div class="flex items-center gap-4">
+                                <input type="number" id="cpDistanceMeters" step="0.01" min="0"
+                                    class="flex-1 px-4 py-3 rounded bg-gray-700 text-white text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    placeholder="0.00" onchange="calculateCpScore()">
+                                <div class="text-gray-500 text-sm">
+                                    <div>From G1 gate</div>
+                                    <div class="text-xs">to 2 decimals</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Zone Accuracy Scoring -->
+                        <div id="cpZoneSection" class="hidden">
+                            <!-- Water Gates -->
+                            <div class="mb-4">
+                                <label class="block text-gray-400 text-sm mb-2">Water Gates (checked = passed through)</label>
+                                <div class="grid grid-cols-4 gap-2">
+                                    <label class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded cursor-pointer hover:bg-gray-600">
+                                        <input type="checkbox" id="cpGate1" class="w-5 h-5" onchange="calculateCpScore()">
+                                        <span>G1 (25pts)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded cursor-pointer hover:bg-gray-600">
+                                        <input type="checkbox" id="cpGate2" class="w-5 h-5" onchange="calculateCpScore()">
+                                        <span>G2 (25pts)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded cursor-pointer hover:bg-gray-600">
+                                        <input type="checkbox" id="cpGate3" class="w-5 h-5" onchange="calculateCpScore()">
+                                        <span>G3 (25pts)</span>
+                                    </label>
+                                    <label class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded cursor-pointer hover:bg-gray-600">
+                                        <input type="checkbox" id="cpGate4" class="w-5 h-5" onchange="calculateCpScore()">
+                                        <span>G4 (25pts)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Landing Zone -->
+                            <div class="mb-4">
+                                <label class="block text-gray-400 text-sm mb-2">Landing Zone</label>
+                                <select id="cpLandingZone" class="w-full px-4 py-2 rounded bg-gray-700 text-white" onchange="calculateCpScore()">
+                                    <option value="0">Outside landing area (0 pts)</option>
+                                    <option value="10">Z1 - First zone (10 pts)</option>
+                                    <option value="20">Z2 (20 pts)</option>
+                                    <option value="30">Z3 (30 pts)</option>
+                                    <option value="40">Z4 (40 pts)</option>
+                                    <option value="50">Z5 (50 pts)</option>
+                                    <option value="60">Z6 (60 pts)</option>
+                                    <option value="70">Z7 (70 pts)</option>
+                                    <option value="80">Z8 (80 pts)</option>
+                                    <option value="90">Z9 (90 pts)</option>
+                                    <option value="100">Z10 (100 pts)</option>
+                                    <option value="125">CZ - Center Zone (125 pts)</option>
+                                </select>
+                            </div>
+
+                            <!-- Stand-up Landing -->
+                            <div class="mb-4">
+                                <label class="flex items-center gap-3 bg-gray-700 px-4 py-3 rounded cursor-pointer hover:bg-gray-600">
+                                    <input type="checkbox" id="cpStandUp" class="w-5 h-5" checked onchange="calculateCpScore()">
+                                    <span>Stand-up landing (uncheck for -10 pts penalty)</span>
+                                </label>
+                            </div>
+
+                            <!-- Zone Score Display -->
+                            <div class="bg-gray-800 rounded p-3 text-center">
+                                <span class="text-gray-400 text-sm">Zone Score: </span>
+                                <span id="cpZoneTotal" class="text-2xl font-mono text-green-400">0</span>
+                                <span class="text-gray-400"> pts</span>
+                            </div>
+                        </div>
+
+                        <!-- CP Score Summary -->
+                        <div class="mt-4 pt-4 border-t border-gray-700">
+                            <div class="flex justify-between items-center">
+                                <span class="text-gray-400">Raw Score:</span>
+                                <span id="cpRawScore" class="text-xl font-mono text-white">--</span>
+                            </div>
+                            <input type="hidden" id="cpScoreValue">
+                            <input type="hidden" id="cpEventType">
+                        </div>
+                    </div>
                     {% endif %}
 
                     <!-- Video Upload Section (for videographers - not for Speed Skydiving) -->
                     <div id="videoUploadSection" class="border-t border-gray-700 pt-4">
                         <label class="block text-gray-400 text-sm mb-2">Upload Video</label>
 
-                        <!-- Upload Options -->
-                        <div class="grid grid-cols-2 gap-3">
-                            <!-- File Upload -->
-                            <div>
-                                <input type="file" id="roundVideoFile" accept="video/*" class="hidden" onchange="handleVideoSelect(event)">
-                                <button type="button" onclick="document.getElementById('roundVideoFile').click()"
-                                    class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
-                                    <span class="block text-lg mb-1">📁</span>
-                                    Upload File
-                                </button>
-                            </div>
-
-                            <!-- Camera/Device Capture -->
-                            <div>
-                                <input type="file" id="roundVideoCapture" accept="video/*" capture="environment" class="hidden" onchange="handleVideoSelect(event)">
-                                <button type="button" onclick="document.getElementById('roundVideoCapture').click()"
-                                    class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
-                                    <span class="block text-lg mb-1">📹</span>
-                                    From Camera
-                                </button>
-                            </div>
+                        <!-- Video Already Exists Message -->
+                        <div id="videoAlreadyExistsMsg" class="hidden p-3 bg-gray-700 rounded text-center text-sm text-gray-400">
+                            Video already uploaded for this round.
                         </div>
 
-                        <!-- Selected File Display -->
-                        <div id="selectedVideoInfo" class="hidden mt-3 p-3 bg-gray-700 rounded flex items-center justify-between">
-                            <span id="selectedVideoName" class="text-sm"></span>
-                            <button type="button" onclick="clearSelectedVideo()" class="text-red-400 text-sm hover:underline">Remove</button>
-                        </div>
+                        <!-- Upload Controls (hidden when video exists) -->
+                        <div id="videoUploadControls">
+                            <!-- Step 1: File Selection -->
+                            <div id="fileSelectControls">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <!-- File Upload -->
+                                    <div>
+                                        <input type="file" id="roundVideoFile" accept="video/*" class="hidden" onchange="handleVideoSelect(event)">
+                                        <button type="button" onclick="document.getElementById('roundVideoFile').click()"
+                                            class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                            <span class="block text-lg mb-1">📁</span>
+                                            Select File
+                                        </button>
+                                    </div>
 
-                        <!-- Upload Progress -->
-                        <div id="uploadProgress" class="hidden mt-3">
-                            <div class="bg-gray-700 rounded-full h-2">
-                                <div id="uploadBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                                    <!-- Camera/Device Capture -->
+                                    <div>
+                                        <input type="file" id="roundVideoCapture" accept="video/*" capture="environment" class="hidden" onchange="handleVideoSelect(event)">
+                                        <button type="button" onclick="document.getElementById('roundVideoCapture').click()"
+                                            class="w-full px-4 py-3 rounded bg-gray-700 hover:bg-gray-600 text-sm">
+                                            <span class="block text-lg mb-1">📹</span>
+                                            From Camera
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            <p class="text-gray-400 text-sm mt-1" id="uploadStatus">Uploading...</p>
+
+                            <!-- Step 2: Set Start Point (shown after file selected) -->
+                            <div id="startPointControls" class="hidden">
+                                <div class="flex items-center justify-between mb-2">
+                                    <span id="selectedVideoName" class="text-sm text-gray-400"></span>
+                                    <button type="button" onclick="clearSelectedVideo()" class="text-red-400 text-sm hover:underline">Change</button>
+                                </div>
+
+                                <!-- Video Preview -->
+                                <div class="bg-black rounded overflow-hidden mb-3">
+                                    <video id="uploadPreviewVideo" controls class="w-full" style="max-height: 200px;">
+                                        Your browser does not support video playback.
+                                    </video>
+                                </div>
+
+                                <!-- Start Point Controls -->
+                                <div class="bg-gray-900 rounded p-3 mb-3">
+                                    <p class="text-gray-400 text-xs mb-2">Scrub to the start of working time and click "Set Start Point"</p>
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" onclick="setVideoStartPoint()"
+                                            class="flex-1 px-3 py-2 rounded bg-blue-600 hover:bg-blue-700 text-sm font-medium">
+                                            Set Start Point
+                                        </button>
+                                        <div class="text-center px-3">
+                                            <div class="text-gray-500 text-xs">Start</div>
+                                            <div class="font-mono text-sm" id="videoStartPointDisplay">
+                                                <span class="text-yellow-400">Not set</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p id="startPointWarning" class="text-red-400 text-xs mt-2 hidden">Please set a start point before uploading</p>
+                                </div>
+                            </div>
+
+                            <!-- Upload Progress -->
+                            <div id="uploadProgress" class="hidden mt-3">
+                                <div class="bg-gray-700 rounded-full h-2">
+                                    <div id="uploadBar" class="bg-blue-600 h-2 rounded-full transition-all" style="width: 0%"></div>
+                                </div>
+                                <p class="text-gray-400 text-sm mt-1" id="uploadStatus">Uploading...</p>
+                            </div>
                         </div>
                     </div>
 
@@ -479,26 +817,76 @@
 
     <script>
         const compId = '{{ competition.id }}';
+        const isMultiEvent = {{ 'true' if is_multi_event else 'false' }};
+        const eventTypes = {{ event_types|tojson|safe }};
         let selectedVideoFile = null;
         let currentClass = 'all';
+        let currentEvent = 'all';
+
+        function showEvent(eventType) {
+            currentEvent = eventType;
+            // Update event tabs
+            document.querySelectorAll('[id^="event-tab-"]').forEach(tab => {
+                tab.classList.remove('bg-blue-600', 'text-white');
+                tab.classList.add('bg-gray-700');
+            });
+            document.getElementById('event-tab-' + eventType).classList.remove('bg-gray-700');
+            document.getElementById('event-tab-' + eventType).classList.add('bg-blue-600', 'text-white');
+
+            // Show/hide event sections
+            document.querySelectorAll('.event-section').forEach(section => {
+                if (eventType === 'all') {
+                    section.classList.remove('hidden');
+                } else {
+                    if (section.dataset.event === eventType) {
+                        section.classList.remove('hidden');
+                    } else {
+                        section.classList.add('hidden');
+                    }
+                }
+            });
+
+            // Reapply class filter
+            showClass(currentClass);
+        }
 
         function showClass(className) {
             currentClass = className;
             // Update tabs
             document.querySelectorAll('[id^="tab-"]').forEach(tab => {
-                tab.classList.remove('bg-blue-600', 'text-white');
-                tab.classList.add('bg-gray-700');
+                if (!tab.id.startsWith('event-tab-')) {
+                    tab.classList.remove('bg-blue-600', 'text-white');
+                    tab.classList.add('bg-gray-700');
+                }
             });
             document.getElementById('tab-' + className).classList.remove('bg-gray-700');
             document.getElementById('tab-' + className).classList.add('bg-blue-600', 'text-white');
 
-            // Show/hide sections
+            // Show/hide class sections
             document.querySelectorAll('.class-section').forEach(section => {
+                const sectionClass = section.dataset.class || section.id.replace('class-', '');
+
                 if (className === 'all') {
-                    section.classList.remove('hidden');
-                } else {
-                    if (section.id === 'class-' + className) {
+                    // Show all classes in currently visible events
+                    if (isMultiEvent) {
+                        const parentEvent = section.closest('.event-section');
+                        if (parentEvent && !parentEvent.classList.contains('hidden')) {
+                            section.classList.remove('hidden');
+                        }
+                    } else {
                         section.classList.remove('hidden');
+                    }
+                } else {
+                    if (sectionClass === className) {
+                        // Show only if parent event is visible (for multi-event)
+                        if (isMultiEvent) {
+                            const parentEvent = section.closest('.event-section');
+                            if (parentEvent && !parentEvent.classList.contains('hidden')) {
+                                section.classList.remove('hidden');
+                            }
+                        } else {
+                            section.classList.remove('hidden');
+                        }
                     } else {
                         section.classList.add('hidden');
                     }
@@ -565,8 +953,17 @@
             document.getElementById('editTeamName').value = teamName;
             document.getElementById('editTeamClass').value = teamClass;
             document.getElementById('editTeamMembers').value = members;
-            document.getElementById('editTeamCategory').value = category || '';
-            document.getElementById('editTeamEvent').value = event || '';
+
+            // Handle event field based on multi-event vs single-event
+            if (isMultiEvent) {
+                const eventEl = document.getElementById('editTeamEvent');
+                if (eventEl) eventEl.value = event || eventTypes[0] || '';
+            } else {
+                const categoryEl = document.getElementById('editTeamCategory');
+                const eventNameEl = document.getElementById('editTeamEventName');
+                if (categoryEl) categoryEl.value = category || '';
+                if (eventNameEl) eventNameEl.value = event || '';
+            }
 
             // Reset photo
             selectedTeamPhotoFile = null;
@@ -614,10 +1011,20 @@
                 team_number: document.getElementById('editTeamNumber').value,
                 team_name: document.getElementById('editTeamName').value,
                 class: document.getElementById('editTeamClass').value,
-                members: document.getElementById('editTeamMembers').value,
-                category: document.getElementById('editTeamCategory').value,
-                event: document.getElementById('editTeamEvent').value
+                members: document.getElementById('editTeamMembers').value
             };
+
+            // Handle event field based on multi-event vs single-event
+            if (isMultiEvent) {
+                const eventEl = document.getElementById('editTeamEvent');
+                data.event = eventEl ? eventEl.value : '';
+                data.category = data.event;  // Use event as category for multi-event
+            } else {
+                const categoryEl = document.getElementById('editTeamCategory');
+                const eventNameEl = document.getElementById('editTeamEventName');
+                data.category = categoryEl ? categoryEl.value : '';
+                data.event = eventNameEl ? eventNameEl.value : '';
+            }
 
             try {
                 const response = await fetch('/admin/team/' + teamId + '/update', {
@@ -639,6 +1046,98 @@
 
         let currentTeamCategory = '';
         let selectedFlysightFile = null;
+        let currentCpEvent = 'speed';
+        let videoStartPoint = null;
+        const competitionEventType = '{{ competition.event_type }}';
+        const isCpCompetition = competitionEventType.startsWith('cp');
+
+        // CP Scoring Functions
+        function setCpEvent(eventType) {
+            currentCpEvent = eventType;
+            document.getElementById('cpEventType').value = eventType;
+
+            // Update button styles
+            document.querySelectorAll('.cp-event-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600');
+                btn.classList.add('bg-gray-700');
+            });
+            document.getElementById('cpEvent' + eventType.charAt(0).toUpperCase() + eventType.slice(1)).classList.remove('bg-gray-700');
+            document.getElementById('cpEvent' + eventType.charAt(0).toUpperCase() + eventType.slice(1)).classList.add('bg-blue-600');
+
+            // Show/hide appropriate section
+            document.getElementById('cpSpeedSection').classList.add('hidden');
+            document.getElementById('cpDistanceSection').classList.add('hidden');
+            document.getElementById('cpZoneSection').classList.add('hidden');
+
+            if (eventType === 'speed') {
+                document.getElementById('cpSpeedSection').classList.remove('hidden');
+            } else if (eventType === 'distance') {
+                document.getElementById('cpDistanceSection').classList.remove('hidden');
+            } else if (eventType === 'zone') {
+                document.getElementById('cpZoneSection').classList.remove('hidden');
+            }
+
+            calculateCpScore();
+        }
+
+        function calculateCpScore() {
+            let rawScore = 0;
+            let displayScore = '--';
+
+            if (currentCpEvent === 'speed') {
+                const time = parseFloat(document.getElementById('cpSpeedTime').value);
+                if (!isNaN(time) && time > 0) {
+                    rawScore = time;
+                    displayScore = time.toFixed(3) + 's';
+                }
+            } else if (currentCpEvent === 'distance') {
+                const distance = parseFloat(document.getElementById('cpDistanceMeters').value);
+                if (!isNaN(distance) && distance >= 0) {
+                    rawScore = distance;
+                    displayScore = distance.toFixed(2) + 'm';
+                }
+            } else if (currentCpEvent === 'zone') {
+                // Calculate water gate points (25 each)
+                let gatePoints = 0;
+                if (document.getElementById('cpGate1').checked) gatePoints += 25;
+                if (document.getElementById('cpGate2').checked) gatePoints += 25;
+                if (document.getElementById('cpGate3').checked) gatePoints += 25;
+                if (document.getElementById('cpGate4').checked) gatePoints += 25;
+
+                // Landing zone points
+                const zonePoints = parseInt(document.getElementById('cpLandingZone').value) || 0;
+
+                // Stand-up penalty
+                const standUpPenalty = document.getElementById('cpStandUp').checked ? 0 : -10;
+
+                rawScore = gatePoints + zonePoints + standUpPenalty;
+                displayScore = rawScore + ' pts';
+
+                // Update zone total display
+                document.getElementById('cpZoneTotal').textContent = rawScore;
+            }
+
+            document.getElementById('cpRawScore').textContent = displayScore;
+            document.getElementById('cpScoreValue').value = rawScore;
+        }
+
+        function resetCpScoring() {
+            // Reset Speed
+            document.getElementById('cpSpeedTime').value = '';
+            // Reset Distance
+            document.getElementById('cpDistanceMeters').value = '';
+            // Reset Zone
+            document.getElementById('cpGate1').checked = false;
+            document.getElementById('cpGate2').checked = false;
+            document.getElementById('cpGate3').checked = false;
+            document.getElementById('cpGate4').checked = false;
+            document.getElementById('cpLandingZone').value = '0';
+            document.getElementById('cpStandUp').checked = true;
+            document.getElementById('cpZoneTotal').textContent = '0';
+            document.getElementById('cpRawScore').textContent = '--';
+            document.getElementById('cpScoreValue').value = '';
+            document.getElementById('cpEventType').value = '';
+        }
 
         function openRoundModal(teamId, teamName, roundNum, score, videoId, category) {
             document.getElementById('roundTeamId').value = teamId;
@@ -651,10 +1150,15 @@
             // Reset state
             selectedVideoFile = null;
             selectedFlysightFile = null;
-            document.getElementById('selectedVideoInfo').classList.add('hidden');
+            videoStartPoint = null;
             document.getElementById('uploadProgress').classList.add('hidden');
             document.getElementById('roundVideoFile').value = '';
             document.getElementById('roundVideoCapture').value = '';
+            // Reset start point controls
+            document.getElementById('fileSelectControls').classList.remove('hidden');
+            document.getElementById('startPointControls').classList.add('hidden');
+            document.getElementById('videoStartPointDisplay').innerHTML = '<span class="text-yellow-400">Not set</span>';
+            document.getElementById('startPointWarning').classList.add('hidden');
 
             // Reset FlySight state
             document.getElementById('flysightFile').value = '';
@@ -662,8 +1166,9 @@
             document.getElementById('flysightResult').classList.add('hidden');
             document.getElementById('flysightProgress').classList.add('hidden');
 
-            // Show/hide appropriate upload section based on category
-            const isSpeedSkydiving = category === 'sp' || category.startsWith('sp_');
+            // Get scoring sections
+            const standardScoreSection = document.getElementById('standardScoreSection');
+            const cpScoreSection = document.getElementById('cpScoreSection');
             const videoUploadSection = document.getElementById('videoUploadSection');
             const flysightUploadSection = document.getElementById('flysightUploadSection');
             const videoPlayerSection = document.getElementById('videoPlayerSection');
@@ -671,8 +1176,30 @@
             const uploadOnlyBtn = document.getElementById('uploadOnlyBtn');
             const scoreInput = document.getElementById('roundScore');
 
-            if (isSpeedSkydiving) {
+            // Determine event type
+            const isSpeedSkydiving = category === 'sp' || category.startsWith('sp_') ||
+                                     competitionEventType === 'sp' || competitionEventType.startsWith('sp_');
+            const isCp = isCpCompetition || category === 'cp' || category.startsWith('cp_');
+
+            if (isCp && standardScoreSection && cpScoreSection) {
+                // Canopy Piloting - show CP-specific scoring
+                standardScoreSection.classList.add('hidden');
+                cpScoreSection.classList.remove('hidden');
+                videoUploadSection.classList.remove('hidden');
+                flysightUploadSection.classList.add('hidden');
+
+                // Reset CP scoring fields
+                resetCpScoring();
+
+                // Default to Speed event
+                setCpEvent('speed');
+
+                document.getElementById('modalStatusText').textContent = 'Select CP event type and enter score';
+                document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
+            } else if (isSpeedSkydiving) {
                 // Speed Skydiving - show FlySight CSV upload
+                if (standardScoreSection) standardScoreSection.classList.remove('hidden');
+                if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 videoUploadSection.classList.add('hidden');
                 flysightUploadSection.classList.remove('hidden');
                 videoPlayerSection.classList.add('hidden');
@@ -685,7 +1212,9 @@
                 document.getElementById('modalStatusText').textContent = 'Upload FlySight CSV to record speed';
                 document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
             } else {
-                // Other categories - show video upload
+                // Other categories - show standard scoring
+                if (standardScoreSection) standardScoreSection.classList.remove('hidden');
+                if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 videoUploadSection.classList.remove('hidden');
                 flysightUploadSection.classList.add('hidden');
                 if (scoreInput) {
@@ -694,7 +1223,13 @@
                     scoreInput.parentElement.querySelector('.text-gray-500 div').textContent = 'Points scored';
                     scoreInput.parentElement.querySelector('.text-gray-500 .text-xs').textContent = '(minus omissions)';
                 }
+            }
 
+            // Handle video player visibility and upload controls
+            const videoUploadControls = document.getElementById('videoUploadControls');
+            const videoAlreadyExistsMsg = document.getElementById('videoAlreadyExistsMsg');
+
+            if (!isSpeedSkydiving) {
                 if (videoId) {
                     // Show video player with the uploaded video
                     videoPlayerSection.classList.remove('hidden');
@@ -703,10 +1238,27 @@
                         .then(data => {
                             if (data.url) {
                                 videoPlayer.src = data.url;
+                                // Store start time as data attribute for keyboard shortcut
+                                videoPlayer.dataset.startTime = data.start_time || 0;
+                                // Apply start time when video loads
+                                if (data.start_time && data.start_time > 0) {
+                                    videoPlayer.addEventListener('loadedmetadata', function onLoaded() {
+                                        videoPlayer.currentTime = data.start_time;
+                                        videoPlayer.removeEventListener('loadedmetadata', onLoaded);
+                                    });
+                                    // Also try setting it directly in case metadata already loaded
+                                    if (videoPlayer.readyState >= 1) {
+                                        videoPlayer.currentTime = data.start_time;
+                                    }
+                                }
                             }
                         })
                         .catch(err => console.error('Error loading video:', err));
                     document.getElementById('viewVideoFullLink').href = '/video/' + videoId;
+
+                    // Hide upload controls since video already exists
+                    if (videoUploadControls) videoUploadControls.classList.add('hidden');
+                    if (videoAlreadyExistsMsg) videoAlreadyExistsMsg.classList.remove('hidden');
 
                     if (score !== null && score !== undefined) {
                         document.getElementById('modalStatusText').textContent = '✓ Video uploaded and scored';
@@ -720,14 +1272,21 @@
                 } else {
                     videoPlayerSection.classList.add('hidden');
                     videoPlayer.src = '';
-                    document.getElementById('modalStatusText').textContent = 'No video uploaded yet';
-                    document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
+
+                    // Show upload controls since no video exists
+                    if (videoUploadControls) videoUploadControls.classList.remove('hidden');
+                    if (videoAlreadyExistsMsg) videoAlreadyExistsMsg.classList.add('hidden');
+
+                    if (!isCp) {
+                        document.getElementById('modalStatusText').textContent = 'No video uploaded yet';
+                        document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
+                    }
                     uploadOnlyBtn.classList.add('hidden');
                 }
             }
 
-            // Set score value
-            if (scoreInput) {
+            // Set score value for non-CP events
+            if (!isCp && scoreInput) {
                 scoreInput.value = (score !== null && score !== undefined) ? score : '';
             }
 
@@ -811,30 +1370,93 @@
             // Stop video playback
             document.getElementById('roundVideoPlayer').pause();
             document.getElementById('roundVideoPlayer').src = '';
+
+            // Clean up upload preview video
+            const previewVideo = document.getElementById('uploadPreviewVideo');
+            if (previewVideo && previewVideo.src) {
+                previewVideo.pause();
+                URL.revokeObjectURL(previewVideo.src);
+                previewVideo.src = '';
+            }
+
+            // Reset start point state
+            videoStartPoint = null;
+            selectedVideoFile = null;
+
+            // Hide remove video confirmation
+            const removeConfirm = document.getElementById('removeVideoConfirm');
+            if (removeConfirm) {
+                removeConfirm.classList.add('hidden');
+                document.getElementById('deleteVideoFile').checked = false;
+            }
         }
 
         function handleVideoSelect(event) {
             const file = event.target.files[0];
             if (file) {
                 selectedVideoFile = file;
-                document.getElementById('selectedVideoName').textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(2) + ' MB)';
-                document.getElementById('selectedVideoInfo').classList.remove('hidden');
-                // Show "Upload Video Only" button for videographers
-                document.getElementById('uploadOnlyBtn').classList.remove('hidden');
+                videoStartPoint = null;
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                document.getElementById('selectedVideoName').textContent = file.name + ' (' + sizeMB + ' MB)';
+
+                // Show start point section, hide file select
+                document.getElementById('fileSelectControls').classList.add('hidden');
+                document.getElementById('startPointControls').classList.remove('hidden');
+
+                // Load video preview
+                const previewVideo = document.getElementById('uploadPreviewVideo');
+                const videoUrl = URL.createObjectURL(file);
+                previewVideo.src = videoUrl;
+
+                // Reset start point display
+                document.getElementById('videoStartPointDisplay').innerHTML = '<span class="text-yellow-400">Not set</span>';
+                document.getElementById('startPointWarning').classList.add('hidden');
+
+                // Hide upload only button until start point is set
+                document.getElementById('uploadOnlyBtn').classList.add('hidden');
             }
+        }
+
+        function setVideoStartPoint() {
+            const previewVideo = document.getElementById('uploadPreviewVideo');
+            videoStartPoint = parseFloat(previewVideo.currentTime.toFixed(2));
+
+            // Update display
+            document.getElementById('videoStartPointDisplay').innerHTML = '<span class="text-green-400">' + videoStartPoint.toFixed(2) + 's</span>';
+            document.getElementById('startPointWarning').classList.add('hidden');
+
+            // Show upload only button
+            document.getElementById('uploadOnlyBtn').classList.remove('hidden');
         }
 
         function clearSelectedVideo() {
             selectedVideoFile = null;
-            document.getElementById('selectedVideoInfo').classList.add('hidden');
+            videoStartPoint = null;
+
+            // Reset UI
+            document.getElementById('fileSelectControls').classList.remove('hidden');
+            document.getElementById('startPointControls').classList.add('hidden');
             document.getElementById('uploadOnlyBtn').classList.add('hidden');
             document.getElementById('roundVideoFile').value = '';
             document.getElementById('roundVideoCapture').value = '';
+
+            // Clean up video preview
+            const previewVideo = document.getElementById('uploadPreviewVideo');
+            if (previewVideo && previewVideo.src) {
+                URL.revokeObjectURL(previewVideo.src);
+                previewVideo.src = '';
+            }
         }
 
         async function uploadVideoOnly() {
             if (!selectedVideoFile) {
                 alert('Please select a video first');
+                return;
+            }
+
+            // Require start point
+            if (videoStartPoint === null) {
+                document.getElementById('startPointWarning').classList.remove('hidden');
                 return;
             }
 
@@ -844,8 +1466,9 @@
 
             document.getElementById('uploadProgress').classList.remove('hidden');
             document.getElementById('uploadOnlyBtn').disabled = true;
-            document.getElementById('saveRoundBtn').disabled = true;
-            document.getElementById('uploadBar').style.width = '30%';
+            const saveRoundBtn = document.getElementById('saveRoundBtn');
+            if (saveRoundBtn) saveRoundBtn.disabled = true;
+            document.getElementById('uploadBar').style.width = '20%';
             document.getElementById('uploadStatus').textContent = 'Uploading video...';
 
             const formData = new FormData();
@@ -855,7 +1478,7 @@
             formData.append('title', teamName + ' - Round ' + roundNum);
 
             try {
-                document.getElementById('uploadBar').style.width = '60%';
+                document.getElementById('uploadBar').style.width = '50%';
 
                 const uploadResponse = await fetch('/videographer/upload-video', {
                     method: 'POST',
@@ -865,8 +1488,22 @@
                 const uploadResult = await uploadResponse.json();
 
                 if (uploadResult.success) {
-                    document.getElementById('uploadBar').style.width = '90%';
-                    document.getElementById('uploadStatus').textContent = 'Saving...';
+                    document.getElementById('uploadBar').style.width = '60%';
+                    document.getElementById('uploadStatus').textContent = 'Setting start point...';
+
+                    // Save start point
+                    const startTimeResponse = await fetch('/api/video/' + uploadResult.id + '/set-start-time', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ start_time: videoStartPoint })
+                    });
+                    const startTimeResult = await startTimeResponse.json();
+                    if (!startTimeResult.success) {
+                        console.error('Failed to save start time:', startTimeResult.error);
+                    }
+
+                    document.getElementById('uploadBar').style.width = '80%';
+                    document.getElementById('uploadStatus').textContent = 'Linking to team...';
 
                     // Save score record with video but no score
                     const response = await fetch('/videographer/team/' + teamId + '/score', {
@@ -882,7 +1519,7 @@
                     const result = await response.json();
                     if (result.success) {
                         document.getElementById('uploadBar').style.width = '100%';
-                        document.getElementById('uploadStatus').textContent = 'Video uploaded! Ready for judging.';
+                        document.getElementById('uploadStatus').textContent = 'Video uploaded! Start: ' + videoStartPoint.toFixed(2) + 's';
                         setTimeout(() => location.reload(), 1000);
                     } else {
                         alert(result.error || 'Failed to save');
@@ -905,10 +1542,19 @@
                 team_number: document.getElementById('teamNumber').value,
                 team_name: document.getElementById('teamName').value,
                 class: document.getElementById('teamClass').value,
-                category: document.getElementById('teamCategory').value,
-                event: document.getElementById('teamEvent').value,
                 members: document.getElementById('teamMembers').value
             };
+
+            // Handle event field based on multi-event vs single-event
+            if (isMultiEvent) {
+                data.event = document.getElementById('teamEvent').value;
+                data.category = data.event;  // Use event as category for multi-event
+            } else {
+                const categoryEl = document.getElementById('teamCategory');
+                const eventNameEl = document.getElementById('teamEventName');
+                data.category = categoryEl ? categoryEl.value : '';
+                data.event = eventNameEl ? eventNameEl.value : '';
+            }
 
             try {
                 const response = await fetch('/admin/competition/' + compId + '/add-team', {
@@ -958,16 +1604,70 @@
 
             const teamId = document.getElementById('roundTeamId').value;
             const roundNum = document.getElementById('roundNumber').value;
-            const scoreInput = document.getElementById('roundScore').value;
             const existingVideoId = document.getElementById('existingVideoId').value;
 
-            // Validate score is entered
-            if (scoreInput === '' || scoreInput === null) {
-                alert('Please enter a score');
-                return;
+            let score;
+            let scoreData = '';
+
+            // Check if this is a CP competition
+            const cpScoreSection = document.getElementById('cpScoreSection');
+            const isCpScoring = cpScoreSection && !cpScoreSection.classList.contains('hidden');
+
+            if (isCpScoring) {
+                // Get CP-specific score
+                const cpEventType = document.getElementById('cpEventType').value;
+                const cpScoreValue = document.getElementById('cpScoreValue').value;
+
+                if (!cpEventType) {
+                    alert('Please select a CP event type (Speed, Distance, or Zone Accuracy)');
+                    return;
+                }
+
+                if (cpScoreValue === '' || cpScoreValue === null) {
+                    alert('Please enter a score');
+                    return;
+                }
+
+                score = parseFloat(cpScoreValue);
+
+                // Build score_data JSON for CP
+                if (cpEventType === 'speed') {
+                    scoreData = JSON.stringify({
+                        event: 'speed',
+                        time: parseFloat(document.getElementById('cpSpeedTime').value)
+                    });
+                } else if (cpEventType === 'distance') {
+                    scoreData = JSON.stringify({
+                        event: 'distance',
+                        meters: parseFloat(document.getElementById('cpDistanceMeters').value)
+                    });
+                } else if (cpEventType === 'zone') {
+                    scoreData = JSON.stringify({
+                        event: 'zone',
+                        gates: {
+                            g1: document.getElementById('cpGate1').checked,
+                            g2: document.getElementById('cpGate2').checked,
+                            g3: document.getElementById('cpGate3').checked,
+                            g4: document.getElementById('cpGate4').checked
+                        },
+                        landingZone: parseInt(document.getElementById('cpLandingZone').value),
+                        standUp: document.getElementById('cpStandUp').checked,
+                        total: score
+                    });
+                }
+            } else {
+                // Standard scoring
+                const scoreInput = document.getElementById('roundScore').value;
+
+                // Validate score is entered
+                if (scoreInput === '' || scoreInput === null) {
+                    alert('Please enter a score');
+                    return;
+                }
+
+                score = parseFloat(scoreInput);
             }
 
-            const score = parseFloat(scoreInput);
             let videoId = existingVideoId;  // Keep existing video if any
 
             // Upload new video if selected
@@ -1022,6 +1722,7 @@
                     body: JSON.stringify({
                         round_num: parseInt(roundNum),
                         score: score,
+                        score_data: scoreData,
                         video_id: videoId
                     })
                 });
@@ -1040,6 +1741,39 @@
 
             document.getElementById('saveRoundBtn').disabled = false;
             document.getElementById('uploadOnlyBtn').disabled = false;
+        }
+
+        function showRemoveVideoConfirm() {
+            document.getElementById('removeVideoConfirm').classList.remove('hidden');
+        }
+
+        function hideRemoveVideoConfirm() {
+            document.getElementById('removeVideoConfirm').classList.add('hidden');
+            document.getElementById('deleteVideoFile').checked = false;
+        }
+
+        async function removeVideoFromRound() {
+            const teamId = document.getElementById('roundTeamId').value;
+            const roundNum = document.getElementById('roundNumber').value;
+            const deleteFile = document.getElementById('deleteVideoFile').checked;
+
+            try {
+                const response = await fetch('/admin/team/' + teamId + '/round/' + roundNum + '/remove-video', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ delete_file: deleteFile })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('Video removed from round' + (result.deleted_file ? ' and file deleted' : ''));
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to remove video');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
         }
 
         async function deleteTeam(teamId) {
@@ -1079,6 +1813,121 @@
                 alert('Error: ' + err.message);
             }
         }
+
+        // ========================================
+        // Keyboard shortcuts for video judging
+        // ========================================
+        const frameTime = 1/30;  // Assume 30fps for frame stepping
+        let currentPlaybackRate = 1;
+
+        function setPlaybackSpeed(speed) {
+            const videoPlayer = document.getElementById('roundVideoPlayer');
+            if (videoPlayer) {
+                videoPlayer.playbackRate = speed;
+                currentPlaybackRate = speed;
+            }
+        }
+
+        // Keyboard controls for round modal video
+        window.addEventListener('keydown', (e) => {
+            // Only handle if round modal is open
+            const roundModal = document.getElementById('roundModal');
+            if (roundModal.classList.contains('hidden')) return;
+
+            // Ignore if typing in an input, select, or textarea
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+            const videoPlayer = document.getElementById('roundVideoPlayer');
+            if (!videoPlayer || !videoPlayer.src) return;
+
+            let handled = false;
+
+            switch(e.code) {
+                case 'Space':
+                    if (videoPlayer.paused) {
+                        videoPlayer.play();
+                    } else {
+                        videoPlayer.pause();
+                    }
+                    handled = true;
+                    break;
+                case 'ArrowLeft':
+                    videoPlayer.pause();
+                    videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - frameTime);
+                    handled = true;
+                    break;
+                case 'ArrowRight':
+                    videoPlayer.pause();
+                    videoPlayer.currentTime = Math.min(videoPlayer.duration || 9999, videoPlayer.currentTime + frameTime);
+                    handled = true;
+                    break;
+                case 'ArrowUp':
+                    // Jump back 5 seconds
+                    videoPlayer.currentTime = Math.max(0, videoPlayer.currentTime - 5);
+                    handled = true;
+                    break;
+                case 'ArrowDown':
+                    // Jump forward 5 seconds
+                    videoPlayer.currentTime = Math.min(videoPlayer.duration || 9999, videoPlayer.currentTime + 5);
+                    handled = true;
+                    break;
+                case 'Digit1':
+                    setPlaybackSpeed(0.25);
+                    handled = true;
+                    break;
+                case 'Digit2':
+                    setPlaybackSpeed(0.5);
+                    handled = true;
+                    break;
+                case 'Digit3':
+                    setPlaybackSpeed(0.75);
+                    handled = true;
+                    break;
+                case 'Digit4':
+                    setPlaybackSpeed(1);
+                    handled = true;
+                    break;
+                case 'Digit5':
+                    setPlaybackSpeed(1.5);
+                    handled = true;
+                    break;
+                case 'Digit6':
+                    setPlaybackSpeed(2);
+                    handled = true;
+                    break;
+                case 'KeyG':
+                    // Go to start time
+                    const startTime = videoPlayer.dataset.startTime;
+                    if (startTime) {
+                        videoPlayer.currentTime = parseFloat(startTime);
+                    }
+                    handled = true;
+                    break;
+                case 'Escape':
+                    hideRoundModal();
+                    handled = true;
+                    break;
+            }
+
+            if (handled) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
+
+        // Prevent video from capturing keyboard events
+        document.getElementById('roundVideoPlayer').addEventListener('focus', function() {
+            this.blur();
+        });
+
+        // Click outside inputs to enable keyboard shortcuts
+        document.getElementById('roundModal').addEventListener('click', (e) => {
+            if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT' && e.target.tagName !== 'TEXTAREA') {
+                if (document.activeElement && ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+                    document.activeElement.blur();
+                }
+            }
+        });
     </script>
 </body>
 </html>

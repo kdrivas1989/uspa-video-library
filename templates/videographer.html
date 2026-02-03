@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Videographer Upload - USPA Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 p-4 sticky top-0 z-10">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
+            <div class="flex items-center gap-4">
+                <a href="/competitions" class="text-gray-400 hover:text-white">Competitions</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8 max-w-2xl">
+        <h1 class="text-3xl font-bold mb-2">Videographer Upload</h1>
+        <p class="text-gray-400 mb-8">Upload competition videos for judging</p>
+
+        <!-- Step 1: Select Event -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-4">
+            <div class="flex items-center gap-3 mb-4">
+                <span class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center font-bold">1</span>
+                <h2 class="text-xl font-bold">Select Event</h2>
+            </div>
+            <select id="eventSelect" onchange="loadTeams()"
+                class="w-full px-4 py-3 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">-- Select Competition --</option>
+                {% for comp in competitions %}
+                <option value="{{ comp.id }}" data-rounds="{{ comp.total_rounds }}" data-type="{{ comp.event_type }}" data-types="{{ comp.event_types|default('', true) }}">
+                    {{ comp.name }}{% if comp.event_types %} (Multi-Event){% else %} ({{ comp.event_type|upper }}){% endif %}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <!-- Step 2: Select Team -->
+        <div id="teamSection" class="bg-gray-800 rounded-lg p-6 mb-4 opacity-50 pointer-events-none">
+            <div class="flex items-center gap-3 mb-4">
+                <span class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold" id="step2Circle">2</span>
+                <h2 class="text-xl font-bold">Select Team</h2>
+            </div>
+            <select id="teamSelect" onchange="loadRounds()"
+                class="w-full px-4 py-3 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">-- Select Team --</option>
+            </select>
+            <p id="teamCount" class="text-gray-500 text-sm mt-2"></p>
+        </div>
+
+        <!-- Step 3: Select Round -->
+        <div id="roundSection" class="bg-gray-800 rounded-lg p-6 mb-4 opacity-50 pointer-events-none">
+            <div class="flex items-center gap-3 mb-4">
+                <span class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold" id="step3Circle">3</span>
+                <h2 class="text-xl font-bold">Select Round</h2>
+            </div>
+            <select id="roundSelect" onchange="enableUpload()"
+                class="w-full px-4 py-3 rounded bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">-- Select Round --</option>
+            </select>
+            <p id="roundStatus" class="text-gray-500 text-sm mt-2"></p>
+            <p class="text-gray-500 text-xs mt-2 italic">If you don't see your round, a video has already been uploaded. Please contact an administrator.</p>
+        </div>
+
+        <!-- Step 4: Upload Video -->
+        <div id="uploadSection" class="bg-gray-800 rounded-lg p-6 mb-4 opacity-50 pointer-events-none">
+            <div class="flex items-center gap-3 mb-4">
+                <span class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center font-bold" id="step4Circle">4</span>
+                <h2 class="text-xl font-bold">Upload Video</h2>
+            </div>
+
+            <!-- Upload Controls -->
+            <div id="uploadControls">
+                <!-- Step 4a: Select File -->
+                <div id="fileSelectSection">
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <!-- File Upload -->
+                        <div>
+                            <input type="file" id="videoFile" accept="video/*" class="hidden" onchange="handleVideoSelect(event)">
+                            <button type="button" onclick="document.getElementById('videoFile').click()"
+                                class="w-full px-4 py-6 rounded bg-gray-700 hover:bg-gray-600 text-center">
+                                <span class="block text-3xl mb-2">📁</span>
+                                <span class="block text-sm">Select File</span>
+                            </button>
+                        </div>
+
+                        <!-- Camera/Device Capture -->
+                        <div>
+                            <input type="file" id="videoCapture" accept="video/*" capture="environment" class="hidden" onchange="handleVideoSelect(event)">
+                            <button type="button" onclick="document.getElementById('videoCapture').click()"
+                                class="w-full px-4 py-6 rounded bg-gray-700 hover:bg-gray-600 text-center">
+                                <span class="block text-3xl mb-2">📹</span>
+                                <span class="block text-sm">From Camera</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4b: Set Start Point (shown after file selected) -->
+                <div id="startPointSection" class="hidden">
+                    <div class="mb-3 flex items-center justify-between">
+                        <span id="selectedVideoName" class="text-sm text-gray-400"></span>
+                        <button type="button" onclick="clearSelectedVideo()" class="text-red-400 text-sm hover:underline">Change File</button>
+                    </div>
+
+                    <!-- Video Preview -->
+                    <div class="bg-black rounded-lg overflow-hidden mb-4">
+                        <video id="previewVideo" controls class="w-full" style="max-height: 300px;">
+                            Your browser does not support video playback.
+                        </video>
+                    </div>
+
+                    <!-- Start Point Controls -->
+                    <div class="bg-gray-700 rounded-lg p-4 mb-4">
+                        <p class="text-gray-300 text-sm mb-3">Scrub to the start of the working time and click "Set Start Point"</p>
+                        <div class="flex items-center gap-3">
+                            <button type="button" onclick="setStartPoint()"
+                                class="flex-1 px-4 py-3 rounded bg-blue-600 hover:bg-blue-700 font-medium">
+                                Set Start Point
+                            </button>
+                            <div id="startPointDisplay" class="text-center px-4">
+                                <div class="text-gray-500 text-xs">Start Point</div>
+                                <div class="text-yellow-400 font-mono text-lg" id="startPointTime">Not set</div>
+                            </div>
+                        </div>
+                        <p id="startPointWarning" class="text-red-400 text-xs mt-2 hidden">Please set a start point before uploading</p>
+                    </div>
+
+                    <!-- Upload Progress -->
+                    <div id="uploadProgress" class="hidden mb-4">
+                        <div class="bg-gray-700 rounded-full h-3 mb-2">
+                            <div id="uploadBar" class="bg-blue-600 h-3 rounded-full transition-all" style="width: 0%"></div>
+                        </div>
+                        <p class="text-gray-400 text-sm text-center" id="uploadStatus">Uploading...</p>
+                    </div>
+
+                    <!-- Upload Button -->
+                    <button id="uploadBtn" onclick="uploadVideo()" disabled
+                        class="w-full px-4 py-4 rounded bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed font-bold text-lg">
+                        Upload Video
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Success Message -->
+        <div id="successMessage" class="hidden bg-green-900/50 border border-green-700 rounded-lg p-6 text-center">
+            <span class="text-5xl block mb-4">✓</span>
+            <h3 class="text-xl font-bold text-green-400 mb-2">Upload Complete!</h3>
+            <p class="text-gray-300 mb-4" id="successText">Video uploaded successfully.</p>
+            <div class="flex gap-3 justify-center">
+                <button onclick="resetForm()" class="px-4 py-2 rounded bg-gray-700 hover:bg-gray-600">
+                    Upload Another
+                </button>
+                <a href="/competitions" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700">
+                    View Competitions
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedVideoFile = null;
+        let currentCompetition = null;
+        let currentTeams = [];
+        let currentTeam = null;
+        let totalRounds = 10;
+        let videoStartPoint = null;
+
+        function loadTeams() {
+            const eventSelect = document.getElementById('eventSelect');
+            const compId = eventSelect.value;
+
+            if (!compId) {
+                disableSection('teamSection', 'step2Circle');
+                disableSection('roundSection', 'step3Circle');
+                disableSection('uploadSection', 'step4Circle');
+                return;
+            }
+
+            // Get total rounds and event types from data attribute
+            const option = eventSelect.options[eventSelect.selectedIndex];
+            totalRounds = parseInt(option.dataset.rounds) || 10;
+            const eventTypes = option.dataset.types;
+            const isMultiEvent = eventTypes && eventTypes.length > 5;  // JSON array will be longer than empty/single
+            currentCompetition = {
+                id: compId,
+                event_type: option.dataset.type,
+                is_multi_event: isMultiEvent
+            };
+
+            // Enable team section
+            enableSection('teamSection', 'step2Circle');
+
+            // Fetch teams for this competition
+            fetch('/api/competition/' + compId + '/teams')
+                .then(r => r.json())
+                .then(teams => {
+                    currentTeams = teams;
+                    const teamSelect = document.getElementById('teamSelect');
+                    teamSelect.innerHTML = '<option value="">-- Select Team --</option>';
+
+                    // Sort teams - by event then by number for multi-event
+                    if (isMultiEvent) {
+                        teams.sort((a, b) => {
+                            const eventCompare = (a.event || '').localeCompare(b.event || '');
+                            if (eventCompare !== 0) return eventCompare;
+                            return (a.team_number || '').localeCompare(b.team_number || '');
+                        });
+                    }
+
+                    teams.forEach(team => {
+                        const opt = document.createElement('option');
+                        opt.value = team.id;
+                        // Show event type for multi-event competitions
+                        if (isMultiEvent && team.event) {
+                            opt.textContent = '[' + team.event.toUpperCase() + '] #' + team.team_number + ' - ' + team.team_name + ' (' + team.class + ')';
+                        } else {
+                            opt.textContent = '#' + team.team_number + ' - ' + team.team_name + ' (' + team.class + ')';
+                        }
+                        teamSelect.appendChild(opt);
+                    });
+
+                    document.getElementById('teamCount').textContent = teams.length + ' teams';
+                })
+                .catch(err => {
+                    console.error('Error loading teams:', err);
+                    document.getElementById('teamCount').textContent = 'Error loading teams';
+                });
+
+            // Disable subsequent sections
+            disableSection('roundSection', 'step3Circle');
+            disableSection('uploadSection', 'step4Circle');
+        }
+
+        function loadRounds() {
+            const teamSelect = document.getElementById('teamSelect');
+            const teamId = teamSelect.value;
+
+            if (!teamId) {
+                disableSection('roundSection', 'step3Circle');
+                disableSection('uploadSection', 'step4Circle');
+                return;
+            }
+
+            // Find selected team data
+            currentTeam = currentTeams.find(t => t.id === teamId);
+
+            // Enable round section
+            enableSection('roundSection', 'step3Circle');
+
+            const roundSelect = document.getElementById('roundSelect');
+            roundSelect.innerHTML = '<option value="">-- Select Round --</option>';
+
+            let availableRounds = 0;
+            for (let i = 1; i <= totalRounds; i++) {
+                // Check if this round has a video
+                const roundScore = currentTeam.scores ? currentTeam.scores.find(s => s.round_num === i) : null;
+                const hasVideo = roundScore && roundScore.video_id;
+
+                // Skip rounds that already have videos
+                if (hasVideo) {
+                    continue;
+                }
+
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.textContent = 'Round ' + i;
+                roundSelect.appendChild(opt);
+                availableRounds++;
+            }
+
+            // Update status based on available rounds
+            const roundStatus = document.getElementById('roundStatus');
+            if (availableRounds === 0) {
+                roundStatus.textContent = 'All rounds have videos uploaded';
+                roundStatus.classList.add('text-green-400');
+            } else {
+                roundStatus.textContent = availableRounds + ' round(s) need video';
+                roundStatus.classList.remove('text-green-400');
+            }
+
+            // Disable upload section
+            disableSection('uploadSection', 'step4Circle');
+        }
+
+        function enableUpload() {
+            const roundSelect = document.getElementById('roundSelect');
+            const roundNum = roundSelect.value;
+
+            if (!roundNum) {
+                disableSection('uploadSection', 'step4Circle');
+                return;
+            }
+
+            // Enable upload section - all rounds in dropdown are available (no video yet)
+            enableSection('uploadSection', 'step4Circle');
+
+            // Reset to file select view
+            document.getElementById('fileSelectSection').classList.remove('hidden');
+            document.getElementById('startPointSection').classList.add('hidden');
+            clearSelectedVideo();
+        }
+
+        function enableSection(sectionId, circleId) {
+            const section = document.getElementById(sectionId);
+            const circle = document.getElementById(circleId);
+            section.classList.remove('opacity-50', 'pointer-events-none');
+            circle.classList.remove('bg-gray-600');
+            circle.classList.add('bg-blue-600');
+        }
+
+        function disableSection(sectionId, circleId) {
+            const section = document.getElementById(sectionId);
+            const circle = document.getElementById(circleId);
+            section.classList.add('opacity-50', 'pointer-events-none');
+            circle.classList.remove('bg-blue-600');
+            circle.classList.add('bg-gray-600');
+        }
+
+        function handleVideoSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                selectedVideoFile = file;
+                videoStartPoint = null;
+                const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                document.getElementById('selectedVideoName').textContent = file.name + ' (' + sizeMB + ' MB)';
+
+                // Show start point section, hide file select
+                document.getElementById('fileSelectSection').classList.add('hidden');
+                document.getElementById('startPointSection').classList.remove('hidden');
+
+                // Load video preview
+                const previewVideo = document.getElementById('previewVideo');
+                const videoUrl = URL.createObjectURL(file);
+                previewVideo.src = videoUrl;
+
+                // Reset start point display
+                document.getElementById('startPointTime').textContent = 'Not set';
+                document.getElementById('startPointTime').classList.remove('text-green-400');
+                document.getElementById('startPointTime').classList.add('text-yellow-400');
+                document.getElementById('startPointWarning').classList.add('hidden');
+                document.getElementById('uploadBtn').disabled = true;
+            }
+        }
+
+        function setStartPoint() {
+            const previewVideo = document.getElementById('previewVideo');
+            videoStartPoint = parseFloat(previewVideo.currentTime.toFixed(2));
+
+            // Update display
+            document.getElementById('startPointTime').textContent = videoStartPoint.toFixed(2) + 's';
+            document.getElementById('startPointTime').classList.remove('text-yellow-400');
+            document.getElementById('startPointTime').classList.add('text-green-400');
+            document.getElementById('startPointWarning').classList.add('hidden');
+
+            // Enable upload button
+            document.getElementById('uploadBtn').disabled = false;
+        }
+
+        function clearSelectedVideo() {
+            selectedVideoFile = null;
+            videoStartPoint = null;
+
+            // Reset UI
+            document.getElementById('fileSelectSection').classList.remove('hidden');
+            document.getElementById('startPointSection').classList.add('hidden');
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('videoFile').value = '';
+            document.getElementById('videoCapture').value = '';
+
+            // Clean up video preview
+            const previewVideo = document.getElementById('previewVideo');
+            if (previewVideo.src) {
+                URL.revokeObjectURL(previewVideo.src);
+                previewVideo.src = '';
+            }
+        }
+
+        async function uploadVideo() {
+            if (!selectedVideoFile) {
+                alert('Please select a video first');
+                return;
+            }
+
+            // Require start point to be set
+            if (videoStartPoint === null) {
+                document.getElementById('startPointWarning').classList.remove('hidden');
+                return;
+            }
+
+            const teamId = document.getElementById('teamSelect').value;
+            const roundNum = document.getElementById('roundSelect').value;
+            const eventSelect = document.getElementById('eventSelect');
+            const eventName = eventSelect.options[eventSelect.selectedIndex].textContent;
+            const teamName = currentTeam ? currentTeam.team_name : 'Team';
+
+            // Show progress
+            document.getElementById('uploadProgress').classList.remove('hidden');
+            document.getElementById('uploadBtn').disabled = true;
+            document.getElementById('uploadBar').style.width = '10%';
+            document.getElementById('uploadStatus').textContent = 'Preparing upload...';
+
+            const formData = new FormData();
+            formData.append('file', selectedVideoFile);
+            formData.append('category', currentCompetition.event_type);
+            formData.append('event', eventName);
+            formData.append('title', teamName + ' - Round ' + roundNum);
+
+            try {
+                document.getElementById('uploadBar').style.width = '30%';
+                document.getElementById('uploadStatus').textContent = 'Uploading video...';
+
+                const uploadResponse = await fetch('/videographer/upload-video', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const uploadResult = await uploadResponse.json();
+
+                if (uploadResult.success) {
+                    document.getElementById('uploadBar').style.width = '50%';
+                    document.getElementById('uploadStatus').textContent = 'Setting start point...';
+
+                    // Save start point
+                    const startTimeResponse = await fetch('/api/video/' + uploadResult.id + '/set-start-time', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ start_time: videoStartPoint })
+                    });
+                    const startTimeResult = await startTimeResponse.json();
+                    if (!startTimeResult.success) {
+                        console.error('Failed to save start time:', startTimeResult.error);
+                        alert('Warning: Video uploaded but start point may not have saved. Error: ' + (startTimeResult.error || 'Unknown'));
+                    }
+
+                    document.getElementById('uploadBar').style.width = '70%';
+                    document.getElementById('uploadStatus').textContent = 'Linking to team...';
+
+                    // Save score record with video but no score
+                    const response = await fetch('/videographer/team/' + teamId + '/score', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            round_num: parseInt(roundNum),
+                            score: null,
+                            video_id: uploadResult.id
+                        })
+                    });
+
+                    const result = await response.json();
+                    if (result.success) {
+                        document.getElementById('uploadBar').style.width = '100%';
+                        document.getElementById('uploadStatus').textContent = 'Complete!';
+
+                        // Show success message
+                        document.getElementById('successText').textContent =
+                            'Video uploaded for ' + teamName + ' - Round ' + roundNum + ' (start: ' + videoStartPoint.toFixed(2) + 's). Ready for judging.';
+                        document.getElementById('successMessage').classList.remove('hidden');
+
+                        // Hide upload section
+                        document.getElementById('uploadSection').classList.add('hidden');
+                    } else {
+                        alert('Failed to link video: ' + (result.error || 'Unknown error'));
+                        document.getElementById('uploadBtn').disabled = false;
+                    }
+                } else {
+                    alert('Video upload failed: ' + (uploadResult.error || 'Unknown error'));
+                    document.getElementById('uploadBtn').disabled = false;
+                }
+            } catch (err) {
+                alert('Upload error: ' + err.message);
+                document.getElementById('uploadBtn').disabled = false;
+            }
+        }
+
+        function resetForm() {
+            // Reset all selections
+            document.getElementById('eventSelect').value = '';
+            document.getElementById('teamSelect').innerHTML = '<option value="">-- Select Team --</option>';
+            document.getElementById('roundSelect').innerHTML = '<option value="">-- Select Round --</option>';
+
+            // Reset file selection
+            clearSelectedVideo();
+
+            // Reset start point section
+            document.getElementById('fileSelectSection').classList.remove('hidden');
+            document.getElementById('startPointSection').classList.add('hidden');
+            document.getElementById('startPointTime').textContent = 'Not set';
+            document.getElementById('startPointWarning').classList.add('hidden');
+
+            // Reset progress
+            document.getElementById('uploadProgress').classList.add('hidden');
+            document.getElementById('uploadBar').style.width = '0%';
+
+            // Hide success message
+            document.getElementById('successMessage').classList.add('hidden');
+
+            // Show and disable sections
+            document.getElementById('uploadSection').classList.remove('hidden');
+            disableSection('teamSection', 'step2Circle');
+            disableSection('roundSection', 'step3Circle');
+            disableSection('uploadSection', 'step4Circle');
+
+            // Reset state
+            selectedVideoFile = null;
+            videoStartPoint = null;
+            currentCompetition = null;
+            currentTeams = [];
+            currentTeam = null;
+        }
+    </script>
+</body>
+</html>

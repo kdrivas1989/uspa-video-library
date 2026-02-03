@@ -12,6 +12,7 @@
             <a href="/" class="text-2xl font-bold text-blue-400">USPA Video Library</a>
             <div class="flex items-center gap-4">
                 <a href="/competitions" class="text-blue-400">Competitions</a>
+                <a href="/videographer" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Videographer Upload</a>
                 {% if is_admin %}
                 <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
                 {% endif %}
@@ -34,8 +35,18 @@
             {% for comp in competitions %}
             <a href="/competition/{{ comp.id }}" class="bg-gray-800 rounded-lg p-6 hover:bg-gray-700 transition">
                 <h2 class="text-xl font-bold mb-2">{{ comp.name }}</h2>
-                <div class="text-gray-400 text-sm space-y-1">
-                    <p>Event: {{ comp.event_type|upper }}</p>
+                <div class="text-gray-400 text-sm space-y-2">
+                    <div class="flex flex-wrap gap-1 items-center">
+                        {% if comp.parsed_event_types|length > 1 %}
+                        <span class="text-gray-500 mr-1">Events:</span>
+                        {% for et in comp.parsed_event_types %}
+                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded">{{ et|upper }}</span>
+                        {% endfor %}
+                        {% else %}
+                        <span class="text-gray-500 mr-1">Event:</span>
+                        <span class="bg-blue-600 text-white text-xs px-2 py-0.5 rounded">{{ comp.event_type|upper }}</span>
+                        {% endif %}
+                    </div>
                     <p>Rounds: {{ comp.total_rounds }}</p>
                     <p>Status: <span class="{% if comp.status == 'active' %}text-green-400{% else %}text-gray-500{% endif %}">{{ comp.status }}</span></p>
                 </div>
@@ -67,20 +78,26 @@
                             placeholder="2024 USPA Nationals">
                     </div>
                     <div>
-                        <label class="block text-gray-400 text-sm mb-1">Event Type</label>
-                        <select id="compEventType" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
+                        <label class="block text-gray-400 text-sm mb-1">Event Types <span class="text-gray-500">(select multiple for multi-event competition)</span></label>
+                        <div class="bg-gray-700 rounded p-3 max-h-48 overflow-y-auto space-y-1">
                             {% for cat_id, cat in categories.items() %}
                             {% if cat.subcategories %}
-                            <optgroup label="{{ cat.name }} ({{ cat.abbrev }})">
-                                {% for sub in cat.subcategories %}
-                                <option value="{{ cat_id }}_{{ sub.id }}">{{ sub.name }}</option>
-                                {% endfor %}
-                            </optgroup>
+                            <div class="text-gray-400 text-xs font-medium mt-2 mb-1">{{ cat.name }} ({{ cat.abbrev }})</div>
+                            {% for sub in cat.subcategories %}
+                            <label class="flex items-center gap-2 px-2 py-1 hover:bg-gray-600 rounded cursor-pointer">
+                                <input type="checkbox" name="eventTypes" value="{{ cat_id }}_{{ sub.id }}" class="event-type-checkbox">
+                                <span class="text-sm">{{ sub.name }}</span>
+                            </label>
+                            {% endfor %}
                             {% else %}
-                            <option value="{{ cat_id }}">{{ cat.name }} ({{ cat.abbrev }})</option>
+                            <label class="flex items-center gap-2 px-2 py-1 hover:bg-gray-600 rounded cursor-pointer">
+                                <input type="checkbox" name="eventTypes" value="{{ cat_id }}" class="event-type-checkbox">
+                                <span class="text-sm">{{ cat.name }} ({{ cat.abbrev }})</span>
+                            </label>
                             {% endif %}
                             {% endfor %}
-                        </select>
+                        </div>
+                        <p class="text-gray-500 text-xs mt-1">Selected: <span id="selectedEventsCount">0</span> event(s)</p>
                     </div>
                     <div>
                         <label class="block text-gray-400 text-sm mb-1">Total Rounds</label>
@@ -101,8 +118,23 @@
     </div>
 
     <script>
+        // Update selected events count on checkbox change
+        document.querySelectorAll('.event-type-checkbox').forEach(cb => {
+            cb.addEventListener('change', updateSelectedCount);
+        });
+
+        function updateSelectedCount() {
+            const count = document.querySelectorAll('.event-type-checkbox:checked').length;
+            document.getElementById('selectedEventsCount').textContent = count;
+        }
+
         function showCreateModal() {
             document.getElementById('createModal').classList.remove('hidden');
+            // Reset checkboxes
+            document.querySelectorAll('.event-type-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
+            updateSelectedCount();
         }
 
         function hideCreateModal() {
@@ -112,9 +144,20 @@
         async function createCompetition(e) {
             e.preventDefault();
 
+            // Get selected event types
+            const selectedEvents = [];
+            document.querySelectorAll('.event-type-checkbox:checked').forEach(cb => {
+                selectedEvents.push(cb.value);
+            });
+
+            if (selectedEvents.length === 0) {
+                alert('Please select at least one event type');
+                return;
+            }
+
             const data = {
                 name: document.getElementById('compName').value,
-                event_type: document.getElementById('compEventType').value,
+                event_types: selectedEvents,
                 total_rounds: parseInt(document.getElementById('compRounds').value)
             };
 
