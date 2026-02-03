@@ -341,11 +341,18 @@ def init_db():
                 score REAL,
                 score_data TEXT,
                 video_id TEXT,
+                scored_by TEXT,
                 created_at TEXT NOT NULL,
                 FOREIGN KEY (competition_id) REFERENCES competitions(id),
                 FOREIGN KEY (team_id) REFERENCES competition_teams(id)
             )
         ''')
+
+        # Add scored_by column if it doesn't exist
+        try:
+            cursor.execute('ALTER TABLE competition_scores ADD COLUMN scored_by TEXT')
+        except:
+            pass
 
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
@@ -737,11 +744,11 @@ def save_score(score_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO competition_scores (id, competition_id, team_id, round_num, score, score_data, video_id, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO competition_scores (id, competition_id, team_id, round_num, score, score_data, video_id, scored_by, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (score_data['id'], score_data['competition_id'], score_data['team_id'],
               score_data['round_num'], score_data.get('score'), score_data.get('score_data', ''),
-              score_data.get('video_id', ''), score_data['created_at']))
+              score_data.get('video_id', ''), score_data.get('scored_by', ''), score_data['created_at']))
         db.commit()
 
 
@@ -2372,6 +2379,9 @@ def save_team_score(team_id):
     else:
         score_id = str(uuid.uuid4())[:8]
 
+    # Record who scored (only if score is being set)
+    scored_by = session.get('username', '') if score is not None else (existing.get('scored_by', '') if existing else '')
+
     save_score({
         'id': score_id,
         'competition_id': team['competition_id'],
@@ -2380,6 +2390,7 @@ def save_team_score(team_id):
         'score': score,
         'score_data': score_data,
         'video_id': video_id,
+        'scored_by': scored_by,
         'created_at': datetime.now().isoformat()
     })
 
@@ -2614,6 +2625,9 @@ def videographer_save_team_score(team_id):
     else:
         score_id = str(uuid.uuid4())[:8]
 
+    # Record who scored (only if score is being set)
+    scored_by = session.get('username', '') if score is not None else (existing.get('scored_by', '') if existing else '')
+
     save_score({
         'id': score_id,
         'competition_id': team['competition_id'],
@@ -2622,6 +2636,7 @@ def videographer_save_team_score(team_id):
         'score': score,
         'score_data': score_data,
         'video_id': video_id,
+        'scored_by': scored_by,
         'created_at': datetime.now().isoformat()
     })
 

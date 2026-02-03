@@ -45,6 +45,7 @@
                     <tr>
                         <th class="px-6 py-3 text-left text-sm font-medium">Username</th>
                         <th class="px-6 py-3 text-left text-sm font-medium">Name</th>
+                        <th class="px-6 py-3 text-left text-sm font-medium">Email</th>
                         <th class="px-6 py-3 text-left text-sm font-medium">Role</th>
                         <th class="px-6 py-3 text-right text-sm font-medium">Actions</th>
                     </tr>
@@ -54,6 +55,7 @@
                     <tr class="hover:bg-gray-700/50">
                         <td class="px-6 py-4 font-mono">{{ user.username }}</td>
                         <td class="px-6 py-4">{{ user.name }}</td>
+                        <td class="px-6 py-4 text-gray-400">{{ user.email|default('-', true) }}</td>
                         <td class="px-6 py-4">
                             {% if user.role == 'admin' %}
                             <span class="bg-purple-600 text-white text-xs px-2 py-1 rounded">Admin</span>

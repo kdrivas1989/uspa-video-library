@@ -166,7 +166,7 @@
                                     {% if round_score and round_score.video_id %}
                                 <a href="/video/{{ round_score.video_id }}?competition={{ competition.id }}&team={{ team.id }}&round={{ i }}"
                                     class="inline-flex items-center justify-center w-10 h-8 rounded text-sm {% if round_score.score is not none %}bg-green-600 hover:bg-green-700{% else %}bg-yellow-600 hover:bg-yellow-700{% endif %}"
-                                    title="{% if round_score.score is not none %}Scored: {{ round_score.score }} - Click to view{% else %}Video uploaded - Click to judge{% endif %}">
+                                    title="{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.scored_by %} (by {{ round_score.scored_by }}){% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
                                     {% if round_score.score is not none %}{{ round_score.score|int }}{% else %}📹{% endif %}
                                 </a>
                                 {% else %}
@@ -255,7 +255,7 @@
                                 {% if round_score and round_score.video_id %}
                                 <a href="/video/{{ round_score.video_id }}?competition={{ competition.id }}&team={{ team.id }}&round={{ i }}"
                                     class="inline-flex items-center justify-center w-10 h-8 rounded text-sm {% if round_score.score is not none %}bg-green-600 hover:bg-green-700{% else %}bg-yellow-600 hover:bg-yellow-700{% endif %}"
-                                    title="{% if round_score.score is not none %}Scored: {{ round_score.score }} - Click to view{% else %}Video uploaded - Click to judge{% endif %}">
+                                    title="{% if round_score.score is not none %}Score: {{ round_score.score }}{% if round_score.scored_by %} (by {{ round_score.scored_by }}){% endif %}{% else %}Video uploaded - Click to judge{% endif %}">
                                     {% if round_score.score is not none %}{{ round_score.score|int }}{% else %}📹{% endif %}
                                 </a>
                                 {% else %}
