@@ -19,13 +19,18 @@
                         Search
                     </button>
                 </form>
-                {% if is_admin %}
-                <a href="/competitions" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">Competitions</a>
-                <a href="/videographer" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Videographer</a>
-                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
-                <a href="/logout" class="text-gray-400 hover:text-white">Logout</a>
+                {% if is_logged_in %}
+                    {% if is_chief_judge %}
+                    <a href="/competitions" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">Competitions</a>
+                    <a href="/videographer" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Videographer</a>
+                    {% endif %}
+                    {% if is_admin %}
+                    <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                    {% endif %}
+                    <span class="text-gray-400">{{ user_name }}</span>
+                    <a href="/logout" class="text-gray-400 hover:text-white">Logout</a>
                 {% else %}
-                <a href="/login" class="text-gray-400 hover:text-white">Admin Login</a>
+                <a href="/login" class="text-gray-400 hover:text-white">Login</a>
                 {% endif %}
             </div>
         </div>

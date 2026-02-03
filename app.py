@@ -119,6 +119,46 @@ CATEGORIES = {
 
 DATABASE = 'videos.db'
 
+# Role hierarchy (higher number = more access)
+ROLES = {
+    'judge': 1,           # Can view and score videos
+    'event_judge': 2,     # Can manage event-specific content
+    'chief_judge': 3,     # Can manage all competitions
+    'admin': 4            # Full access
+}
+
+def get_user_role_level(role):
+    """Get numeric level for a role."""
+    return ROLES.get(role, 0)
+
+def has_role(required_role):
+    """Check if current user has at least the required role level."""
+    user_role = session.get('role', '')
+    return get_user_role_level(user_role) >= get_user_role_level(required_role)
+
+def role_required(required_role):
+    """Decorator to require a minimum role level."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not session.get('username'):
+                return redirect(url_for('login'))
+            if not has_role(required_role):
+                return "Access denied. Insufficient permissions.", 403
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+# Convenience decorators for each role
+def judge_required(f):
+    return role_required('judge')(f)
+
+def event_judge_required(f):
+    return role_required('event_judge')(f)
+
+def chief_judge_required(f):
+    return role_required('chief_judge')(f)
+
 
 def get_sqlite_db():
     """Get SQLite database connection for local development."""
@@ -430,6 +470,44 @@ def get_user(username):
         cursor = db.execute('SELECT * FROM users WHERE username = ?', (username,))
         row = cursor.fetchone()
         return dict(row) if row else None
+
+
+def get_all_users():
+    """Get all users from database."""
+    if USE_SUPABASE:
+        result = supabase.table('users').select('*').order('username').execute()
+        return result.data
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT * FROM users ORDER BY username')
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def save_user(user_data):
+    """Save or update a user."""
+    if USE_SUPABASE:
+        existing = supabase.table('users').select('username').eq('username', user_data['username']).execute()
+        if existing.data:
+            supabase.table('users').update(user_data).eq('username', user_data['username']).execute()
+        else:
+            supabase.table('users').insert(user_data).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('''
+            INSERT OR REPLACE INTO users (username, password, role, name)
+            VALUES (?, ?, ?, ?)
+        ''', (user_data['username'], user_data['password'], user_data['role'], user_data['name']))
+        db.commit()
+
+
+def delete_user(username):
+    """Delete a user."""
+    if USE_SUPABASE:
+        supabase.table('users').delete().eq('username', username).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('DELETE FROM users WHERE username = ?', (username,))
+        db.commit()
 
 
 # Competition database functions
@@ -844,11 +922,16 @@ def index():
     all_videos = get_all_videos()
     recent_videos = all_videos[:8] if all_videos else []
 
+    user_role = session.get('role', '')
     return render_template('index.html',
                          categories=CATEGORIES,
                          category_counts=category_counts,
                          recent_videos=recent_videos,
-                         is_admin=session.get('role') == 'admin')
+                         is_admin=user_role == 'admin',
+                         is_chief_judge=has_role('chief_judge'),
+                         is_logged_in=bool(session.get('username')),
+                         user_name=session.get('name', ''),
+                         user_role=user_role)
 
 
 @app.route('/category/<cat_id>')
@@ -983,6 +1066,105 @@ def admin_dashboard():
                          total_views=total_views,
                          events=events,
                          dropbox_app_key=DROPBOX_APP_KEY)
+
+
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    """User management page (admin only)."""
+    users = get_all_users()
+    return render_template('admin_users.html',
+                         users=users,
+                         roles=ROLES,
+                         is_admin=True)
+
+
+@app.route('/admin/user/create', methods=['POST'])
+@admin_required
+def admin_create_user():
+    """Create a new user."""
+    data = request.json
+    username = data.get('username', '').strip().lower()
+    password = data.get('password', '').strip()
+    name = data.get('name', '').strip()
+    role = data.get('role', 'judge')
+
+    if not username or not password or not name:
+        return jsonify({'error': 'Username, password, and name are required'}), 400
+
+    if role not in ROLES:
+        return jsonify({'error': 'Invalid role'}), 400
+
+    # Check if user already exists
+    existing = get_user(username)
+    if existing:
+        return jsonify({'error': 'Username already exists'}), 400
+
+    save_user({
+        'username': username,
+        'password': password,
+        'role': role,
+        'name': name
+    })
+
+    return jsonify({'success': True, 'message': 'User created'})
+
+
+@app.route('/admin/user/<username>/update', methods=['POST'])
+@admin_required
+def admin_update_user(username):
+    """Update a user."""
+    user = get_user(username)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.json
+    name = data.get('name', user['name']).strip()
+    role = data.get('role', user['role'])
+    password = data.get('password', '').strip()
+
+    if role not in ROLES:
+        return jsonify({'error': 'Invalid role'}), 400
+
+    # Don't allow demoting the last admin
+    if user['role'] == 'admin' and role != 'admin':
+        all_users = get_all_users()
+        admin_count = sum(1 for u in all_users if u['role'] == 'admin')
+        if admin_count <= 1:
+            return jsonify({'error': 'Cannot demote the last admin'}), 400
+
+    update_data = {
+        'username': username,
+        'name': name,
+        'role': role,
+        'password': password if password else user['password']
+    }
+
+    save_user(update_data)
+    return jsonify({'success': True, 'message': 'User updated'})
+
+
+@app.route('/admin/user/<username>/delete', methods=['POST'])
+@admin_required
+def admin_delete_user(username):
+    """Delete a user."""
+    user = get_user(username)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    # Don't allow deleting the last admin
+    if user['role'] == 'admin':
+        all_users = get_all_users()
+        admin_count = sum(1 for u in all_users if u['role'] == 'admin')
+        if admin_count <= 1:
+            return jsonify({'error': 'Cannot delete the last admin'}), 400
+
+    # Don't allow deleting yourself
+    if username == session.get('username'):
+        return jsonify({'error': 'Cannot delete your own account'}), 400
+
+    delete_user(username)
+    return jsonify({'success': True, 'message': 'User deleted'})
 
 
 def download_and_convert_video(url, video_id):
@@ -1568,9 +1750,9 @@ def events_list():
 
 # Competition routes
 @app.route('/competitions')
-@admin_required
+@chief_judge_required
 def competitions_list():
-    """Show all competitions (admin only)."""
+    """Show all competitions (chief judge and above)."""
     try:
         competitions = get_all_competitions()
 
@@ -1964,9 +2146,9 @@ def remove_round_video(team_id, round_num):
 
 
 @app.route('/admin/team/<team_id>/score', methods=['POST'])
-@admin_required
+@event_judge_required
 def save_team_score(team_id):
-    """Save a score for a team."""
+    """Save a score for a team (event judge and above)."""
     data = request.json
 
     team = get_team(team_id)
@@ -2038,9 +2220,9 @@ def get_video_info(video_id):
 # ===========================================
 
 @app.route('/videographer/upload-video', methods=['POST'])
-@admin_required
+@chief_judge_required
 def videographer_upload_video():
-    """Upload a video file (admin only)."""
+    """Upload a video file (chief judge and above)."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
 
@@ -2137,9 +2319,9 @@ def videographer_upload_video():
 
 
 @app.route('/videographer/upload-flysight', methods=['POST'])
-@admin_required
+@chief_judge_required
 def videographer_upload_flysight():
-    """Upload a FlysSight CSV file for Speed Skydiving (admin only)."""
+    """Upload a FlysSight CSV file for Speed Skydiving (chief judge and above)."""
     if 'file' not in request.files:
         return jsonify({'error': 'No file provided'}), 400
 
@@ -2203,9 +2385,9 @@ def videographer_upload_flysight():
 
 
 @app.route('/videographer/team/<team_id>/score', methods=['POST'])
-@admin_required
+@event_judge_required
 def videographer_save_team_score(team_id):
-    """Save a score for a team (admin only)."""
+    """Save a score for a team (event judge and above)."""
     data = request.json
 
     team = get_team(team_id)
@@ -2275,9 +2457,9 @@ def videographer_get_video_info(video_id):
 
 
 @app.route('/videographer')
-@admin_required
+@chief_judge_required
 def videographer_upload_page():
-    """Videographer upload page (admin only)."""
+    """Videographer upload page (chief judge and above)."""
     try:
         competitions = get_all_competitions()
         return render_template('videographer.html',
