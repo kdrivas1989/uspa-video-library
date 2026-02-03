@@ -302,7 +302,7 @@
                                 </td>
                                 {% endif %}
                                 {% endfor %}
-                                <td class="px-4 py-3 text-right font-bold text-green-400">{% if event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
+                                <td class="px-4 py-3 text-right font-bold text-black">{% if event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
                                 {% if 'sp' in event_type %}
                                 <td class="px-4 py-3 text-right text-blue-400">
                                     {% set completed_scores = team.scores|selectattr('score', 'ne', none)|list %}
@@ -475,7 +475,7 @@
                             </td>
                             {% endif %}
                             {% endfor %}
-                            <td class="px-4 py-3 text-right font-bold text-green-400">{% if competition.event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
+                            <td class="px-4 py-3 text-right font-bold text-black">{% if competition.event_type == 'cp_dsz' %}{{ "%.2f"|format(team.total_score) }}{% else %}{{ team.total_score|int }}{% endif %}</td>
                             {% if competition.event_type.startswith('sp') %}
                             <td class="px-4 py-3 text-right text-blue-400">
                                 {% set completed_scores = team.scores|selectattr('score', 'ne', none)|list %}
