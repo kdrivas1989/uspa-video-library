@@ -508,6 +508,12 @@
         function chooseFromDropbox() {
             Dropbox.choose({
                 success: function(files) {
+                    // Check for unsupported formats
+                    const filename = files[0].name.toLowerCase();
+                    if (filename.endsWith('.mts') || filename.endsWith('.m2ts') || filename.endsWith('.avi') || filename.endsWith('.mkv') || filename.endsWith('.mov')) {
+                        alert('Warning: ' + files[0].name + ' is not MP4 format.\n\nBrowsers cannot play MTS/M2TS/AVI/MKV files directly.\nPlease convert to MP4 first, then upload to Dropbox.');
+                        return;
+                    }
                     // Convert to streaming URL (use dl.dropboxusercontent.com)
                     let url = files[0].link
                         .replace('www.dropbox.com', 'dl.dropboxusercontent.com')
@@ -609,6 +615,23 @@
 
             let added = 0;
             let errors = [];
+
+            // Filter out unsupported formats
+            const unsupportedFiles = pendingFiles.filter(f => {
+                const name = f.name.toLowerCase();
+                return name.endsWith('.mts') || name.endsWith('.m2ts') || name.endsWith('.avi') || name.endsWith('.mkv');
+            });
+            if (unsupportedFiles.length > 0) {
+                alert('Warning: ' + unsupportedFiles.length + ' file(s) are not MP4 format and will be skipped.\n\nBrowsers cannot play MTS/M2TS/AVI/MKV files directly.\nPlease convert to MP4 first.');
+                pendingFiles = pendingFiles.filter(f => {
+                    const name = f.name.toLowerCase();
+                    return !name.endsWith('.mts') && !name.endsWith('.m2ts') && !name.endsWith('.avi') && !name.endsWith('.mkv');
+                });
+                if (pendingFiles.length === 0) {
+                    progressDiv.classList.add('hidden');
+                    return;
+                }
+            }
 
             for (const file of pendingFiles) {
                 const url = file.link.replace('www.dropbox.com', 'dl.dropboxusercontent.com').replace('?dl=0', '');
