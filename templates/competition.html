@@ -4872,9 +4872,19 @@
                 document.getElementById('wsFlysightResult').classList.remove('hidden');
                 document.getElementById('wsFlysightProgress').classList.add('hidden');
 
-                // Update flight track map if visible
-                if (wsFlightTrackMap && wsFlysightTrackPoints.length > 0) {
-                    drawFlightTrackOnMap();
+                // Automatically show flight track map after parsing
+                if (wsFlysightTrackPoints.length > 0) {
+                    const container = document.getElementById('wsFlightTrackMapContainer');
+                    const toggleBtn = document.getElementById('wsFlightTrackToggle');
+                    if (container) {
+                        container.classList.remove('hidden');
+                        if (toggleBtn) toggleBtn.textContent = 'Hide Map';
+                        // Small delay to ensure container is visible before initializing map
+                        setTimeout(() => {
+                            initFlightTrackMap();
+                            drawFlightTrackOnMap();
+                        }, 100);
+                    }
                 }
 
                 // Update selected value display
