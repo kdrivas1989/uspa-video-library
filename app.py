@@ -321,16 +321,19 @@ If you did not request this reset, please ignore this email.
 # Global error handler to show actual errors
 def _is_api_request_check():
     """Check if the current request is an API/AJAX request expecting JSON."""
-    content_type = request.headers.get('Content-Type', '')
-    if 'application/json' in content_type:
-        return True
-    accept = request.headers.get('Accept', '')
-    if 'application/json' in accept:
-        return True
-    if request.is_json:
-        return True
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return True
+    try:
+        content_type = request.headers.get('Content-Type', '')
+        if 'application/json' in content_type:
+            return True
+        accept = request.headers.get('Accept', '')
+        if 'application/json' in accept:
+            return True
+        if request.is_json:
+            return True
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return True
+    except:
+        pass
     return False
 
 @app.errorhandler(500)
@@ -339,8 +342,11 @@ def handle_500_error(e):
     error_msg = f"500 Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
     print(error_msg)
     # Return JSON for API requests
-    if _is_api_request_check():
-        return jsonify({'success': False, 'error': str(e)}), 500
+    try:
+        if _is_api_request_check():
+            return jsonify({'success': False, 'error': str(e)}), 500
+    except:
+        pass
     return f"<pre>{error_msg}</pre>", 500
 
 @app.errorhandler(Exception)
@@ -349,8 +355,11 @@ def handle_exception(e):
     error_msg = f"Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
     print(error_msg)
     # Return JSON for API requests
-    if _is_api_request_check():
-        return jsonify({'success': False, 'error': str(e)}), 500
+    try:
+        if _is_api_request_check():
+            return jsonify({'success': False, 'error': str(e)}), 500
+    except:
+        pass
     return f"<pre>{error_msg}</pre>", 500
 
 # Video storage paths (for local development)
@@ -2046,6 +2055,11 @@ def debug_db_status():
     except Exception as e:
         return jsonify({'error': str(e), 'use_supabase': USE_SUPABASE}), 500
 
+
+@app.route('/favicon.ico')
+def favicon():
+    """Return empty favicon to avoid 404 errors."""
+    return '', 204
 
 @app.route('/')
 def index():
