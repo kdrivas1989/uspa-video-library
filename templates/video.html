@@ -165,6 +165,10 @@
                                 class="px-4 py-1 rounded bg-green-600 hover:bg-green-700 text-sm font-medium">
                                 Start (X)
                             </button>
+                            <button onclick="endWorkingTimeEarly()" id="endTimeBtn"
+                                class="hidden px-3 py-1 rounded bg-yellow-600 hover:bg-yellow-700 text-sm font-medium" title="End working time early (T)">
+                                End Time (T)
+                            </button>
                             <button onclick="replayVideo()"
                                 class="px-3 py-1 rounded bg-blue-600 hover:bg-blue-700 text-sm" title="Restart video without clearing scores">
                                 Replay
@@ -1375,6 +1379,9 @@
                     return true;
                 case 'KeyB':
                     pointToBust();
+                    return true;
+                case 'KeyT':
+                    endWorkingTimeEarly();
                     return true;
                 case 'KeyN':
                     toggleNV();
@@ -3150,6 +3157,8 @@
             document.getElementById('timerStatus').textContent = 'Running';
             document.getElementById('timerStatus').classList.remove('text-gray-500');
             document.getElementById('timerStatus').classList.add('text-green-400');
+            // Show End Time button
+            document.getElementById('endTimeBtn').classList.remove('hidden');
 
             const overlay = document.getElementById('freezeOverlay'); if (overlay) overlay.classList.add('hidden');
             if (video) video.play();
@@ -3286,6 +3295,33 @@
                 document.getElementById('timerStatus').classList.remove('text-green-400');
                 document.getElementById('timerStatus').classList.add('text-gray-500');
             }
+            // Hide end time button
+            document.getElementById('endTimeBtn').classList.add('hidden');
+        }
+
+        function endWorkingTimeEarly() {
+            // Only works if timer is running
+            if (!timerRunning) return;
+
+            // Pause video
+            if (video) video.pause();
+            if (vimeoPlayer) vimeoPlayer.pause();
+
+            // Stop the timer
+            stopTimer();
+
+            // Show "Time!" status (same as when time runs out)
+            document.getElementById('timerStatus').textContent = 'Time!';
+            document.getElementById('timerStatus').classList.remove('text-green-400', 'text-gray-500');
+            document.getElementById('timerStatus').classList.add('text-yellow-400');
+            document.getElementById('timerDisplay').classList.add('text-yellow-400');
+
+            // Show freeze overlay
+            const overlayEl = document.getElementById('freezeOverlay');
+            if (overlayEl) overlayEl.classList.remove('hidden');
+
+            // Show save score section
+            showSaveScoreSection();
         }
 
         function confirmReset() {
