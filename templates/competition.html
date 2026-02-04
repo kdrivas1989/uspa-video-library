@@ -122,8 +122,8 @@
                     Event Details
                 </button>
                 {% set ns = namespace(has_draw_events=false) %}
-                {% for et in event_types %}{% if et.startswith('fs_') or et.startswith('cf_') %}{% set ns.has_draw_events = true %}{% endif %}{% endfor %}
-                {% if ns.has_draw_events or competition.event_type.startswith('fs_') or competition.event_type.startswith('cf_') %}
+                {% for et in event_types %}{% if et.startswith('fs_') or et.startswith('cf_') or et.startswith('ae_') or et == 'ws_acrobatic' %}{% set ns.has_draw_events = true %}{% endif %}{% endfor %}
+                {% if ns.has_draw_events or competition.event_type.startswith('fs_') or competition.event_type.startswith('cf_') or competition.event_type.startswith('ae_') or competition.event_type == 'ws_acrobatic' %}
                 <button onclick="showDrawGeneratorModal()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg text-sm flex items-center gap-1">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                     Draw Generator
@@ -1240,7 +1240,7 @@
                     <label class="block text-gray-600 text-sm mb-1">Event</label>
                     <select id="drawEventType" onchange="updateDrawClassOptions()" class="w-full px-3 py-2 rounded bg-white text-gray-900 border border-gray-300">
                         {% for et in event_types %}
-                        {% if et.startswith('fs_') or et.startswith('cf_') %}
+                        {% if et.startswith('fs_') or et.startswith('cf_') or et.startswith('ae_') or et == 'ws_acrobatic' %}
                         <option value="{{ et }}">{{ EVENT_DISPLAY_NAMES.get(et, et) }}</option>
                         {% endif %}
                         {% endfor %}
