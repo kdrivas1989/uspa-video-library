@@ -7429,14 +7429,33 @@
             if (isCpScoring) {
                 // Get CP score (Zone Accuracy or Distance)
                 const cpScoreValue = document.getElementById('cpScoreValue').value;
-                console.log('CP Score Value:', cpScoreValue);
                 const cpPenalty = document.getElementById('cpPenaltyValue').value;
                 const cpEventType = currentCpEvent || 'zone';
+                console.log('CP Scoring - Event:', cpEventType, 'Score Value:', cpScoreValue, 'Penalty:', cpPenalty);
 
                 // Validate zone is selected for zone accuracy
                 if (cpEventType === 'zone' && !cpPenalty && document.getElementById('cpLandingZone').value === '') {
                     alert('Please select a landing zone');
                     return;
+                }
+
+                // Validate distance is entered for distance scoring
+                if (cpEventType === 'distance' && !cpPenalty) {
+                    const distanceValue = document.getElementById('cpDistanceMeters').value;
+                    console.log('Distance validation - value:', distanceValue, 'cpScoreValue:', cpScoreValue);
+                    if (distanceValue === '' || distanceValue === null) {
+                        alert('Please enter the distance in meters');
+                        return;
+                    }
+                }
+
+                // Validate time is entered for speed scoring
+                if (cpEventType === 'speed' && !cpPenalty) {
+                    const timeValue = document.getElementById('cpSpeedTime').value;
+                    if (timeValue === '' || timeValue === null) {
+                        alert('Please enter the time in seconds');
+                        return;
+                    }
                 }
 
                 // Check for penalty first
