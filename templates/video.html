@@ -1083,6 +1083,22 @@
             {% endfor %}
         ];
 
+        // Helper function to navigate to next video after saving score
+        function navigateToNextVideo(statusElementId) {
+            if (relatedVideos.length > 0) {
+                const statusEl = statusElementId ? document.getElementById(statusElementId) : null;
+                if (statusEl) {
+                    statusEl.textContent = 'Saved! Going to next video...';
+                    statusEl.classList.remove('text-gray-500');
+                    statusEl.classList.add('text-green-400');
+                }
+                setTimeout(() => {
+                    const nextVideo = relatedVideos[0];
+                    window.location.href = '/video/' + nextVideo.id;
+                }, 1500);
+            }
+        }
+
         // Apply start time when video loads (only for local videos)
         if (video) {
             video.addEventListener('loadedmetadata', () => {
@@ -2436,26 +2452,11 @@
             savedScores.push(scoreData);
             localStorage.setItem('practiceScores_' + videoId, JSON.stringify(savedScores));
 
-            document.getElementById('saveScoreStatus').textContent = 'Saved!';
-            document.getElementById('saveScoreStatus').classList.remove('text-gray-500');
-            document.getElementById('saveScoreStatus').classList.add('text-green-400');
-
             document.getElementById('scoreRoundLabel').value = '';
             displaySavedScores();
 
-            // Auto-navigate to next video after a short delay
-            if (relatedVideos.length > 0) {
-                document.getElementById('saveScoreStatus').textContent = 'Saved! Going to next video...';
-                setTimeout(() => {
-                    const nextVideo = relatedVideos[0];
-                    window.location.href = '/video/' + nextVideo.id;
-                }, 1500);
-            } else {
-                setTimeout(() => {
-                    document.getElementById('saveScoreStatus').textContent = '';
-                    document.getElementById('saveScoreStatus').classList.remove('text-green-400');
-                }, 2000);
-            }
+            // Auto-navigate to next video
+            navigateToNextVideo('saveScoreStatus');
         }
 
         function displaySavedScores() {
@@ -2574,6 +2575,9 @@
             localStorage.setItem('practiceScores_' + videoId, JSON.stringify(savedScores));
             document.getElementById('wsCompRoundLabel').value = '';
             displaySavedScores();
+
+            // Auto-navigate to next video
+            navigateToNextVideo('saveScoreStatus');
         }
 
         function saveWsFreeScore() {
@@ -2600,6 +2604,9 @@
             localStorage.setItem('practiceScores_' + videoId, JSON.stringify(savedScores));
             document.getElementById('wsFreeRoundLabel').value = '';
             displaySavedScores();
+
+            // Auto-navigate to next video
+            navigateToNextVideo('saveScoreStatus');
         }
 
         // Load saved scores on page load
@@ -4337,7 +4344,21 @@
             // Clear inputs after saving
             clearMultiJudgeInputs();
 
-            alert('Score saved! ' + (scoreData.average || scoreData.total).toFixed(2));
+            // Auto-navigate to next video
+            if (relatedVideos.length > 0) {
+                // Show brief confirmation then navigate
+                const score = (scoreData.average || scoreData.total).toFixed(2);
+                const notification = document.createElement('div');
+                notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                notification.textContent = 'Score saved! (' + score + ') Going to next video...';
+                document.body.appendChild(notification);
+                setTimeout(() => {
+                    const nextVideo = relatedVideos[0];
+                    window.location.href = '/video/' + nextVideo.id;
+                }, 1500);
+            } else {
+                alert('Score saved! ' + (scoreData.average || scoreData.total).toFixed(2));
+            }
         }
 
         function clearMultiJudgeInputs() {
