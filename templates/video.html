@@ -2669,13 +2669,13 @@
             }
         }
 
+        // Formations/Draw tracking (must be declared before updateEventType is called)
+        let formations = [];
+        let maxPossiblePoints = 0;
+
         // Initialize event type on page load (after timer variables are declared)
         autoSelectEventType();
         updateEventType();
-
-        // Formations/Draw tracking
-        let formations = [];
-        let maxPossiblePoints = 0;
 
         // USPA Dive Pool Rules per Event/Class (from SCM Chapter 9)
         const divePoolRules = {
