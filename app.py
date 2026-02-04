@@ -1209,9 +1209,14 @@ def fetch_vimeo_metadata(url):
     try:
         import urllib.request
         import urllib.parse
-        oembed_url = f"https://vimeo.com/api/oembed.json?url={urllib.parse.quote(url, safe='')}"
+        import re
+
+        # Clean URL - ensure it's the standard format
+        clean_url = url.split('?')[0]  # Remove query params for oEmbed
+
+        oembed_url = f"https://vimeo.com/api/oembed.json?url={urllib.parse.quote(clean_url, safe='')}"
         req = urllib.request.Request(oembed_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=5) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             data = json.loads(response.read().decode())
             return {
                 'title': data.get('title', ''),
@@ -1219,8 +1224,13 @@ def fetch_vimeo_metadata(url):
                 'duration': data.get('duration', 0)
             }
     except Exception as e:
-        print(f"Vimeo metadata fetch error: {e}")
-        return None
+        print(f"Vimeo metadata fetch error for {url}: {e}")
+        # Return basic info even if API fails
+        return {
+            'title': 'Vimeo Video',
+            'thumbnail': '',
+            'duration': 0
+        }
 
 
 def fetch_youtube_metadata(url):
@@ -1267,9 +1277,24 @@ def get_video_embed_url(url):
     elif 'youtu.be/' in url:
         video_id = url.split('youtu.be/')[1].split('?')[0]
         return f'https://www.youtube.com/embed/{video_id}'
+    elif 'player.vimeo.com/video/' in url:
+        # Already an embed URL
+        return url.split('?')[0]
     elif 'vimeo.com/' in url:
-        video_id = url.split('vimeo.com/')[1].split('?')[0]
-        return f'https://player.vimeo.com/video/{video_id}'
+        # Handle various Vimeo URL formats:
+        # https://vimeo.com/123456789
+        # https://vimeo.com/123456789/abcdef (unlisted with hash)
+        # https://vimeo.com/channels/xxx/123456789
+        import re
+        # Extract video ID (just the numbers)
+        match = re.search(r'vimeo\.com/(?:channels/[^/]+/|video/)?(\d+)', url)
+        if match:
+            video_id = match.group(1)
+            # Check if there's an unlisted hash
+            hash_match = re.search(r'vimeo\.com/\d+/([a-f0-9]+)', url)
+            if hash_match:
+                return f'https://player.vimeo.com/video/{video_id}?h={hash_match.group(1)}'
+            return f'https://player.vimeo.com/video/{video_id}'
     return url
 
 
