@@ -2578,6 +2578,146 @@ def add_video():
     return jsonify({'success': True, 'message': 'Video added successfully', 'id': video_id})
 
 
+@app.route('/admin/bulk-import-urls', methods=['POST'])
+@admin_required
+def bulk_import_urls():
+    """Bulk import videos from URLs (Dropbox, YouTube, etc.)."""
+    data = request.json
+
+    urls_text = data.get('urls', '').strip()
+    category = data.get('category', '') or 'uncategorized'
+    subcategory = data.get('subcategory', '')
+    event = data.get('event', '').strip()
+
+    if not urls_text:
+        return jsonify({'error': 'No URLs provided'}), 400
+
+    if category not in CATEGORIES:
+        category = 'uncategorized'
+
+    # Parse URLs (one per line, skip empty lines and comments)
+    urls = []
+    for line in urls_text.split('\n'):
+        line = line.strip()
+        if line and not line.startswith('#'):
+            urls.append(line)
+
+    if not urls:
+        return jsonify({'error': 'No valid URLs found'}), 400
+
+    added = 0
+    errors = []
+
+    for url in urls:
+        try:
+            # Extract title from URL
+            # For Dropbox: get filename from URL
+            # For YouTube: use URL as placeholder (user can edit later)
+            title = ''
+
+            if 'dropbox.com' in url.lower() or 'dropboxusercontent.com' in url.lower():
+                # Extract filename from Dropbox URL
+                import urllib.parse
+                parsed = urllib.parse.urlparse(url)
+                path = urllib.parse.unquote(parsed.path)
+                if '/' in path:
+                    filename = path.split('/')[-1]
+                    # Remove query params from filename
+                    if '?' in filename:
+                        filename = filename.split('?')[0]
+                    title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
+
+            elif 'youtube.com' in url.lower() or 'youtu.be' in url.lower():
+                # For YouTube, extract video ID as placeholder
+                title = f"YouTube Video"
+
+            elif 'vimeo.com' in url.lower():
+                title = f"Vimeo Video"
+
+            else:
+                # Generic URL - try to get filename
+                import urllib.parse
+                parsed = urllib.parse.urlparse(url)
+                path = urllib.parse.unquote(parsed.path)
+                if '/' in path:
+                    filename = path.split('/')[-1]
+                    if '?' in filename:
+                        filename = filename.split('?')[0]
+                    if '.' in filename:
+                        title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
+
+            if not title:
+                title = f"Video {added + 1}"
+
+            # Auto-detect category from title if uncategorized
+            detected_cat = None
+            detected_sub = None
+            detected_event = None
+
+            if category == 'uncategorized':
+                detected_cat, detected_sub, detected_event = detect_category_from_filename(title)
+                if detected_cat and detected_cat in CATEGORIES:
+                    final_category = detected_cat
+                    final_subcategory = detected_sub or subcategory
+                else:
+                    final_category = category
+                    final_subcategory = subcategory
+            else:
+                final_category = category
+                final_subcategory = subcategory
+
+            final_event = event or detected_event or ''
+
+            video_id = str(uuid.uuid4())[:8]
+
+            # Get thumbnail for YouTube/Vimeo
+            thumbnail = None
+            if 'youtube.com' in url.lower() or 'youtu.be' in url.lower():
+                # Extract YouTube video ID
+                yt_id = None
+                if 'youtu.be/' in url:
+                    yt_id = url.split('youtu.be/')[-1].split('?')[0]
+                elif 'v=' in url:
+                    yt_id = url.split('v=')[-1].split('&')[0]
+                if yt_id:
+                    thumbnail = f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg"
+
+            save_video({
+                'id': video_id,
+                'title': title,
+                'description': '',
+                'url': url,
+                'thumbnail': thumbnail,
+                'category': final_category,
+                'subcategory': final_subcategory,
+                'tags': '',
+                'duration': '',
+                'created_at': datetime.now().isoformat(),
+                'views': 0,
+                'video_type': 'url',
+                'local_file': '',
+                'event': final_event,
+                'category_auto': category == 'uncategorized' and detected_cat is not None
+            })
+
+            added += 1
+
+        except Exception as e:
+            errors.append(f"{url[:50]}...: {str(e)}")
+
+    result = {
+        'success': True,
+        'added': added,
+        'total': len(urls),
+        'message': f'Successfully imported {added} of {len(urls)} videos'
+    }
+
+    if errors:
+        result['errors'] = errors
+
+    return jsonify(result)
+
+
 @app.route('/admin/upload-video', methods=['POST'])
 @admin_required
 def upload_video():

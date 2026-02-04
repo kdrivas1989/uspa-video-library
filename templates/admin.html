@@ -180,6 +180,57 @@
             <div id="uploadResults" class="mt-4 hidden"></div>
         </div>
 
+        <!-- Bulk URL Import -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4">Bulk Import from URLs</h2>
+            <p class="text-gray-400 text-sm mb-4">Paste video URLs (Dropbox, YouTube, Vimeo, or direct links) - one per line. Titles will be extracted from filenames automatically.</p>
+            <div class="grid md:grid-cols-3 gap-4 mb-4">
+                <div>
+                    <label class="block text-gray-300 mb-2">Category</label>
+                    <select id="bulkUrlCategory"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        onchange="updateBulkUrlSubcategories()">
+                        <option value="uncategorized">Auto-detect from filename</option>
+                        {% for cat_id, cat in categories.items() %}
+                        <option value="{{ cat_id }}">{{ cat.abbrev }} - {{ cat.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-2">Subcategory</label>
+                    <select id="bulkUrlSubcategory"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="">None</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-2">Event</label>
+                    <input type="text" id="bulkUrlEvent" placeholder="e.g., Nationals 2024"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        list="bulkEventSuggestions">
+                    <datalist id="bulkEventSuggestions">
+                        {% for event in events %}
+                        <option value="{{ event }}">
+                        {% endfor %}
+                    </datalist>
+                </div>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-300 mb-2">Video URLs (one per line)</label>
+                <textarea id="bulkUrlsInput" rows="6" placeholder="https://www.dropbox.com/s/xxx/video1.mp4?dl=0
+https://www.dropbox.com/s/yyy/video2.mp4?dl=0
+https://www.youtube.com/watch?v=xxxxx"
+                    class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"></textarea>
+            </div>
+            <div class="flex items-center gap-4">
+                <button type="button" onclick="bulkImportUrls()"
+                    class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-semibold transition">
+                    Import Videos
+                </button>
+                <span id="bulkUrlStatus" class="text-gray-400 text-sm"></span>
+            </div>
+        </div>
+
         {% if dropbox_app_key %}
         <!-- Bulk Upload from Dropbox -->
         <div class="bg-gray-800 rounded-lg p-6 mb-8">
@@ -400,6 +451,78 @@
             } else {
                 subDiv.classList.add('hidden');
                 subSelect.value = '';
+            }
+        }
+
+        // Bulk URL Import
+        function updateBulkUrlSubcategories() {
+            const catId = document.getElementById('bulkUrlCategory').value;
+            const subSelect = document.getElementById('bulkUrlSubcategory');
+
+            const cat = categories[catId];
+            if (cat && cat.subcategories && cat.subcategories.length > 0) {
+                subSelect.innerHTML = '<option value="">None</option>';
+                cat.subcategories.forEach(sub => {
+                    subSelect.innerHTML += `<option value="${sub.id}">${sub.name}</option>`;
+                });
+            } else {
+                subSelect.innerHTML = '<option value="">None</option>';
+            }
+        }
+
+        async function bulkImportUrls() {
+            const urls = document.getElementById('bulkUrlsInput').value.trim();
+            const category = document.getElementById('bulkUrlCategory').value;
+            const subcategory = document.getElementById('bulkUrlSubcategory').value;
+            const event = document.getElementById('bulkUrlEvent').value.trim();
+            const statusEl = document.getElementById('bulkUrlStatus');
+
+            if (!urls) {
+                alert('Please paste some URLs');
+                return;
+            }
+
+            const lineCount = urls.split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).length;
+            statusEl.textContent = `Importing ${lineCount} videos...`;
+
+            try {
+                const response = await fetch('/admin/bulk-import-urls', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        urls: urls,
+                        category: category,
+                        subcategory: subcategory,
+                        event: event
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    statusEl.textContent = result.message;
+                    statusEl.classList.remove('text-red-400');
+                    statusEl.classList.add('text-green-400');
+
+                    if (result.errors && result.errors.length > 0) {
+                        console.log('Import errors:', result.errors);
+                        statusEl.textContent += ` (${result.errors.length} errors - check console)`;
+                    }
+
+                    // Clear the textarea
+                    document.getElementById('bulkUrlsInput').value = '';
+
+                    // Reload page after short delay to show new videos
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    statusEl.textContent = result.error || 'Import failed';
+                    statusEl.classList.remove('text-green-400');
+                    statusEl.classList.add('text-red-400');
+                }
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+                statusEl.classList.remove('text-green-400');
+                statusEl.classList.add('text-red-400');
             }
         }
 
