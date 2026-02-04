@@ -3800,7 +3800,10 @@
         // =====================
 
         function calculateWsScore() {
-            const rawScore = parseFloat(document.getElementById('wsRawScore').value) || 0;
+            const wsRawScoreEl = document.getElementById('wsRawScore');
+            if (!wsRawScoreEl) return; // Elements don't exist
+
+            const rawScore = parseFloat(wsRawScoreEl.value) || 0;
             const dlViolation = document.querySelector('input[name="wsDlViolation"]:checked')?.value || 'none';
 
             // Determine penalty percentage based on DL violation
@@ -3838,29 +3841,47 @@
 
             const finalScore = rawScore * multiplier;
 
-            // Update displays
-            document.getElementById('wsRawDisplay').textContent = rawScore.toFixed(2);
-            document.getElementById('wsPenaltyDisplay').textContent = penaltyDisplay;
-            document.getElementById('wsPenaltyDisplay').className = `text-2xl font-mono ${penaltyPercent === 0 ? 'text-green-400' : penaltyPercent < 50 ? 'text-yellow-500' : 'text-red-500'}`;
-            document.getElementById('wsFinalScore').textContent = finalScore.toFixed(2);
-            document.getElementById('wsScoreBreakdown').textContent =
-                `${rawScore.toFixed(2)} × ${(multiplier * 100).toFixed(0)}% = ${finalScore.toFixed(2)}`;
+            // Update displays (with null checks)
+            const wsRawDisplay = document.getElementById('wsRawDisplay');
+            const wsPenaltyDisplay = document.getElementById('wsPenaltyDisplay');
+            const wsFinalScore = document.getElementById('wsFinalScore');
+            const wsScoreBreakdown = document.getElementById('wsScoreBreakdown');
+            const wsScoreValue = document.getElementById('wsScoreValue');
+            const wsDlPenaltyValue = document.getElementById('wsDlPenaltyValue');
+
+            if (wsRawDisplay) wsRawDisplay.textContent = rawScore.toFixed(2);
+            if (wsPenaltyDisplay) {
+                wsPenaltyDisplay.textContent = penaltyDisplay;
+                wsPenaltyDisplay.className = `text-2xl font-mono ${penaltyPercent === 0 ? 'text-green-400' : penaltyPercent < 50 ? 'text-yellow-500' : 'text-red-500'}`;
+            }
+            if (wsFinalScore) wsFinalScore.textContent = finalScore.toFixed(2);
+            if (wsScoreBreakdown) wsScoreBreakdown.textContent = `${rawScore.toFixed(2)} × ${(multiplier * 100).toFixed(0)}% = ${finalScore.toFixed(2)}`;
 
             // Store values for submission
-            document.getElementById('wsScoreValue').value = finalScore;
-            document.getElementById('wsDlPenaltyValue').value = dlViolation;
+            if (wsScoreValue) wsScoreValue.value = finalScore;
+            if (wsDlPenaltyValue) wsDlPenaltyValue.value = dlViolation;
         }
 
         function resetWsScoring() {
-            document.getElementById('wsRawScore').value = '';
+            const wsRawScore = document.getElementById('wsRawScore');
+            const wsRawDisplay = document.getElementById('wsRawDisplay');
+            const wsPenaltyDisplay = document.getElementById('wsPenaltyDisplay');
+            const wsFinalScore = document.getElementById('wsFinalScore');
+            const wsScoreBreakdown = document.getElementById('wsScoreBreakdown');
+            const wsScoreValue = document.getElementById('wsScoreValue');
+            const wsDlPenaltyValue = document.getElementById('wsDlPenaltyValue');
+
+            if (wsRawScore) wsRawScore.value = '';
             document.querySelectorAll('input[name="wsDlViolation"]').forEach(r => r.checked = r.value === 'none');
-            document.getElementById('wsRawDisplay').textContent = '0.00';
-            document.getElementById('wsPenaltyDisplay').textContent = '0%';
-            document.getElementById('wsPenaltyDisplay').className = 'text-2xl font-mono text-green-400';
-            document.getElementById('wsFinalScore').textContent = '0.00';
-            document.getElementById('wsScoreBreakdown').textContent = '0.00 × 100% = 0.00';
-            document.getElementById('wsScoreValue').value = '';
-            document.getElementById('wsDlPenaltyValue').value = 'none';
+            if (wsRawDisplay) wsRawDisplay.textContent = '0.00';
+            if (wsPenaltyDisplay) {
+                wsPenaltyDisplay.textContent = '0%';
+                wsPenaltyDisplay.className = 'text-2xl font-mono text-green-400';
+            }
+            if (wsFinalScore) wsFinalScore.textContent = '0.00';
+            if (wsScoreBreakdown) wsScoreBreakdown.textContent = '0.00 × 100% = 0.00';
+            if (wsScoreValue) wsScoreValue.value = '';
+            if (wsDlPenaltyValue) wsDlPenaltyValue.value = 'none';
         }
 
         function openRoundModal(teamId, teamName, roundNum, score, videoId, category, scoreId, trainingFlag) {
