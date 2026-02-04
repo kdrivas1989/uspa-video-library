@@ -256,7 +256,7 @@
                         </thead>
                         <tbody>
                             {% for team in teams %}
-                            <tr class="border-t border-gray-200 hover:bg-gray-750">
+                            <tr class="border-t border-gray-200 hover:bg-gray-750" data-team-id="{{ team.id }}" data-team-name="{{ team.team_name|e }}">
                                 <td class="px-4 py-3 font-bold text-black">{{ loop.index }}</td>
                                 <td class="px-2 py-3 text-center">
                                     {% if team.photo %}
@@ -541,7 +541,7 @@
                     </thead>
                     <tbody>
                         {% for team in teams %}
-                        <tr class="border-t border-gray-200 hover:bg-gray-750">
+                        <tr class="border-t border-gray-200 hover:bg-gray-750" data-team-id="{{ team.id }}" data-team-name="{{ team.team_name|e }}">
                             <td class="px-4 py-3 font-bold text-black">{{ loop.index }}</td>
                             <td class="px-2 py-3 text-center">
                                 {% if team.photo %}
@@ -2404,6 +2404,52 @@
             return flag ? `${flag} ${country}` : country;
         }
 
+        // CP Scoring - ordered team list for auto-navigation
+        let cpTeamList = [];
+        let currentCpTeamIndex = -1;
+
+        function buildCpTeamList() {
+            // Build ordered list of teams from the table for CP auto-navigation
+            cpTeamList = [];
+            const rows = document.querySelectorAll('table tbody tr[data-team-id]');
+            rows.forEach(row => {
+                const teamId = row.dataset.teamId;
+                const teamName = row.dataset.teamName;
+                if (teamId && teamName) {
+                    cpTeamList.push({ id: teamId, name: teamName });
+                }
+            });
+            // Also check for teams in event sections (multi-event)
+            if (cpTeamList.length === 0) {
+                document.querySelectorAll('[data-team-id]').forEach(el => {
+                    const teamId = el.dataset.teamId;
+                    const teamName = el.dataset.teamName;
+                    if (teamId && teamName && !cpTeamList.find(t => t.id === teamId)) {
+                        cpTeamList.push({ id: teamId, name: teamName });
+                    }
+                });
+            }
+        }
+
+        function getNextCpTeam(currentTeamId, currentRound) {
+            // Find index of current team
+            const currentIndex = cpTeamList.findIndex(t => t.id === currentTeamId);
+            if (currentIndex === -1 || currentIndex >= cpTeamList.length - 1) {
+                return null; // No next team
+            }
+            return { ...cpTeamList[currentIndex + 1], round: currentRound };
+        }
+
+        function openNextCpCompetitor(currentTeamId, currentRound) {
+            const next = getNextCpTeam(currentTeamId, currentRound);
+            if (next) {
+                // Open scoring modal for next competitor
+                openRoundModal(next.id, next.name, currentRound, null, '', currentTeamCategory, null, 0);
+                return true;
+            }
+            return false;
+        }
+
         // Helper function to preserve current event/class when reloading
         function preserveEventAndReload() {
             // Store current state in sessionStorage
@@ -2426,6 +2472,9 @@
                     el.textContent = flag ? `${flag} ${country}` : country;
                 }
             });
+
+            // Build CP team list for auto-navigation
+            buildCpTeamList();
 
             const savedEvent = sessionStorage.getItem('competition_currentEvent');
             const savedClass = sessionStorage.getItem('competition_currentClass');
@@ -3851,6 +3900,49 @@
                 speedSection.classList.remove('hidden');
             }
 
+            calculateCpScore();
+        }
+
+        function resetCpScoringForm() {
+            // Reset all CP scoring checkboxes to checked
+            ['cpGateEntry', 'cpGate1', 'cpGate2', 'cpGate3', 'cpGate4'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.checked = true;
+            });
+            ['cpDistEntry', 'cpDistG4'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.checked = true;
+            });
+            ['cpSpeedG1', 'cpSpeedG2', 'cpSpeedG3', 'cpSpeedG4', 'cpSpeedG5'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.checked = true;
+            });
+
+            // Reset input fields
+            const landingZone = document.getElementById('cpLandingZone');
+            if (landingZone) landingZone.value = '0';
+            const distanceMeters = document.getElementById('cpDistanceMeters');
+            if (distanceMeters) distanceMeters.value = '';
+            const speedTime = document.getElementById('cpSpeedTime');
+            if (speedTime) speedTime.value = '';
+
+            // Clear penalties
+            document.querySelectorAll('input[name="cpPenalty"]').forEach(radio => {
+                radio.checked = false;
+            });
+            const cpPenaltyValue = document.getElementById('cpPenaltyValue');
+            if (cpPenaltyValue) cpPenaltyValue.value = '';
+
+            // Reset score value
+            const cpScoreValue = document.getElementById('cpScoreValue');
+            if (cpScoreValue) cpScoreValue.value = '';
+
+            // Reset upload progress
+            document.getElementById('uploadProgress').classList.add('hidden');
+            document.getElementById('uploadBar').style.width = '0%';
+            document.getElementById('uploadStatus').textContent = '';
+
+            // Recalculate score
             calculateCpScore();
         }
 
@@ -6450,11 +6542,31 @@
                         document.getElementById('uploadStatus').textContent = 'Score saved!';
                     }
 
-                    // Close modal and reload page after saving (preserve current event)
-                    setTimeout(() => {
-                        hideRoundModal();
-                        preserveEventAndReload();
-                    }, 500);
+                    // For CP scoring, auto-navigate to next competitor
+                    if (isCpScoring) {
+                        const nextTeam = getNextCpTeam(teamId, parseInt(roundNum));
+                        if (nextTeam) {
+                            document.getElementById('uploadStatus').textContent += ' Loading next competitor...';
+                            setTimeout(() => {
+                                // Reset the modal for next competitor
+                                resetCpScoringForm();
+                                openRoundModal(nextTeam.id, nextTeam.name, nextTeam.round, null, '', currentTeamCategory, null, 0);
+                            }, 800);
+                        } else {
+                            // No more competitors, reload page
+                            document.getElementById('uploadStatus').textContent += ' (Last competitor)';
+                            setTimeout(() => {
+                                hideRoundModal();
+                                preserveEventAndReload();
+                            }, 1000);
+                        }
+                    } else {
+                        // Close modal and reload page after saving (preserve current event)
+                        setTimeout(() => {
+                            hideRoundModal();
+                            preserveEventAndReload();
+                        }, 500);
+                    }
                 } else {
                     alert(result.error || 'Failed to save score');
                 }
