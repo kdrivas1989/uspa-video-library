@@ -319,11 +319,28 @@ If you did not request this reset, please ignore this email.
         return False
 
 # Global error handler to show actual errors
+def _is_api_request_check():
+    """Check if the current request is an API/AJAX request expecting JSON."""
+    content_type = request.headers.get('Content-Type', '')
+    if 'application/json' in content_type:
+        return True
+    accept = request.headers.get('Accept', '')
+    if 'application/json' in accept:
+        return True
+    if request.is_json:
+        return True
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return True
+    return False
+
 @app.errorhandler(500)
 def handle_500_error(e):
     import traceback
     error_msg = f"500 Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
     print(error_msg)
+    # Return JSON for API requests
+    if _is_api_request_check():
+        return jsonify({'success': False, 'error': str(e)}), 500
     return f"<pre>{error_msg}</pre>", 500
 
 @app.errorhandler(Exception)
@@ -331,6 +348,9 @@ def handle_exception(e):
     import traceback
     error_msg = f"Error: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
     print(error_msg)
+    # Return JSON for API requests
+    if _is_api_request_check():
+        return jsonify({'success': False, 'error': str(e)}), 500
     return f"<pre>{error_msg}</pre>", 500
 
 # Video storage paths (for local development)
@@ -1282,12 +1302,31 @@ def safe_init_db():
 safe_init_db()
 
 
+def is_api_request():
+    """Check if the current request is an API/AJAX request expecting JSON."""
+    # Check Content-Type header
+    content_type = request.headers.get('Content-Type', '')
+    if 'application/json' in content_type:
+        return True
+    # Check Accept header
+    accept = request.headers.get('Accept', '')
+    if 'application/json' in accept:
+        return True
+    # Check if request has JSON body
+    if request.is_json:
+        return True
+    # Check X-Requested-With header (common for AJAX)
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return True
+    return False
+
+
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
             # For API requests (JSON), return JSON error instead of redirect
-            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            if is_api_request():
                 return jsonify({'success': False, 'error': 'Login required. Please log in.'}), 401
             return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -1299,7 +1338,7 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if 'user' not in session or session.get('role') != 'admin':
             # For API requests (JSON), return JSON error instead of redirect
-            if request.is_json or request.headers.get('Content-Type') == 'application/json':
+            if is_api_request():
                 return jsonify({'success': False, 'error': 'Admin access required. Please log in.'}), 401
             return redirect(url_for('login'))
         return f(*args, **kwargs)
@@ -2823,249 +2862,261 @@ def download_and_convert_video(url, video_id):
 @admin_required
 def add_video():
     """Add a new video."""
-    data = request.json
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'Invalid request data'}), 400
 
-    title = data.get('title', '').strip()
-    description = data.get('description', '').strip()
-    url = data.get('url', '').strip()
-    category = data.get('category', '') or 'uncategorized'
-    subcategory = data.get('subcategory', '')
-    tags = data.get('tags', '').strip()
-    duration = data.get('duration', '').strip()
-    event = data.get('event', '').strip()
+        title = data.get('title', '').strip()
+        description = data.get('description', '').strip()
+        url = data.get('url', '').strip()
+        category = data.get('category', '') or 'uncategorized'
+        subcategory = data.get('subcategory', '')
+        tags = data.get('tags', '').strip()
+        duration = data.get('duration', '').strip()
+        event = data.get('event', '').strip()
 
-    if not title or not url:
-        return jsonify({'error': 'Title and URL are required'}), 400
+        if not title or not url:
+            return jsonify({'success': False, 'error': 'Title and URL are required'}), 400
 
-    if category not in CATEGORIES:
-        category = 'uncategorized'
+        if category not in CATEGORIES:
+            category = 'uncategorized'
 
-    video_id = str(uuid.uuid4())[:8]
+        video_id = str(uuid.uuid4())[:8]
 
-    # Check if video needs conversion (MTS, AVI, etc.)
-    url_lower = url.lower()
-    needs_conversion = any(ext in url_lower for ext in CONVERSION_FORMATS)
+        # Check if video needs conversion (MTS, AVI, etc.)
+        url_lower = url.lower()
+        needs_conversion = any(ext in url_lower for ext in CONVERSION_FORMATS)
 
-    if needs_conversion and not USE_SUPABASE:
-        # Local mode - download and convert
-        local_file, thumbnail, vid_duration = download_and_convert_video(url, video_id)
-        if local_file:
-            save_video({
-                'id': video_id,
-                'title': title,
-                'description': description,
-                'url': '',
-                'thumbnail': thumbnail,
-                'category': category,
-                'subcategory': subcategory,
-                'tags': tags,
-                'duration': vid_duration or duration,
-                'created_at': datetime.now().isoformat(),
-                'views': 0,
-                'video_type': 'local',
-                'local_file': local_file,
-                'event': event
-            })
-            return jsonify({'success': True, 'message': 'Video converted and added successfully', 'id': video_id})
-        else:
-            return jsonify({'error': 'Failed to convert video. Make sure ffmpeg is installed.'}), 400
-    elif needs_conversion and USE_SUPABASE:
-        return jsonify({'error': 'MTS/AVI/MKV files need to be converted to MP4 first. Convert locally or upload MP4 files to Dropbox.'}), 400
+        if needs_conversion and not USE_SUPABASE:
+            # Local mode - download and convert
+            local_file, thumbnail, vid_duration = download_and_convert_video(url, video_id)
+            if local_file:
+                save_video({
+                    'id': video_id,
+                    'title': title,
+                    'description': description,
+                    'url': '',
+                    'thumbnail': thumbnail,
+                    'category': category,
+                    'subcategory': subcategory,
+                    'tags': tags,
+                    'duration': vid_duration or duration,
+                    'created_at': datetime.now().isoformat(),
+                    'views': 0,
+                    'video_type': 'local',
+                    'local_file': local_file,
+                    'event': event
+                })
+                return jsonify({'success': True, 'message': 'Video converted and added successfully', 'id': video_id})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to convert video. Make sure ffmpeg is installed.'}), 400
+        elif needs_conversion and USE_SUPABASE:
+            return jsonify({'success': False, 'error': 'MTS/AVI/MKV files need to be converted to MP4 first. Convert locally or upload MP4 files to Dropbox.'}), 400
 
-    # Regular URL video (MP4, YouTube, etc.)
-    thumbnail = get_video_thumbnail(url)
+        # Regular URL video (MP4, YouTube, etc.)
+        thumbnail = get_video_thumbnail(url)
 
-    save_video({
-        'id': video_id,
-        'title': title,
-        'description': description,
-        'url': url,
-        'thumbnail': thumbnail,
-        'category': category,
-        'subcategory': subcategory,
-        'tags': tags,
-        'duration': duration,
-        'created_at': datetime.now().isoformat(),
-        'views': 0,
-        'video_type': 'url',
-        'local_file': '',
-        'event': event
-    })
+        save_video({
+            'id': video_id,
+            'title': title,
+            'description': description,
+            'url': url,
+            'thumbnail': thumbnail,
+            'category': category,
+            'subcategory': subcategory,
+            'tags': tags,
+            'duration': duration,
+            'created_at': datetime.now().isoformat(),
+            'views': 0,
+            'video_type': 'url',
+            'local_file': '',
+            'event': event
+        })
 
-    return jsonify({'success': True, 'message': 'Video added successfully', 'id': video_id})
+        return jsonify({'success': True, 'message': 'Video added successfully', 'id': video_id})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Failed to add video: {str(e)}'}), 500
 
 
 @app.route('/admin/bulk-import-urls', methods=['POST'])
 @admin_required
 def bulk_import_urls():
     """Bulk import videos from URLs (Dropbox, YouTube, etc.)."""
-    data = request.json
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'Invalid request data'}), 400
 
-    urls_text = data.get('urls', '').strip()
-    category = data.get('category', '') or 'uncategorized'
-    subcategory = data.get('subcategory', '')
-    event = data.get('event', '').strip()
+        urls_text = data.get('urls', '').strip()
+        category = data.get('category', '') or 'uncategorized'
+        subcategory = data.get('subcategory', '')
+        event = data.get('event', '').strip()
 
-    if not urls_text:
-        return jsonify({'error': 'No URLs provided'}), 400
+        if not urls_text:
+            return jsonify({'success': False, 'error': 'No URLs provided'}), 400
 
-    if category not in CATEGORIES:
-        category = 'uncategorized'
+        if category not in CATEGORIES:
+            category = 'uncategorized'
 
-    # Parse URLs (one per line, skip empty lines and comments)
-    urls = []
-    for line in urls_text.split('\n'):
-        line = line.strip()
-        if line and not line.startswith('#'):
-            urls.append(line)
+        # Parse URLs (one per line, skip empty lines and comments)
+        urls = []
+        for line in urls_text.split('\n'):
+            line = line.strip()
+            if line and not line.startswith('#'):
+                urls.append(line)
 
-    if not urls:
-        return jsonify({'error': 'No valid URLs found'}), 400
+        if not urls:
+            return jsonify({'error': 'No valid URLs found'}), 400
 
-    added = 0
-    skipped = 0
-    errors = []
+        added = 0
+        skipped = 0
+        errors = []
 
-    for url in urls:
-        try:
-            # Extract title from URL
-            # For Dropbox: get filename from URL
-            # For YouTube/Vimeo: fetch from API
-            title = ''
-            yt_meta = None
-            vimeo_meta = None
+        for url in urls:
+            try:
+                # Extract title from URL
+                # For Dropbox: get filename from URL
+                # For YouTube/Vimeo: fetch from API
+                title = ''
+                yt_meta = None
+                vimeo_meta = None
 
-            if 'dropbox.com' in url.lower() or 'dropboxusercontent.com' in url.lower():
-                # Extract filename from Dropbox URL
-                import urllib.parse
-                parsed = urllib.parse.urlparse(url)
-                path = urllib.parse.unquote(parsed.path)
-                if '/' in path:
-                    filename = path.split('/')[-1]
-                    # Remove query params from filename
-                    if '?' in filename:
-                        filename = filename.split('?')[0]
-                    title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
-
-            elif 'youtube.com' in url.lower() or 'youtu.be' in url.lower():
-                # Fetch YouTube metadata
-                yt_meta = fetch_youtube_metadata(url)
-                if yt_meta:
-                    title = yt_meta.get('title', 'YouTube Video')
-                else:
-                    title = 'YouTube Video'
-
-            elif 'vimeo.com' in url.lower():
-                # Fetch Vimeo metadata
-                vimeo_meta = fetch_vimeo_metadata(url)
-                if vimeo_meta:
-                    title = vimeo_meta.get('title', 'Vimeo Video')
-                else:
-                    title = 'Vimeo Video'
-
-            else:
-                # Generic URL - try to get filename
-                import urllib.parse
-                parsed = urllib.parse.urlparse(url)
-                path = urllib.parse.unquote(parsed.path)
-                if '/' in path:
-                    filename = path.split('/')[-1]
-                    if '?' in filename:
-                        filename = filename.split('?')[0]
-                    if '.' in filename:
+                if 'dropbox.com' in url.lower() or 'dropboxusercontent.com' in url.lower():
+                    # Extract filename from Dropbox URL
+                    import urllib.parse
+                    parsed = urllib.parse.urlparse(url)
+                    path = urllib.parse.unquote(parsed.path)
+                    if '/' in path:
+                        filename = path.split('/')[-1]
+                        # Remove query params from filename
+                        if '?' in filename:
+                            filename = filename.split('?')[0]
                         title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
 
-            if not title:
-                title = f"Video {added + 1}"
+                elif 'youtube.com' in url.lower() or 'youtu.be' in url.lower():
+                    # Fetch YouTube metadata
+                    yt_meta = fetch_youtube_metadata(url)
+                    if yt_meta:
+                        title = yt_meta.get('title', 'YouTube Video')
+                    else:
+                        title = 'YouTube Video'
 
-            # Auto-detect category from title if uncategorized
-            detected_cat = None
-            detected_sub = None
-            detected_event = None
+                elif 'vimeo.com' in url.lower():
+                    # Fetch Vimeo metadata
+                    vimeo_meta = fetch_vimeo_metadata(url)
+                    if vimeo_meta:
+                        title = vimeo_meta.get('title', 'Vimeo Video')
+                    else:
+                        title = 'Vimeo Video'
 
-            if category == 'uncategorized':
-                detected_cat, detected_sub, detected_event = detect_category_from_filename(title)
-                if detected_cat and detected_cat in CATEGORIES:
-                    final_category = detected_cat
-                    final_subcategory = detected_sub or subcategory
+                else:
+                    # Generic URL - try to get filename
+                    import urllib.parse
+                    parsed = urllib.parse.urlparse(url)
+                    path = urllib.parse.unquote(parsed.path)
+                    if '/' in path:
+                        filename = path.split('/')[-1]
+                        if '?' in filename:
+                            filename = filename.split('?')[0]
+                        if '.' in filename:
+                            title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
+
+                if not title:
+                    title = f"Video {added + 1}"
+
+                # Auto-detect category from title if uncategorized
+                detected_cat = None
+                detected_sub = None
+                detected_event = None
+
+                if category == 'uncategorized':
+                    detected_cat, detected_sub, detected_event = detect_category_from_filename(title)
+                    if detected_cat and detected_cat in CATEGORIES:
+                        final_category = detected_cat
+                        final_subcategory = detected_sub or subcategory
+                    else:
+                        final_category = category
+                        final_subcategory = subcategory
                 else:
                     final_category = category
                     final_subcategory = subcategory
-            else:
-                final_category = category
-                final_subcategory = subcategory
 
-            final_event = event or detected_event or ''
+                final_event = event or detected_event or ''
 
-            # Get thumbnail and duration for YouTube/Vimeo (need duration for duplicate check)
-            thumbnail = None
-            duration = ''
-            if 'youtube.com' in url.lower() or 'youtu.be' in url.lower():
-                # Use metadata if already fetched, otherwise get thumbnail
-                if yt_meta:
-                    thumbnail = yt_meta.get('thumbnail', '')
-                else:
-                    yt_id = None
-                    if 'youtu.be/' in url:
-                        yt_id = url.split('youtu.be/')[-1].split('?')[0]
-                    elif 'v=' in url:
-                        yt_id = url.split('v=')[-1].split('&')[0]
-                    if yt_id:
-                        thumbnail = f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg"
+                # Get thumbnail and duration for YouTube/Vimeo (need duration for duplicate check)
+                thumbnail = None
+                duration = ''
+                if 'youtube.com' in url.lower() or 'youtu.be' in url.lower():
+                    # Use metadata if already fetched, otherwise get thumbnail
+                    if yt_meta:
+                        thumbnail = yt_meta.get('thumbnail', '')
+                    else:
+                        yt_id = None
+                        if 'youtu.be/' in url:
+                            yt_id = url.split('youtu.be/')[-1].split('?')[0]
+                        elif 'v=' in url:
+                            yt_id = url.split('v=')[-1].split('&')[0]
+                        if yt_id:
+                            thumbnail = f"https://img.youtube.com/vi/{yt_id}/hqdefault.jpg"
 
-            elif 'vimeo.com' in url.lower():
-                # Use metadata if already fetched
-                if vimeo_meta:
-                    thumbnail = vimeo_meta.get('thumbnail', '')
-                    dur_seconds = vimeo_meta.get('duration', 0)
-                    if dur_seconds:
-                        mins = dur_seconds // 60
-                        secs = dur_seconds % 60
-                        duration = f"{mins}:{secs:02d}"
+                elif 'vimeo.com' in url.lower():
+                    # Use metadata if already fetched
+                    if vimeo_meta:
+                        thumbnail = vimeo_meta.get('thumbnail', '')
+                        dur_seconds = vimeo_meta.get('duration', 0)
+                        if dur_seconds:
+                            mins = dur_seconds // 60
+                            secs = dur_seconds % 60
+                            duration = f"{mins}:{secs:02d}"
 
-            # Check for duplicate (same title + duration, or same URL)
-            existing = find_duplicate_video(title, duration, url)
-            if existing:
-                skipped += 1
-                continue
+                # Check for duplicate (same title + duration, or same URL)
+                existing = find_duplicate_video(title, duration, url)
+                if existing:
+                    skipped += 1
+                    continue
 
-            video_id = str(uuid.uuid4())[:8]
+                video_id = str(uuid.uuid4())[:8]
 
-            save_video({
-                'id': video_id,
-                'title': title,
-                'description': '',
-                'url': url,
-                'thumbnail': thumbnail,
-                'category': final_category,
-                'subcategory': final_subcategory,
-                'tags': '',
-                'duration': duration,
-                'created_at': datetime.now().isoformat(),
-                'views': 0,
-                'video_type': 'url',
-                'local_file': '',
-                'event': final_event,
-                'category_auto': category == 'uncategorized' and detected_cat is not None
-            })
+                save_video({
+                    'id': video_id,
+                    'title': title,
+                    'description': '',
+                    'url': url,
+                    'thumbnail': thumbnail,
+                    'category': final_category,
+                    'subcategory': final_subcategory,
+                    'tags': '',
+                    'duration': duration,
+                    'created_at': datetime.now().isoformat(),
+                    'views': 0,
+                    'video_type': 'url',
+                    'local_file': '',
+                    'event': final_event,
+                    'category_auto': category == 'uncategorized' and detected_cat is not None
+                })
 
-            added += 1
+                added += 1
 
-        except Exception as e:
-            errors.append(f"{url[:50]}...: {str(e)}")
+            except Exception as e:
+                errors.append(f"{url[:50]}...: {str(e)}")
 
-    result = {
-        'success': True,
-        'added': added,
-        'skipped': skipped,
-        'total': len(urls),
-        'message': f'Imported {added} videos, skipped {skipped} duplicates (of {len(urls)} total)'
-    }
+        result = {
+            'success': True,
+            'added': added,
+            'skipped': skipped,
+            'total': len(urls),
+            'message': f'Imported {added} videos, skipped {skipped} duplicates (of {len(urls)} total)'
+        }
 
-    if errors:
-        result['errors'] = errors
+        if errors:
+            result['errors'] = errors
 
-    return jsonify(result)
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': f'Import failed: {str(e)}'}), 500
 
 
 @app.route('/admin/export-urls', methods=['GET'])
@@ -3101,14 +3152,16 @@ def export_urls():
 @admin_required
 def fetch_vimeo_account():
     """Fetch all videos from a Vimeo account using their API."""
-    data = request.json
-    token = data.get('token', '').strip()
-    folder = data.get('folder', '').strip()
-
-    if not token:
-        return jsonify({'success': False, 'error': 'Access token is required'}), 400
-
     try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'Invalid request data'}), 400
+
+        token = data.get('token', '').strip()
+        folder = data.get('folder', '').strip()
+
+        if not token:
+            return jsonify({'success': False, 'error': 'Access token is required'}), 400
         videos = []
         page = 1
         per_page = 100  # Max allowed by Vimeo API
@@ -3216,13 +3269,15 @@ def fetch_vimeo_account():
 @admin_required
 def fetch_vimeo_folders():
     """Fetch all folders from a Vimeo account."""
-    data = request.json
-    token = data.get('token', '').strip()
-
-    if not token:
-        return jsonify({'success': False, 'error': 'Access token is required'}), 400
-
     try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'Invalid request data'}), 400
+
+        token = data.get('token', '').strip()
+
+        if not token:
+            return jsonify({'success': False, 'error': 'Access token is required'}), 400
         folders = []
         page = 1
         per_page = 100

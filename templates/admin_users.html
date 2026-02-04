@@ -53,6 +53,7 @@
                         <th class="px-6 py-3 text-left text-sm font-medium">Name</th>
                         <th class="px-6 py-3 text-left text-sm font-medium">Email</th>
                         <th class="px-6 py-3 text-left text-sm font-medium">Role</th>
+                        <th class="px-6 py-3 text-center text-sm font-medium">PIN</th>
                         <th class="px-6 py-3 text-right text-sm font-medium">Actions</th>
                     </tr>
                 </thead>
@@ -71,6 +72,15 @@
                             <span class="bg-green-600 text-white text-xs px-2 py-1 rounded">Event Judge</span>
                             {% else %}
                             <span class="bg-gray-600 text-white text-xs px-2 py-1 rounded">Judge</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-center">
+                            {% if user.signature_pin %}
+                            <svg class="w-5 h-5 text-green-400 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                            </svg>
+                            {% else %}
+                            <span class="text-gray-600">-</span>
                             {% endif %}
                         </td>
                         <td class="px-6 py-4 text-right">
