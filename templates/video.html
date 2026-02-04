@@ -2339,8 +2339,10 @@
             let html = '<div class="space-y-4">';
 
             // Find all bust positions
+            const bustPositions = [];
             scoringTypes.forEach((type, idx) => {
                 if (type === 'c') {
+                    bustPositions.push(idx);
                     const position = idx + 1;
                     const time = scoringTimes[idx] || '--';
                     const currentReason = bustReasons[idx] || '';
@@ -2353,7 +2355,7 @@
                             </div>
                             <div class="grid grid-cols-2 gap-2" id="bustReasonBtns_${idx}">
                                 ${BUST_REASON_OPTIONS.map(opt =>
-                                    `<button type="button" onclick="selectBustReason(${idx}, '${opt.value}')"
+                                    `<button type="button"
                                         class="bust-reason-btn px-3 py-2 rounded text-sm text-left ${currentReason === opt.value ? 'bg-red-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}"
                                         data-idx="${idx}" data-value="${opt.value}">
                                         ${opt.label}
@@ -2368,23 +2370,37 @@
 
             html += '</div>';
             content.innerHTML = html;
+
+            // Add click event listeners to all bust reason buttons
+            content.querySelectorAll('.bust-reason-btn').forEach(btn => {
+                btn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const idx = parseInt(this.dataset.idx);
+                    const value = this.dataset.value;
+                    selectBustReason(idx, value);
+                });
+            });
         }
 
         function selectBustReason(idx, value) {
             // Update hidden input
-            document.getElementById('bustReason_' + idx).value = value;
+            const hiddenInput = document.getElementById('bustReason_' + idx);
+            if (hiddenInput) hiddenInput.value = value;
 
             // Update button styles
             const btnContainer = document.getElementById('bustReasonBtns_' + idx);
-            btnContainer.querySelectorAll('button').forEach(btn => {
-                if (btn.dataset.value === value) {
-                    btn.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
-                    btn.classList.add('bg-red-600', 'text-white');
-                } else {
-                    btn.classList.remove('bg-red-600', 'text-white');
-                    btn.classList.add('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
-                }
-            });
+            if (btnContainer) {
+                btnContainer.querySelectorAll('button').forEach(btn => {
+                    if (btn.dataset.value === value) {
+                        btn.classList.remove('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                        btn.classList.add('bg-red-600', 'text-white');
+                    } else {
+                        btn.classList.remove('bg-red-600', 'text-white');
+                        btn.classList.add('bg-gray-700', 'text-gray-300', 'hover:bg-gray-600');
+                    }
+                });
+            }
         }
 
         function saveBustReasonsAndClose() {
