@@ -5192,8 +5192,9 @@ def get_signature(username):
 @app.route('/api/signature/<username>', methods=['POST'])
 def save_signature(username):
     """Save signature image for a user (base64 PNG data)."""
-    # Only allow users to save their own signature, or admins to save anyone's
-    if session.get('username') != username and session.get('role') != 'admin':
+    # Allow admins and chief_judges to save signatures for any user
+    user_role = session.get('role', '')
+    if session.get('username') != username and user_role not in ['admin', 'chief_judge']:
         return jsonify({'error': 'Not authorized'}), 403
 
     user = get_user(username)
@@ -5208,18 +5209,22 @@ def save_signature(username):
         return jsonify({'error': 'Invalid signature format. Must be base64 PNG.'}), 400
 
     # Update user with signature data
-    user['signature_data'] = signature_data
+    try:
+        if USE_SUPABASE:
+            result = supabase.table('users').update({'signature_data': signature_data}).eq('username', username).execute()
+            if not result.data:
+                return jsonify({'error': 'Failed to update user. Make sure signature_data column exists in Supabase.'}), 500
+        else:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE users SET signature_data = ? WHERE username = ?', (signature_data, username))
+            conn.commit()
+            conn.close()
 
-    if USE_SUPABASE:
-        supabase.table('users').update({'signature_data': signature_data}).eq('username', username).execute()
-    else:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute('UPDATE users SET signature_data = ? WHERE username = ?', (signature_data, username))
-        conn.commit()
-        conn.close()
-
-    return jsonify({'success': True, 'message': 'Signature saved'})
+        return jsonify({'success': True, 'message': 'Signature saved'})
+    except Exception as e:
+        print(f"Error saving signature: {e}")
+        return jsonify({'error': f'Database error: {str(e)}. You may need to add the signature_data column to the users table.'}), 500
 
 
 @app.route('/admin/competition/<comp_id>/set-chief-judge', methods=['POST'])
