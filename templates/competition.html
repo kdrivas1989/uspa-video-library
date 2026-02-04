@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ competition.name }} - Video Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts for signatures -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Alex+Brush&family=Dancing+Script:wght@500&family=Great+Vibes&family=Pacifico&family=Satisfy&family=Tangerine:wght@700&display=swap" rel="stylesheet">
 </head>
 <body class="bg-gray-100 text-gray-900 min-h-screen">
     <nav class="bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
@@ -1095,20 +1099,87 @@
                 <h2 class="text-xl font-bold">Create Signature</h2>
                 <button onclick="closeSignatureModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
             </div>
-            <p class="text-gray-600 text-sm mb-4">Draw your signature in the box below using your mouse or touch screen.</p>
 
-            <div class="border-2 border-gray-300 rounded bg-white mb-4">
-                <canvas id="signatureCanvas" width="450" height="150" class="w-full cursor-crosshair"></canvas>
+            <!-- Signature Type Tabs -->
+            <div class="flex border-b border-gray-300 mb-4">
+                <button id="tabDraw" onclick="switchSignatureTab('draw')" class="px-4 py-2 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+                    Draw Signature
+                </button>
+                <button id="tabType" onclick="switchSignatureTab('type')" class="px-4 py-2 text-sm font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700">
+                    Type Signature
+                </button>
             </div>
 
-            <div class="flex justify-between">
-                <button onclick="clearSignatureCanvas()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400 text-sm">
-                    Clear
-                </button>
-                <div class="flex gap-2">
-                    <button onclick="closeSignatureModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
-                    <button onclick="saveSignature()" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white">Save Signature</button>
+            <!-- Draw Signature Panel -->
+            <div id="drawPanel">
+                <p class="text-gray-600 text-sm mb-4">Draw your signature using your mouse or touch screen.</p>
+                <div class="border-2 border-gray-300 rounded bg-white mb-4">
+                    <canvas id="signatureCanvas" width="450" height="150" class="w-full cursor-crosshair"></canvas>
                 </div>
+                <button onclick="clearSignatureCanvas()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400 text-sm mb-4">
+                    Clear Canvas
+                </button>
+            </div>
+
+            <!-- Type Signature Panel -->
+            <div id="typePanel" class="hidden">
+                <p class="text-gray-600 text-sm mb-4">Type your name and select a signature style.</p>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Your Name</label>
+                    <input type="text" id="signatureNameInput" class="w-full border rounded px-3 py-2"
+                           placeholder="Enter your name" oninput="updateTypedSignaturePreview()">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Style</label>
+                    <div class="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto">
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="'Great Vibes', cursive" class="mr-3" checked onchange="updateTypedSignaturePreview()">
+                            <span class="text-3xl" style="font-family: 'Great Vibes', cursive;">Sample Signature</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="'Alex Brush', cursive" class="mr-3" onchange="updateTypedSignaturePreview()">
+                            <span class="text-3xl" style="font-family: 'Alex Brush', cursive;">Sample Signature</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="'Dancing Script', cursive" class="mr-3" onchange="updateTypedSignaturePreview()">
+                            <span class="text-3xl" style="font-family: 'Dancing Script', cursive;">Sample Signature</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="'Satisfy', cursive" class="mr-3" onchange="updateTypedSignaturePreview()">
+                            <span class="text-3xl" style="font-family: 'Satisfy', cursive;">Sample Signature</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="'Pacifico', cursive" class="mr-3" onchange="updateTypedSignaturePreview()">
+                            <span class="text-3xl" style="font-family: 'Pacifico', cursive;">Sample Signature</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="'Tangerine', cursive" class="mr-3" onchange="updateTypedSignaturePreview()">
+                            <span class="text-4xl" style="font-family: 'Tangerine', cursive;">Sample Signature</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="Georgia, serif" class="mr-3" onchange="updateTypedSignaturePreview()">
+                            <span class="text-2xl italic" style="font-family: Georgia, serif;">Sample Signature</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded cursor-pointer hover:bg-gray-50 signature-style-option">
+                            <input type="radio" name="signatureFont" value="'Times New Roman', serif" class="mr-3" onchange="updateTypedSignaturePreview()">
+                            <span class="text-2xl italic" style="font-family: 'Times New Roman', serif;">Sample Signature</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Preview</label>
+                    <div class="border-2 border-gray-300 rounded bg-white p-4 min-h-[80px] flex items-center justify-center">
+                        <canvas id="typedSignatureCanvas" width="450" height="80" class="max-w-full"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-4 border-t">
+                <button onclick="closeSignatureModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
+                <button onclick="saveSignature()" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white">Save Signature</button>
             </div>
         </div>
     </div>
@@ -2990,10 +3061,14 @@
         // Signature canvas variables
         let signatureCanvas = null;
         let signatureCtx = null;
+        let typedSignatureCanvas = null;
+        let typedSignatureCtx = null;
         let isDrawing = false;
         let lastX = 0;
         let lastY = 0;
         let currentSignerUsername = '';
+        let currentSignerName = '';
+        let currentSignatureTab = 'draw';
 
         async function showChiefJudgeModal() {
             document.getElementById('chiefJudgeModal').classList.remove('hidden');
@@ -3076,12 +3151,50 @@
                 return;
             }
 
+            // Get the signer's display name from the selected option
+            const selectedOption = select.options[select.selectedIndex];
+            currentSignerName = selectedOption.textContent.split(' (')[0];  // Extract name before role
+
             document.getElementById('signatureModal').classList.remove('hidden');
+
+            // Reset to draw tab
+            switchSignatureTab('draw');
             initSignatureCanvas();
+
+            // Pre-fill name input for typed signature
+            document.getElementById('signatureNameInput').value = currentSignerName;
+            initTypedSignatureCanvas();
+            updateTypedSignaturePreview();
         }
 
         function closeSignatureModal() {
             document.getElementById('signatureModal').classList.add('hidden');
+        }
+
+        function switchSignatureTab(tab) {
+            currentSignatureTab = tab;
+
+            const tabDraw = document.getElementById('tabDraw');
+            const tabType = document.getElementById('tabType');
+            const drawPanel = document.getElementById('drawPanel');
+            const typePanel = document.getElementById('typePanel');
+
+            if (tab === 'draw') {
+                tabDraw.classList.add('border-blue-600', 'text-blue-600');
+                tabDraw.classList.remove('border-transparent', 'text-gray-500');
+                tabType.classList.remove('border-blue-600', 'text-blue-600');
+                tabType.classList.add('border-transparent', 'text-gray-500');
+                drawPanel.classList.remove('hidden');
+                typePanel.classList.add('hidden');
+            } else {
+                tabType.classList.add('border-blue-600', 'text-blue-600');
+                tabType.classList.remove('border-transparent', 'text-gray-500');
+                tabDraw.classList.remove('border-blue-600', 'text-blue-600');
+                tabDraw.classList.add('border-transparent', 'text-gray-500');
+                typePanel.classList.remove('hidden');
+                drawPanel.classList.add('hidden');
+                updateTypedSignaturePreview();
+            }
         }
 
         function initSignatureCanvas() {
@@ -3097,6 +3210,15 @@
             signatureCtx.lineCap = 'round';
             signatureCtx.lineJoin = 'round';
 
+            // Remove old listeners to prevent duplicates
+            signatureCanvas.removeEventListener('mousedown', startDrawing);
+            signatureCanvas.removeEventListener('mousemove', draw);
+            signatureCanvas.removeEventListener('mouseup', stopDrawing);
+            signatureCanvas.removeEventListener('mouseout', stopDrawing);
+            signatureCanvas.removeEventListener('touchstart', handleTouchStart);
+            signatureCanvas.removeEventListener('touchmove', handleTouchMove);
+            signatureCanvas.removeEventListener('touchend', stopDrawing);
+
             // Mouse events
             signatureCanvas.addEventListener('mousedown', startDrawing);
             signatureCanvas.addEventListener('mousemove', draw);
@@ -3107,6 +3229,53 @@
             signatureCanvas.addEventListener('touchstart', handleTouchStart);
             signatureCanvas.addEventListener('touchmove', handleTouchMove);
             signatureCanvas.addEventListener('touchend', stopDrawing);
+        }
+
+        function initTypedSignatureCanvas() {
+            typedSignatureCanvas = document.getElementById('typedSignatureCanvas');
+            typedSignatureCtx = typedSignatureCanvas.getContext('2d');
+        }
+
+        function updateTypedSignaturePreview() {
+            if (!typedSignatureCtx) {
+                initTypedSignatureCanvas();
+            }
+
+            const name = document.getElementById('signatureNameInput').value || 'Your Name';
+            const fontRadio = document.querySelector('input[name="signatureFont"]:checked');
+            const fontFamily = fontRadio ? fontRadio.value : "'Great Vibes', cursive";
+
+            // Check if it's a serif font (needs italic)
+            const isSerif = fontFamily.includes('Georgia') || fontFamily.includes('Times') || fontFamily.includes('Palatino');
+
+            // Check if it's Tangerine (needs larger font)
+            const isTangerine = fontFamily.includes('Tangerine');
+
+            // Clear canvas
+            typedSignatureCtx.fillStyle = '#ffffff';
+            typedSignatureCtx.fillRect(0, 0, typedSignatureCanvas.width, typedSignatureCanvas.height);
+
+            // Draw text
+            typedSignatureCtx.fillStyle = '#1a365d';  // Dark blue
+            typedSignatureCtx.textAlign = 'center';
+            typedSignatureCtx.textBaseline = 'middle';
+
+            // Calculate font size to fit (Tangerine needs larger base size)
+            let fontSize = isTangerine ? 64 : 48;
+            typedSignatureCtx.font = `${isSerif ? 'italic ' : ''}${fontSize}px ${fontFamily}`;
+
+            // Reduce font size if text is too wide
+            while (typedSignatureCtx.measureText(name).width > typedSignatureCanvas.width - 40 && fontSize > 20) {
+                fontSize -= 2;
+                typedSignatureCtx.font = `${isSerif ? 'italic ' : ''}${fontSize}px ${fontFamily}`;
+            }
+
+            typedSignatureCtx.fillText(name, typedSignatureCanvas.width / 2, typedSignatureCanvas.height / 2);
+
+            // Update the sample text in radio options to show the user's name
+            document.querySelectorAll('.signature-style-option span').forEach(span => {
+                span.textContent = name || 'Sample Signature';
+            });
         }
 
         function getCanvasCoords(e) {
@@ -3177,8 +3346,42 @@
                 return;
             }
 
-            // Get canvas data as PNG
-            const signatureData = signatureCanvas.toDataURL('image/png');
+            let signatureData;
+
+            if (currentSignatureTab === 'draw') {
+                // Check if canvas has any drawing (not just white)
+                const canvas = signatureCanvas;
+                const ctx = signatureCtx;
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const pixels = imageData.data;
+                let hasDrawing = false;
+
+                for (let i = 0; i < pixels.length; i += 4) {
+                    // Check if pixel is not white (255, 255, 255)
+                    if (pixels[i] < 250 || pixels[i + 1] < 250 || pixels[i + 2] < 250) {
+                        hasDrawing = true;
+                        break;
+                    }
+                }
+
+                if (!hasDrawing) {
+                    alert('Please draw your signature before saving');
+                    return;
+                }
+
+                signatureData = signatureCanvas.toDataURL('image/png');
+            } else {
+                // Typed signature
+                const name = document.getElementById('signatureNameInput').value.trim();
+                if (!name) {
+                    alert('Please enter your name');
+                    return;
+                }
+
+                // Make sure preview is up to date
+                updateTypedSignaturePreview();
+                signatureData = typedSignatureCanvas.toDataURL('image/png');
+            }
 
             try {
                 const response = await fetch(`/api/signature/${currentSignerUsername}`, {
