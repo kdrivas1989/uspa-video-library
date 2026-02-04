@@ -5362,6 +5362,58 @@ def delete_competition_draw(comp_id):
     return jsonify({'success': True})
 
 
+@app.route('/competition/<comp_id>/ws-task-order', methods=['GET'])
+def get_ws_task_order(comp_id):
+    """Get the WS Performance task order for a competition."""
+    competition = get_competition(comp_id)
+    if not competition:
+        return jsonify({'success': False, 'error': 'Competition not found'}), 404
+
+    # Task order is stored in competition metadata
+    metadata = {}
+    if competition.get('metadata'):
+        try:
+            metadata = json.loads(competition['metadata'])
+        except:
+            metadata = {}
+
+    task_order = metadata.get('ws_task_order', None)
+    return jsonify({'success': True, 'task_order': task_order})
+
+
+@app.route('/competition/<comp_id>/ws-task-order', methods=['POST'])
+@admin_required
+def save_ws_task_order(comp_id):
+    """Save the WS Performance task order for a competition."""
+    data = request.json
+    task_order = data.get('task_order', [])
+
+    if not task_order or len(task_order) != 3:
+        return jsonify({'success': False, 'error': 'Task order must have exactly 3 tasks'}), 400
+
+    valid_tasks = ['Time', 'Distance', 'Speed']
+    if not all(t in valid_tasks for t in task_order) or len(set(task_order)) != 3:
+        return jsonify({'success': False, 'error': 'Task order must contain Time, Distance, and Speed'}), 400
+
+    competition = get_competition(comp_id)
+    if not competition:
+        return jsonify({'success': False, 'error': 'Competition not found'}), 404
+
+    # Store task order in competition metadata
+    metadata = {}
+    if competition.get('metadata'):
+        try:
+            metadata = json.loads(competition['metadata'])
+        except:
+            metadata = {}
+
+    metadata['ws_task_order'] = task_order
+    competition['metadata'] = json.dumps(metadata)
+    save_competition(competition)
+
+    return jsonify({'success': True, 'task_order': task_order})
+
+
 @app.route('/competition/<comp_id>/verify-pin', methods=['POST'])
 def verify_chief_judge_pin(comp_id):
     """Verify the Chief Judge PIN."""

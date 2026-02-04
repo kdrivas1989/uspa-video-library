@@ -1270,19 +1270,105 @@
                 </div>
             </div>
 
-            <!-- Tie Breaker Section (for WS Acrobatic and AE events) -->
-            <div id="tieBreakerSection" class="hidden mb-4 p-3 bg-purple-50 rounded border border-purple-200">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h4 class="font-semibold text-gray-800">Tie Breaker Draw</h4>
-                        <p class="text-sm text-gray-600">Draw to determine if tie breaker round is Compulsory or Free routine</p>
+            <!-- WS Acrobatic Section (Round Structure, Compulsory Sequence Draw & Tie Breaker) -->
+            <div id="tieBreakerSection" class="hidden mb-4 p-4 bg-purple-50 rounded border border-purple-200">
+                <!-- Round Structure -->
+                <div class="mb-4">
+                    <h4 class="font-semibold text-gray-800 mb-2">Round Structure (7 Rounds)</h4>
+                    <div class="flex gap-1 mb-2">
+                        <div class="w-10 h-10 rounded bg-green-500 text-white flex items-center justify-center font-bold text-sm" title="Round 1: Free">F</div>
+                        <div class="w-10 h-10 rounded bg-orange-500 text-white flex items-center justify-center font-bold text-sm" title="Round 2: Compulsory">C</div>
+                        <div class="w-10 h-10 rounded bg-orange-500 text-white flex items-center justify-center font-bold text-sm" title="Round 3: Compulsory">C</div>
+                        <div class="w-10 h-10 rounded bg-green-500 text-white flex items-center justify-center font-bold text-sm" title="Round 4: Free">F</div>
+                        <div class="w-10 h-10 rounded bg-orange-500 text-white flex items-center justify-center font-bold text-sm" title="Round 5: Compulsory">C</div>
+                        <div class="w-10 h-10 rounded bg-orange-500 text-white flex items-center justify-center font-bold text-sm" title="Round 6: Compulsory">C</div>
+                        <div class="w-10 h-10 rounded bg-green-500 text-white flex items-center justify-center font-bold text-sm" title="Round 7: Free">F</div>
                     </div>
-                    <div class="flex items-center gap-3">
-                        <div id="tieBreakerResult" class="hidden px-4 py-2 rounded font-bold text-lg"></div>
-                        <button onclick="drawTieBreaker()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold">
-                            Draw Tie Breaker
+                    <div class="text-xs text-gray-600 space-y-1">
+                        <p><span class="inline-block w-4 h-4 bg-green-500 rounded mr-1 align-middle"></span> <strong>Free (F)</strong> - 3 rounds: Competitor's own routine</p>
+                        <p><span class="inline-block w-4 h-4 bg-orange-500 rounded mr-1 align-middle"></span> <strong>Compulsory (C)</strong> - 4 rounds: 3 Compulsory Sequences per routine (from Addendum A)</p>
+                    </div>
+                </div>
+                <!-- Compulsory Sequence Draw -->
+                <div class="mb-4 pt-3 border-t border-purple-200">
+                    <div class="flex items-center justify-between mb-3">
+                        <div>
+                            <h4 class="font-semibold text-gray-800">Compulsory Sequence Draw</h4>
+                            <p class="text-sm text-gray-600">Draw 3 sequences per Compulsory round from Addendum A (without replacement)</p>
+                        </div>
+                        <button onclick="drawWsAcroSequences()" class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded font-bold">
+                            Draw Sequences
                         </button>
                     </div>
+                    <div id="wsAcroSequenceResults" class="hidden">
+                        <div class="grid grid-cols-4 gap-2 text-sm">
+                            <div class="bg-orange-100 rounded p-2">
+                                <div class="font-semibold text-orange-800 mb-1">Round 2 (C)</div>
+                                <div id="wsAcroSeqR2" class="text-gray-700 space-y-1"></div>
+                            </div>
+                            <div class="bg-orange-100 rounded p-2">
+                                <div class="font-semibold text-orange-800 mb-1">Round 3 (C)</div>
+                                <div id="wsAcroSeqR3" class="text-gray-700 space-y-1"></div>
+                            </div>
+                            <div class="bg-orange-100 rounded p-2">
+                                <div class="font-semibold text-orange-800 mb-1">Round 5 (C)</div>
+                                <div id="wsAcroSeqR5" class="text-gray-700 space-y-1"></div>
+                            </div>
+                            <div class="bg-orange-100 rounded p-2">
+                                <div class="font-semibold text-orange-800 mb-1">Round 6 (C)</div>
+                                <div id="wsAcroSeqR6" class="text-gray-700 space-y-1"></div>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500 mt-2">Sequences drawn without replacement. Pool restarts if exhausted.</p>
+                    </div>
+                </div>
+                <!-- Tie Breaker Draw -->
+                <div class="pt-3 border-t border-purple-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h4 class="font-semibold text-gray-800">Tie Breaker Draw</h4>
+                            <p class="text-sm text-gray-600">Draw to determine if tie breaker round is Compulsory or Free routine</p>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div id="tieBreakerResult" class="hidden px-4 py-2 rounded font-bold text-lg"></div>
+                            <button onclick="drawTieBreaker()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold">
+                                Draw Tie Breaker
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WS Performance Task Order Section -->
+            <div id="wsTaskOrderSection" class="hidden mb-4 p-4 bg-green-50 rounded border border-green-200">
+                <div class="mb-3">
+                    <h4 class="font-semibold text-gray-800">Task Order Draw</h4>
+                    <p class="text-sm text-gray-600">Draw which task (Time, Distance, Speed) is performed in each round</p>
+                </div>
+                <div class="flex items-center gap-4 mb-3">
+                    <div class="flex gap-2">
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500 mb-1">Round 1</div>
+                            <div id="wsTaskRound1" class="w-24 h-10 rounded bg-gray-200 flex items-center justify-center font-bold text-gray-600">-</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500 mb-1">Round 2</div>
+                            <div id="wsTaskRound2" class="w-24 h-10 rounded bg-gray-200 flex items-center justify-center font-bold text-gray-600">-</div>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-xs text-gray-500 mb-1">Round 3</div>
+                            <div id="wsTaskRound3" class="w-24 h-10 rounded bg-gray-200 flex items-center justify-center font-bold text-gray-600">-</div>
+                        </div>
+                    </div>
+                    <button onclick="drawWsTaskOrder()" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold">
+                        Draw Task Order
+                    </button>
+                    <button onclick="saveWsTaskOrder()" id="saveWsTaskOrderBtn" class="hidden px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold">
+                        Save & Apply
+                    </button>
+                </div>
+                <div id="wsTaskOrderSaved" class="hidden text-sm text-green-700 font-medium">
+                    Task order saved and applied to scoring!
                 </div>
             </div>
 
@@ -3821,7 +3907,7 @@
                 // Artistic Events
                 'ae_freestyle': 7, 'ae_freefly': 7,
                 // Wingsuit
-                'ws_acrobatic': 7, 'ws_performance': 9
+                'ws_acrobatic': 7, 'ws_performance': 3
             };
             const rounds = defaultRounds[eventType] || 10;
 
@@ -3834,8 +3920,100 @@
             const needsTieBreaker = eventType === 'ws_acrobatic';
             tieBreakerSection.classList.toggle('hidden', !needsTieBreaker);
 
+            // Show/hide WS Performance task order section
+            const wsTaskOrderSection = document.getElementById('wsTaskOrderSection');
+            wsTaskOrderSection.classList.toggle('hidden', eventType !== 'ws_performance');
+
             // Reset tie breaker result when switching events
             document.getElementById('tieBreakerResult').classList.add('hidden');
+
+            // Load saved task order for WS Performance
+            if (eventType === 'ws_performance') {
+                loadSavedWsTaskOrder();
+            }
+        }
+
+        let currentWsTaskOrder = null;
+
+        function drawWsTaskOrder() {
+            // Shuffle tasks: Time, Distance, Speed
+            const tasks = ['Time', 'Distance', 'Speed'];
+            for (let i = tasks.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [tasks[i], tasks[j]] = [tasks[j], tasks[i]];
+            }
+            currentWsTaskOrder = tasks;
+
+            // Display results with colors
+            const colors = {
+                'Time': 'bg-blue-500 text-white',
+                'Distance': 'bg-green-500 text-white',
+                'Speed': 'bg-orange-500 text-white'
+            };
+
+            for (let i = 0; i < 3; i++) {
+                const el = document.getElementById('wsTaskRound' + (i + 1));
+                el.textContent = tasks[i];
+                el.className = 'w-24 h-10 rounded flex items-center justify-center font-bold ' + colors[tasks[i]];
+            }
+
+            // Show save button
+            document.getElementById('saveWsTaskOrderBtn').classList.remove('hidden');
+            document.getElementById('wsTaskOrderSaved').classList.add('hidden');
+        }
+
+        async function loadSavedWsTaskOrder() {
+            try {
+                const response = await fetch('/competition/' + compId + '/ws-task-order');
+                const result = await response.json();
+                if (result.success && result.task_order && result.task_order.length === 3) {
+                    currentWsTaskOrder = result.task_order;
+                    const colors = {
+                        'Time': 'bg-blue-500 text-white',
+                        'Distance': 'bg-green-500 text-white',
+                        'Speed': 'bg-orange-500 text-white'
+                    };
+                    for (let i = 0; i < 3; i++) {
+                        const el = document.getElementById('wsTaskRound' + (i + 1));
+                        el.textContent = result.task_order[i];
+                        el.className = 'w-24 h-10 rounded flex items-center justify-center font-bold ' + colors[result.task_order[i]];
+                    }
+                    document.getElementById('wsTaskOrderSaved').classList.remove('hidden');
+                    document.getElementById('wsTaskOrderSaved').textContent = 'Current task order loaded';
+                    document.getElementById('saveWsTaskOrderBtn').classList.add('hidden');
+                }
+            } catch (err) {
+                console.error('Error loading WS task order:', err);
+            }
+        }
+
+        async function saveWsTaskOrder() {
+            if (!currentWsTaskOrder) {
+                alert('Please draw a task order first');
+                return;
+            }
+
+            try {
+                const response = await fetch('/competition/' + compId + '/ws-task-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ task_order: currentWsTaskOrder })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    document.getElementById('wsTaskOrderSaved').textContent = 'Task order saved and applied to scoring!';
+                    document.getElementById('wsTaskOrderSaved').classList.remove('hidden');
+                    document.getElementById('saveWsTaskOrderBtn').classList.add('hidden');
+                    // Reload page to apply new task order to scoring display
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    alert('Error: ' + (result.error || 'Failed to save task order'));
+                }
+            } catch (err) {
+                console.error('Error saving WS task order:', err);
+                alert('Error saving task order');
+            }
         }
 
         function drawTieBreaker() {
@@ -3846,6 +4024,62 @@
                 ? 'px-4 py-2 rounded font-bold text-lg bg-orange-100 text-orange-800 border border-orange-300'
                 : 'px-4 py-2 rounded font-bold text-lg bg-green-100 text-green-800 border border-green-300';
             resultDiv.classList.remove('hidden');
+        }
+
+        // WS Acrobatic Compulsory Sequences from Addendum A (USPA SCM Chapter 14)
+        const wsAcroSequencePool = [
+            'A: Up and Over',
+            'B: Rock and Roll',
+            'C: Revolutions',
+            'D: Roll Over',
+            'E: Duck and Roll',
+            'F: Déjà vu',
+            'G: Yin Yang',
+            'H: Back to Back',
+            'I: Pancakes',
+            'J: Reversed Pancakes',
+            'K: Hand to Foot',
+            'L: Reversed Hand to Foot',
+            'M: Hand to Opposed Foot',
+            'N: Corkscrew',
+            'O: Scary Roll'
+        ];
+
+        function drawWsAcroSequences() {
+            // 4 Compulsory rounds (2, 3, 5, 6), each needs 3 sequences
+            const compulsoryRounds = [2, 3, 5, 6];
+            const sequencesPerRound = 3;
+            const totalNeeded = compulsoryRounds.length * sequencesPerRound; // 12 sequences
+
+            // Create a working copy of the pool
+            let availableSequences = [...wsAcroSequencePool];
+            const drawnSequences = {};
+
+            for (const round of compulsoryRounds) {
+                drawnSequences[round] = [];
+                for (let i = 0; i < sequencesPerRound; i++) {
+                    // If pool is exhausted, restart
+                    if (availableSequences.length === 0) {
+                        availableSequences = [...wsAcroSequencePool];
+                    }
+                    // Draw random sequence
+                    const randomIndex = Math.floor(Math.random() * availableSequences.length);
+                    const sequence = availableSequences.splice(randomIndex, 1)[0];
+                    drawnSequences[round].push(sequence);
+                }
+            }
+
+            // Display results
+            for (const round of compulsoryRounds) {
+                const container = document.getElementById(`wsAcroSeqR${round}`);
+                if (container) {
+                    container.innerHTML = drawnSequences[round].map((seq, idx) =>
+                        `<div class="bg-white px-2 py-1 rounded text-xs">${idx + 1}. ${seq}</div>`
+                    ).join('');
+                }
+            }
+
+            document.getElementById('wsAcroSequenceResults').classList.remove('hidden');
         }
 
         function generateCompetitionDraw() {
