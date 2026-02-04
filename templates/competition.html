@@ -3829,9 +3829,9 @@
             document.getElementById('drawNumRounds').value = rounds;
             document.getElementById('drawNumRoundsDisplay').textContent = rounds + ' Rounds';
 
-            // Show/hide tie breaker section for events with compulsory/free rounds
+            // Show/hide tie breaker section for WS Acrobatic only
             const tieBreakerSection = document.getElementById('tieBreakerSection');
-            const needsTieBreaker = eventType === 'ws_acrobatic' || eventType.startsWith('ae_');
+            const needsTieBreaker = eventType === 'ws_acrobatic';
             tieBreakerSection.classList.toggle('hidden', !needsTieBreaker);
 
             // Reset tie breaker result when switching events
