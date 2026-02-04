@@ -4068,6 +4068,46 @@ def set_video_start_time(video_id):
     return jsonify({'success': True, 'message': 'Start time saved', 'start_time': start_time})
 
 
+@app.route('/video/<video_id>/draw', methods=['GET'])
+def get_video_draw(video_id):
+    """Get the draw (formation sequence) for a video."""
+    video = get_video(video_id)
+    if not video:
+        return jsonify({'error': 'Video not found'}), 404
+
+    draw = video.get('draw', [])
+    if isinstance(draw, str):
+        try:
+            import json
+            draw = json.loads(draw)
+        except:
+            draw = []
+
+    return jsonify({'success': True, 'draw': draw})
+
+
+@app.route('/video/<video_id>/draw', methods=['POST'])
+@login_required
+def save_video_draw(video_id):
+    """Save the draw (formation sequence) for a video. Chief judge or admin only."""
+    if session.get('role') not in ['admin', 'chief_judge']:
+        return jsonify({'error': 'Permission denied'}), 403
+
+    video = get_video(video_id)
+    if not video:
+        return jsonify({'error': 'Video not found'}), 404
+
+    data = request.json
+    draw = data.get('draw', [])
+
+    # Store as JSON string
+    import json
+    video['draw'] = json.dumps(draw)
+    save_video(video)
+
+    return jsonify({'success': True, 'message': 'Draw saved'})
+
+
 @app.route('/search')
 def search():
     """Search videos."""

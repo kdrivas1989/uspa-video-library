@@ -73,8 +73,25 @@
         </div>
 
         <div>
-            <!-- Main Video Area -->
-            <div>
+            <!-- Main Video Area with Draw Panel -->
+            <div class="flex gap-4">
+                <!-- Draw Panel (Left Side) -->
+                <div id="drawPanel" class="hidden w-20 flex-shrink-0">
+                    <div class="bg-gray-800 rounded-lg p-2 sticky top-20">
+                        <div class="text-center text-xs text-gray-400 mb-2 font-medium">DRAW</div>
+                        <div id="drawPanelList" class="space-y-1">
+                            <!-- Formations will be listed here -->
+                        </div>
+                        {% if is_admin or session.get('role') == 'chief_judge' %}
+                        <button onclick="showSetDrawModal()" class="mt-3 w-full px-2 py-1 bg-blue-600 hover:bg-blue-700 rounded text-xs">
+                            Set Draw
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Video Container -->
+                <div class="flex-1">
                 <!-- Video Player -->
                 <div class="aspect-video bg-black rounded-lg overflow-hidden mb-4 relative" id="videoContainer">
                     <!-- Freeze Frame Overlay (for all videos) -->
@@ -893,6 +910,8 @@
                         </div>
                     </div>
                 </div>
+                </div><!-- End flex-1 video container -->
+            </div><!-- End flex container with draw panel -->
 
                 <!-- Video Info -->
                 <div class="flex items-center gap-3 mb-4">
@@ -2022,6 +2041,11 @@
             }
 
             updateScoringDisplay();
+
+            // Advance draw position to highlight next formation
+            if (typeof advanceDrawPosition === 'function') {
+                advanceDrawPosition();
+            }
         }
 
         function recalculatePanelCounts() {
@@ -2301,6 +2325,11 @@
             document.getElementById('scoreSummaryTable').classList.add('hidden');
             document.getElementById('bustReasonsModal').classList.add('hidden');
             updateScoringDisplay();
+
+            // Reset draw position
+            if (typeof resetDrawPosition === 'function') {
+                resetDrawPosition();
+            }
         }
 
         // Score confirmation and summary functions
@@ -4839,6 +4868,231 @@
         }
     </script>
     {% endif %}
+
+    <!-- Set Draw Modal -->
+    <div id="setDrawModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-[100]">
+        <div class="w-full max-w-md mx-4 bg-gray-900 rounded-lg shadow-2xl">
+            <div class="bg-blue-800 px-4 py-3 border-b border-gray-700 rounded-t-lg">
+                <h3 class="text-xl font-bold text-white text-center">Set Draw for Video</h3>
+            </div>
+            <div class="p-4">
+                <div class="mb-4">
+                    <label class="block text-gray-400 text-sm mb-2">Enter Draw (e.g., A2BC1D or 1-A-2-B-3)</label>
+                    <input type="text" id="setDrawInput" placeholder="A2BC1D"
+                        class="w-full px-4 py-2 rounded bg-gray-700 text-white font-mono uppercase focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div id="setDrawPreview" class="mb-4 p-3 bg-gray-800 rounded min-h-[60px]">
+                    <div class="text-gray-500 text-sm">Preview will appear here...</div>
+                </div>
+                <p class="text-gray-500 text-xs mb-4">
+                    Use letters for randoms (A-Z) and numbers for blocks.
+                    Separate with dashes or enter continuously.
+                </p>
+            </div>
+            <div class="bg-gray-800 px-4 py-3 border-t border-gray-700 flex justify-end gap-3 rounded-b-lg">
+                <button onclick="hideSetDrawModal()" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded text-white">
+                    Cancel
+                </button>
+                <button onclick="saveVideoDraw()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-white font-bold">
+                    Save Draw
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Draw Panel Functions
+        let videoDraw = []; // The saved draw for this video
+        let currentDrawPosition = 0; // Current position in the draw (0-indexed)
+
+        function showSetDrawModal() {
+            document.getElementById('setDrawModal').classList.remove('hidden');
+            const input = document.getElementById('setDrawInput');
+            // Pre-fill with current draw if exists
+            if (videoDraw.length > 0) {
+                input.value = videoDraw.join('-');
+            }
+            input.focus();
+            updateSetDrawPreview();
+        }
+
+        function hideSetDrawModal() {
+            document.getElementById('setDrawModal').classList.add('hidden');
+        }
+
+        document.getElementById('setDrawInput').addEventListener('input', updateSetDrawPreview);
+
+        function updateSetDrawPreview() {
+            const input = document.getElementById('setDrawInput').value.toUpperCase();
+            const preview = document.getElementById('setDrawPreview');
+
+            if (!input) {
+                preview.innerHTML = '<div class="text-gray-500 text-sm">Preview will appear here...</div>';
+                return;
+            }
+
+            // Parse the draw
+            const parsed = parseDrawInput(input);
+
+            if (parsed.length === 0) {
+                preview.innerHTML = '<div class="text-red-400 text-sm">Invalid draw format</div>';
+                return;
+            }
+
+            // Show preview
+            preview.innerHTML = `
+                <div class="flex flex-wrap gap-2">
+                    ${parsed.map((f, i) => `
+                        <div class="flex flex-col items-center">
+                            <span class="text-xs text-gray-500">${i + 1}</span>
+                            <span class="px-2 py-1 rounded ${f.match(/^\d+$/) ? 'bg-purple-600' : 'bg-blue-600'} text-white font-mono text-sm">${f}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="text-gray-400 text-xs mt-2">${parsed.length} formations</div>
+            `;
+        }
+
+        function parseDrawInput(input) {
+            // Remove spaces and convert to uppercase
+            input = input.replace(/\s/g, '').toUpperCase();
+
+            // If contains dashes, split by dashes
+            if (input.includes('-')) {
+                return input.split('-').filter(f => f.length > 0);
+            }
+
+            // Otherwise, parse character by character
+            const formations = [];
+            let i = 0;
+            while (i < input.length) {
+                const char = input[i];
+                if (char >= 'A' && char <= 'Z') {
+                    // Letter - it's a random
+                    formations.push(char);
+                    i++;
+                } else if (char >= '0' && char <= '9') {
+                    // Number - could be multi-digit block
+                    let num = '';
+                    while (i < input.length && input[i] >= '0' && input[i] <= '9') {
+                        num += input[i];
+                        i++;
+                    }
+                    formations.push(num);
+                } else {
+                    i++; // Skip invalid characters
+                }
+            }
+            return formations;
+        }
+
+        async function saveVideoDraw() {
+            const input = document.getElementById('setDrawInput').value.toUpperCase();
+            const parsed = parseDrawInput(input);
+
+            if (parsed.length === 0) {
+                alert('Please enter a valid draw');
+                return;
+            }
+
+            try {
+                const response = await fetch('/video/{{ video.id }}/draw', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ draw: parsed })
+                });
+                const result = await response.json();
+                if (result.success) {
+                    videoDraw = parsed;
+                    updateDrawPanel();
+                    hideSetDrawModal();
+                    // Also update the formations input
+                    document.getElementById('formationsInput').value = parsed.join('');
+                    updateFormations();
+                } else {
+                    alert(result.error || 'Failed to save draw');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        function updateDrawPanel() {
+            const panel = document.getElementById('drawPanel');
+            const list = document.getElementById('drawPanelList');
+
+            if (videoDraw.length === 0) {
+                panel.classList.add('hidden');
+                return;
+            }
+
+            panel.classList.remove('hidden');
+
+            list.innerHTML = videoDraw.map((f, i) => {
+                let bgClass = 'bg-gray-700';
+                let textClass = 'text-gray-400';
+                let borderClass = '';
+
+                if (i < currentDrawPosition) {
+                    // Already scored
+                    bgClass = 'bg-gray-600';
+                    textClass = 'text-gray-500';
+                } else if (i === currentDrawPosition) {
+                    // Current formation (next to score)
+                    bgClass = 'bg-yellow-500';
+                    textClass = 'text-black font-bold';
+                    borderClass = 'ring-2 ring-yellow-300';
+                } else if (i === currentDrawPosition + 1) {
+                    // On deck
+                    bgClass = 'bg-blue-600';
+                    textClass = 'text-white';
+                }
+
+                const isBlock = f.match(/^\d+$/);
+
+                return `
+                    <div class="flex items-center gap-1" id="drawItem_${i}">
+                        <span class="text-xs text-gray-500 w-4">${i + 1}</span>
+                        <div class="flex-1 text-center py-1 rounded ${bgClass} ${textClass} ${borderClass} font-mono text-sm transition-all duration-200">
+                            ${f}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function advanceDrawPosition() {
+            if (currentDrawPosition < videoDraw.length) {
+                currentDrawPosition++;
+                updateDrawPanel();
+            }
+        }
+
+        function resetDrawPosition() {
+            currentDrawPosition = 0;
+            updateDrawPanel();
+        }
+
+        // Load saved draw on page load
+        async function loadVideoDraw() {
+            try {
+                const response = await fetch('/video/{{ video.id }}/draw');
+                const result = await response.json();
+                if (result.success && result.draw && result.draw.length > 0) {
+                    videoDraw = result.draw;
+                    updateDrawPanel();
+                    // Also update formations input
+                    document.getElementById('formationsInput').value = videoDraw.join('');
+                    updateFormations();
+                }
+            } catch (err) {
+                console.log('No saved draw for this video');
+            }
+        }
+
+        // Load draw when page loads
+        loadVideoDraw();
+    </script>
 
     <!-- Bust Reasons Modal (fixed position, outside all other containers) -->
     <div id="bustReasonsModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-[100]">
