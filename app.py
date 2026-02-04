@@ -3592,6 +3592,71 @@ def fix_dropbox_urls():
     return jsonify({'success': True, 'message': f'Fixed {fixed} Dropbox video URLs'})
 
 
+@app.route('/admin/fix-duplicates', methods=['POST'])
+@admin_required
+def fix_duplicates():
+    """Remove duplicate videos (same URL or same title+duration)."""
+    removed = 0
+    try:
+        if USE_SUPABASE:
+            result = supabase.table('videos').select('*').execute()
+            videos = result.data
+        else:
+            db = get_sqlite_db()
+            cursor = db.execute('SELECT * FROM videos')
+            videos = [dict(row) for row in cursor.fetchall()]
+
+        # Track seen videos by URL and by title+duration
+        seen_urls = {}
+        seen_title_duration = {}
+        duplicates_to_remove = []
+
+        for video in videos:
+            video_id = video['id']
+            url = video.get('url', '')
+            title = video.get('title', '')
+            duration = video.get('duration', '')
+
+            is_duplicate = False
+
+            # Check for URL duplicate
+            if url and url in seen_urls:
+                is_duplicate = True
+            elif url:
+                seen_urls[url] = video_id
+
+            # Check for title+duration duplicate (only if duration exists)
+            if not is_duplicate and title and duration:
+                key = f"{title}|{duration}"
+                if key in seen_title_duration:
+                    is_duplicate = True
+                else:
+                    seen_title_duration[key] = video_id
+
+            if is_duplicate:
+                duplicates_to_remove.append(video_id)
+
+        # Remove duplicates
+        for video_id in duplicates_to_remove:
+            if USE_SUPABASE:
+                supabase.table('videos').delete().eq('id', video_id).execute()
+            else:
+                db.execute('DELETE FROM videos WHERE id = ?', (video_id,))
+            removed += 1
+
+        if not USE_SUPABASE:
+            db.commit()
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+    return jsonify({
+        'success': True,
+        'removed': removed,
+        'message': f'Removed {removed} duplicate videos'
+    })
+
+
 @app.route('/admin/edit-video/<video_id>', methods=['POST'])
 @admin_required
 def edit_video(video_id):

@@ -55,6 +55,13 @@
                 </button>
                 <p id="fixUrlsMessage" class="text-sm mt-2 hidden"></p>
             </div>
+            <div class="bg-gray-800 rounded-lg p-6">
+                <p class="text-gray-400 text-sm mb-3">Remove duplicate videos (same URL or title+duration)</p>
+                <button onclick="fixDuplicates()" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm">
+                    Fix Duplicates
+                </button>
+                <p id="fixDuplicatesMessage" class="text-sm mt-2 hidden"></p>
+            </div>
         </div>
 
         <!-- Background Conversion Status -->
@@ -1056,6 +1063,33 @@ https://www.youtube.com/watch?v=xxxxx"
                     msgDiv.className = 'text-sm mt-2 text-green-400';
                 } else {
                     msgDiv.textContent = result.error || 'Error fixing URLs';
+                    msgDiv.className = 'text-sm mt-2 text-red-400';
+                }
+            } catch (error) {
+                msgDiv.textContent = 'Error: ' + error.message;
+                msgDiv.className = 'text-sm mt-2 text-red-400';
+            }
+        }
+
+        // Fix Duplicates
+        async function fixDuplicates() {
+            const msgDiv = document.getElementById('fixDuplicatesMessage');
+            msgDiv.textContent = 'Scanning for duplicates...';
+            msgDiv.className = 'text-sm mt-2 text-yellow-400';
+            msgDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/fix-duplicates', { method: 'POST' });
+                const result = await response.json();
+
+                if (result.success) {
+                    msgDiv.textContent = result.message;
+                    msgDiv.className = 'text-sm mt-2 text-green-400';
+                    if (result.removed > 0) {
+                        setTimeout(() => location.reload(), 2000);
+                    }
+                } else {
+                    msgDiv.textContent = result.error || 'Error fixing duplicates';
                     msgDiv.className = 'text-sm mt-2 text-red-400';
                 }
             } catch (error) {
