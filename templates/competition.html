@@ -1968,7 +1968,7 @@
                             <label class="block text-gray-600 text-sm mb-2">Upload FlySight CSV:</label>
                             <p class="text-gray-500 text-xs mb-2">Competition window: 3000m to 2000m altitude</p>
                             <input type="file" id="wsFlysightFile" accept=".csv" class="hidden" onchange="handleWsFlysightSelect(event)">
-                            <button type="button" onclick="document.getElementById('wsFlysightFile').click()"
+                            <button type="button" onclick="document.getElementById('wsFlysightFile').value=''; document.getElementById('wsFlysightFile').click()"
                                 class="w-full px-4 py-3 rounded bg-blue-100 hover:bg-blue-200 text-sm border-2 border-dashed border-blue-400">
                                 <span class="block text-lg mb-1">📊</span>
                                 Select FlySight CSV
