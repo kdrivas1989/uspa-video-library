@@ -1270,6 +1270,22 @@
                 </div>
             </div>
 
+            <!-- Tie Breaker Section (for WS Acrobatic and AE events) -->
+            <div id="tieBreakerSection" class="hidden mb-4 p-3 bg-purple-50 rounded border border-purple-200">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="font-semibold text-gray-800">Tie Breaker Draw</h4>
+                        <p class="text-sm text-gray-600">Draw to determine if tie breaker round is Compulsory or Free routine</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div id="tieBreakerResult" class="hidden px-4 py-2 rounded font-bold text-lg"></div>
+                        <button onclick="drawTieBreaker()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-bold">
+                            Draw Tie Breaker
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Saved Draws Display -->
             <div id="savedDrawsSection" class="mb-4 p-3 bg-blue-50 rounded border border-blue-200">
                 <h4 class="font-semibold text-gray-800 mb-2">Saved Draws</h4>
@@ -3812,6 +3828,24 @@
             // Update the rounds display and hidden input
             document.getElementById('drawNumRounds').value = rounds;
             document.getElementById('drawNumRoundsDisplay').textContent = rounds + ' Rounds';
+
+            // Show/hide tie breaker section for events with compulsory/free rounds
+            const tieBreakerSection = document.getElementById('tieBreakerSection');
+            const needsTieBreaker = eventType === 'ws_acrobatic' || eventType.startsWith('ae_');
+            tieBreakerSection.classList.toggle('hidden', !needsTieBreaker);
+
+            // Reset tie breaker result when switching events
+            document.getElementById('tieBreakerResult').classList.add('hidden');
+        }
+
+        function drawTieBreaker() {
+            const result = Math.random() < 0.5 ? 'Compulsory' : 'Free';
+            const resultDiv = document.getElementById('tieBreakerResult');
+            resultDiv.textContent = result;
+            resultDiv.className = result === 'Compulsory'
+                ? 'px-4 py-2 rounded font-bold text-lg bg-orange-100 text-orange-800 border border-orange-300'
+                : 'px-4 py-2 rounded font-bold text-lg bg-green-100 text-green-800 border border-green-300';
+            resultDiv.classList.remove('hidden');
         }
 
         function generateCompetitionDraw() {
