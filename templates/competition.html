@@ -1522,21 +1522,22 @@
 
                             <!-- Landing Zone -->
                             <div class="mb-4">
-                                <label class="block text-gray-600 text-sm mb-2">Landing Zone</label>
-                                <select id="cpLandingZone" class="w-full px-4 py-2 rounded bg-white text-gray-900 border border-gray-300" onchange="calculateCpScore()">
-                                    <option value="0">Outside landing area (0 pts)</option>
-                                    <option value="3">Z1 (3 pts)</option>
-                                    <option value="11">Z2 (11 pts)</option>
-                                    <option value="19">Z3 (19 pts)</option>
-                                    <option value="27">Z4 (27 pts)</option>
-                                    <option value="34">Z5 (34 pts)</option>
-                                    <option value="41">Z6 (41 pts)</option>
-                                    <option value="46">Z7 (46 pts)</option>
-                                    <option value="48">Z8 (48 pts)</option>
-                                    <option value="25">Z9 (25 pts)</option>
-                                    <option value="5">Z10 (5 pts)</option>
-                                    <option value="50">Center (50 pts)</option>
-                                </select>
+                                <label class="block text-gray-600 text-sm mb-2">Landing Zone (click to select)</label>
+                                <input type="hidden" id="cpLandingZone" value="0">
+                                <div class="grid grid-cols-3 gap-2">
+                                    <button type="button" onclick="selectCpZone(0)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="0">Outside (0)</button>
+                                    <button type="button" onclick="selectCpZone(3)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="3">Z1 (3)</button>
+                                    <button type="button" onclick="selectCpZone(11)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="11">Z2 (11)</button>
+                                    <button type="button" onclick="selectCpZone(19)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="19">Z3 (19)</button>
+                                    <button type="button" onclick="selectCpZone(27)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="27">Z4 (27)</button>
+                                    <button type="button" onclick="selectCpZone(34)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="34">Z5 (34)</button>
+                                    <button type="button" onclick="selectCpZone(41)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="41">Z6 (41)</button>
+                                    <button type="button" onclick="selectCpZone(46)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="46">Z7 (46)</button>
+                                    <button type="button" onclick="selectCpZone(48)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="48">Z8 (48)</button>
+                                    <button type="button" onclick="selectCpZone(25)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="25">Z9 (25)</button>
+                                    <button type="button" onclick="selectCpZone(5)" class="cp-zone-btn px-3 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm" data-zone="5">Z10 (5)</button>
+                                    <button type="button" onclick="selectCpZone(50)" class="cp-zone-btn px-3 py-2 rounded bg-green-500 hover:bg-green-600 text-white text-sm font-bold" data-zone="50">Center (50)</button>
+                                </div>
                             </div>
 
                             <!-- Zone Score Display -->
@@ -3879,6 +3880,30 @@
         const isCpCompetition = competitionEventType.startsWith('cp');
 
         // CP Scoring Functions (Zone Accuracy, Distance, and Speed)
+        function selectCpZone(value) {
+            document.getElementById('cpLandingZone').value = value;
+            // Update button styles
+            document.querySelectorAll('.cp-zone-btn').forEach(btn => {
+                const btnZone = parseInt(btn.dataset.zone);
+                if (btnZone === value) {
+                    btn.classList.remove('bg-gray-200', 'hover:bg-gray-300', 'text-gray-800');
+                    if (value === 50) {
+                        btn.classList.add('bg-green-600', 'ring-2', 'ring-green-400');
+                    } else {
+                        btn.classList.add('bg-blue-500', 'hover:bg-blue-600', 'text-white', 'ring-2', 'ring-blue-400');
+                    }
+                } else {
+                    btn.classList.remove('bg-blue-500', 'hover:bg-blue-600', 'text-white', 'ring-2', 'ring-blue-400', 'bg-green-600', 'ring-green-400');
+                    if (btnZone === 50) {
+                        btn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                    } else {
+                        btn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-800');
+                    }
+                }
+            });
+            calculateCpScore();
+        }
+
         function setCpEvent(eventType) {
             currentCpEvent = eventType;
             document.getElementById('cpEventType').value = eventType;
@@ -3921,6 +3946,16 @@
             // Reset input fields
             const landingZone = document.getElementById('cpLandingZone');
             if (landingZone) landingZone.value = '0';
+            // Reset zone button styles
+            document.querySelectorAll('.cp-zone-btn').forEach(btn => {
+                const btnZone = parseInt(btn.dataset.zone);
+                btn.classList.remove('bg-blue-500', 'hover:bg-blue-600', 'text-white', 'ring-2', 'ring-blue-400', 'bg-green-600', 'ring-green-400');
+                if (btnZone === 50) {
+                    btn.classList.add('bg-green-500', 'hover:bg-green-600', 'text-white');
+                } else {
+                    btn.classList.add('bg-gray-200', 'hover:bg-gray-300', 'text-gray-800');
+                }
+            });
             const distanceMeters = document.getElementById('cpDistanceMeters');
             if (distanceMeters) distanceMeters.value = '';
             const speedTime = document.getElementById('cpSpeedTime');
@@ -6469,6 +6504,13 @@
             }
 
             let videoId = existingVideoId;  // Keep existing video if any
+
+            // Show progress for CP/CF scoring (no video upload)
+            if (isCpScoring || isCfScoring) {
+                document.getElementById('uploadProgress').classList.remove('hidden');
+                document.getElementById('uploadBar').style.width = '50%';
+                document.getElementById('uploadStatus').textContent = 'Saving score...';
+            }
 
             // Upload new video if selected
             if (selectedVideoFile) {
