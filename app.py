@@ -6892,6 +6892,8 @@ def ws_performance_save_score(team_id):
     round_num = int(data.get('round_num', 1))
     score_value = float(data.get('score', 0))
     task = data.get('task', 'time')  # 'time', 'distance', 'speed'
+    raw_score = float(data.get('raw_score', score_value))
+    dl_violation = data.get('dl_violation', 'none')
 
     # Validate round number based on task
     # Time: 1-3, Distance: 4-6, Speed: 7-9
@@ -6913,7 +6915,9 @@ def ws_performance_save_score(team_id):
             score['score'] = score_value
             score['score_data'] = json.dumps({
                 'task_type': task.capitalize(),
-                'source': 'flysight'
+                'source': 'flysight',
+                'raw_score': raw_score,
+                'dl_violation': dl_violation
             })
             score['scored_by'] = session.get('username', 'system')
             score_updated = True
@@ -6926,7 +6930,9 @@ def ws_performance_save_score(team_id):
             'score': score_value,
             'score_data': json.dumps({
                 'task_type': task.capitalize(),
-                'source': 'flysight'
+                'source': 'flysight',
+                'raw_score': raw_score,
+                'dl_violation': dl_violation
             }),
             'video_id': None,
             'scored_by': session.get('username', 'system')

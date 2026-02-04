@@ -4561,6 +4561,15 @@
                 wsSpeedCard.classList.remove('hidden');
             }
 
+            // Update raw score if FlySight data exists
+            if (wsFlysightParsedData) {
+                const wsRawScoreEl = document.getElementById('wsRawScore');
+                if (wsRawScoreEl) {
+                    wsRawScoreEl.value = wsFlysightParsedData[task];
+                    calculateWsScore();
+                }
+            }
+
             updateWsSelectedDisplay();
         }
 
@@ -4911,6 +4920,13 @@
                 document.getElementById('wsFlysightResult').classList.remove('hidden');
                 document.getElementById('wsFlysightProgress').classList.add('hidden');
 
+                // Set raw score based on selected task and calculate final score
+                const wsRawScoreEl = document.getElementById('wsRawScore');
+                if (wsRawScoreEl) {
+                    wsRawScoreEl.value = wsFlysightParsedData[selectedWsTask];
+                    calculateWsScore();
+                }
+
                 // Automatically show flight track map after parsing
                 if (wsFlysightTrackPoints.length > 0) {
                     const container = document.getElementById('wsFlightTrackMapContainer');
@@ -4997,7 +5013,12 @@
                 internalRound = selectedWsRound + 6;
             }
 
-            const score = parseFloat(wsFlysightParsedData[selectedWsTask]);
+            // Get final score with DL penalty applied
+            const wsScoreValueEl = document.getElementById('wsScoreValue');
+            const rawScore = parseFloat(wsFlysightParsedData[selectedWsTask]);
+            const finalScore = wsScoreValueEl ? parseFloat(wsScoreValueEl.value) || rawScore : rawScore;
+            const dlViolation = document.querySelector('input[name="wsDlViolation"]:checked')?.value || 'none';
+
             const taskLabels = { time: 'Time', distance: 'Distance', speed: 'Speed' };
             const taskUnits = { time: 's', distance: 'm', speed: 'km/h' };
 
@@ -5010,8 +5031,10 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         round_num: internalRound,
-                        score: score,
-                        task: selectedWsTask
+                        score: finalScore,
+                        task: selectedWsTask,
+                        raw_score: rawScore,
+                        dl_violation: dlViolation
                     })
                 });
 
@@ -5019,7 +5042,8 @@
 
                 if (result.success) {
                     document.getElementById('wsFlysightStatus').textContent = 'Score saved!';
-                    alert(`${taskLabels[selectedWsTask]} Round ${selectedWsRound} saved: ${score} ${taskUnits[selectedWsTask]}`);
+                    const penaltyText = dlViolation !== 'none' ? ` (with ${dlViolation} DL penalty)` : '';
+                    alert(`${taskLabels[selectedWsTask]} Round ${selectedWsRound} saved: ${finalScore.toFixed(2)} ${taskUnits[selectedWsTask]}${penaltyText}`);
                     hideRoundModal();
                     preserveEventAndReload();
                 } else {
