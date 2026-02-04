@@ -1968,44 +1968,17 @@
 
                         <!-- WS Upload Content (hidden when no ref point assigned) -->
                         <div id="wsUploadContent">
-                        <!-- Task Selection -->
-                        <div class="mb-4">
-                            <label class="block text-gray-600 text-sm mb-2">Select Task:</label>
-                            <div class="grid grid-cols-3 gap-2">
-                                <button type="button" onclick="selectWsTask('time')" id="wsTaskTimeBtn"
-                                    class="ws-task-btn px-4 py-3 rounded border-2 text-center transition-all bg-blue-100 border-blue-500 text-blue-700">
-                                    <span class="block text-lg">⏱️</span>
-                                    <span class="text-sm font-medium">Time</span>
-                                </button>
-                                <button type="button" onclick="selectWsTask('distance')" id="wsTaskDistanceBtn"
-                                    class="ws-task-btn px-4 py-3 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
-                                    <span class="block text-lg">📏</span>
-                                    <span class="text-sm font-medium">Distance</span>
-                                </button>
-                                <button type="button" onclick="selectWsTask('speed')" id="wsTaskSpeedBtn"
-                                    class="ws-task-btn px-4 py-3 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
-                                    <span class="block text-lg">💨</span>
-                                    <span class="text-sm font-medium">Speed</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Round Selection -->
-                        <div class="mb-4">
-                            <label class="block text-gray-600 text-sm mb-2">Round:</label>
-                            <div class="grid grid-cols-3 gap-2">
-                                <button type="button" onclick="selectWsRound(1)" id="wsRound1Btn"
-                                    class="ws-round-btn px-4 py-2 rounded border-2 text-center transition-all bg-green-100 border-green-500 text-green-700">
-                                    Round 1
-                                </button>
-                                <button type="button" onclick="selectWsRound(2)" id="wsRound2Btn"
-                                    class="ws-round-btn px-4 py-2 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
-                                    Round 2
-                                </button>
-                                <button type="button" onclick="selectWsRound(3)" id="wsRound3Btn"
-                                    class="ws-round-btn px-4 py-2 rounded border-2 text-center transition-all bg-gray-100 border-gray-300 text-gray-600 hover:bg-gray-200">
-                                    Round 3
-                                </button>
+                        <!-- Current Task/Round Display -->
+                        <div class="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <span id="wsCurrentTaskIcon" class="text-2xl">⏱️</span>
+                                    <div>
+                                        <span id="wsCurrentTaskLabel" class="font-medium text-blue-700">Time</span>
+                                        <span class="text-gray-500 mx-2">-</span>
+                                        <span id="wsCurrentRoundLabel" class="font-medium text-green-700">Round 1</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -4366,8 +4339,9 @@
             }
 
             // Draw designated lane using FlySight track start point and reference point
+            let trackStart = null;
             if (wsFlysightTrackPoints.length > 0 && competitorRefPoint) {
-                const trackStart = wsFlysightTrackPoints[0];
+                trackStart = wsFlysightTrackPoints[0];
                 drawDesignatedLaneOnTrackMap(trackStart, competitorRefPoint);
             }
 
@@ -4419,6 +4393,28 @@
                     infoEl.innerHTML = `Track: ${wsFlysightTrackPoints.length} points | ` +
                         `Start: ${trackCoords[0][0].toFixed(4)}, ${trackCoords[0][1].toFixed(4)} | ` +
                         `End: ${trackCoords[trackCoords.length-1][0].toFixed(4)}, ${trackCoords[trackCoords.length-1][1].toFixed(4)}`;
+                }
+
+                // Auto-detect DL violations if we have reference point
+                if (trackStart && competitorRefPoint) {
+                    const detection = detectDLViolation(
+                        wsFlysightTrackPoints,
+                        trackStart.lat, trackStart.lon,
+                        competitorRefPoint.lat, competitorRefPoint.lng
+                    );
+
+                    if (detection) {
+                        // Update info with violation detection
+                        if (infoEl) {
+                            const violationText = detection.violation === 'none'
+                                ? '<span class="text-green-600">No DL violation detected</span>'
+                                : `<span class="text-red-600">Max ${detection.maxDistance}m from center (${detection.outsideDistance}m outside safe zone)</span>`;
+                            infoEl.innerHTML += ` | ${violationText}`;
+                        }
+
+                        // Show detection and ask for confirmation
+                        setTimeout(() => showDLViolationDetection(detection), 500);
+                    }
                 }
             }
         }
@@ -4500,17 +4496,14 @@
         function selectWsTask(task) {
             selectedWsTask = task;
 
-            // Update button styles
-            document.querySelectorAll('.ws-task-btn').forEach(btn => {
-                btn.classList.remove('bg-blue-100', 'border-blue-500', 'text-blue-700');
-                btn.classList.add('bg-gray-100', 'border-gray-300', 'text-gray-600');
-            });
+            // Update current task display
+            const taskIcons = { time: '⏱️', distance: '📏', speed: '💨' };
+            const taskLabels = { time: 'Time', distance: 'Distance', speed: 'Speed' };
 
-            const activeBtn = document.getElementById('wsTask' + task.charAt(0).toUpperCase() + task.slice(1) + 'Btn');
-            if (activeBtn) {
-                activeBtn.classList.remove('bg-gray-100', 'border-gray-300', 'text-gray-600');
-                activeBtn.classList.add('bg-blue-100', 'border-blue-500', 'text-blue-700');
-            }
+            const iconEl = document.getElementById('wsCurrentTaskIcon');
+            const labelEl = document.getElementById('wsCurrentTaskLabel');
+            if (iconEl) iconEl.textContent = taskIcons[task] || '⏱️';
+            if (labelEl) labelEl.textContent = taskLabels[task] || 'Time';
 
             // Update card highlights (only if cards exist - they appear after CSV upload)
             const wsTimeCard = document.getElementById('wsTimeCard');
@@ -4547,17 +4540,9 @@
         function selectWsRound(round) {
             selectedWsRound = round;
 
-            // Update button styles
-            document.querySelectorAll('.ws-round-btn').forEach(btn => {
-                btn.classList.remove('bg-green-100', 'border-green-500', 'text-green-700');
-                btn.classList.add('bg-gray-100', 'border-gray-300', 'text-gray-600');
-            });
-
-            const activeBtn = document.getElementById('wsRound' + round + 'Btn');
-            if (activeBtn) {
-                activeBtn.classList.remove('bg-gray-100', 'border-gray-300', 'text-gray-600');
-                activeBtn.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
-            }
+            // Update current round display
+            const labelEl = document.getElementById('wsCurrentRoundLabel');
+            if (labelEl) labelEl.textContent = 'Round ' + round;
 
             updateWsSelectedDisplay();
         }
@@ -5143,6 +5128,134 @@
             const newLng = lng1R + Math.atan2(Math.sin(perpBearing) * Math.sin(d) * Math.cos(lat1R), Math.cos(d) - Math.sin(lat1R) * Math.sin(newLat));
 
             return [newLat * 180 / Math.PI, newLng * 180 / Math.PI];
+        }
+
+        // Calculate perpendicular distance from a point to a line defined by two points
+        function distanceFromPointToLine(pointLat, pointLon, line1Lat, line1Lon, line2Lat, line2Lon) {
+            const R = 6371000; // Earth's radius in meters
+
+            // Convert to radians
+            const toRad = deg => deg * Math.PI / 180;
+            const pLat = toRad(pointLat);
+            const pLon = toRad(pointLon);
+            const l1Lat = toRad(line1Lat);
+            const l1Lon = toRad(line1Lon);
+            const l2Lat = toRad(line2Lat);
+            const l2Lon = toRad(line2Lon);
+
+            // Calculate bearing from line point 1 to line point 2
+            const dLon12 = l2Lon - l1Lon;
+            const y12 = Math.sin(dLon12) * Math.cos(l2Lat);
+            const x12 = Math.cos(l1Lat) * Math.sin(l2Lat) - Math.sin(l1Lat) * Math.cos(l2Lat) * Math.cos(dLon12);
+            const bearing12 = Math.atan2(y12, x12);
+
+            // Calculate bearing from line point 1 to our point
+            const dLon1P = pLon - l1Lon;
+            const y1P = Math.sin(dLon1P) * Math.cos(pLat);
+            const x1P = Math.cos(l1Lat) * Math.sin(pLat) - Math.sin(l1Lat) * Math.cos(pLat) * Math.cos(dLon1P);
+            const bearing1P = Math.atan2(y1P, x1P);
+
+            // Calculate angular distance from line point 1 to our point
+            const dLat = pLat - l1Lat;
+            const dLon = pLon - l1Lon;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(l1Lat) * Math.cos(pLat) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            const angularDist = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            // Cross-track distance (perpendicular distance)
+            const crossTrack = Math.asin(Math.sin(angularDist) * Math.sin(bearing1P - bearing12));
+
+            return Math.abs(crossTrack * R);
+        }
+
+        // Analyze flight track and detect DL violations
+        function detectDLViolation(trackPoints, trackStartLat, trackStartLon, refPointLat, refPointLon) {
+            if (!trackPoints || trackPoints.length === 0) return null;
+
+            let maxDistance = 0;
+            let maxDistancePoint = null;
+
+            // Check each track point's distance from the designated lane center line
+            for (const point of trackPoints) {
+                const distance = distanceFromPointToLine(
+                    point.lat, point.lon,
+                    trackStartLat, trackStartLon,
+                    refPointLat, refPointLon
+                );
+
+                if (distance > maxDistance) {
+                    maxDistance = distance;
+                    maxDistancePoint = point;
+                }
+            }
+
+            // Determine violation level based on max distance from center line
+            // Safe lane is 300m from center (600m total width)
+            // Penalties are based on distance OUTSIDE the safe lane
+            let violation = 'none';
+            let penaltyPercent = 0;
+            let outsideDistance = Math.max(0, maxDistance - 300);
+
+            if (outsideDistance <= 0) {
+                violation = 'none';
+                penaltyPercent = 0;
+            } else if (outsideDistance <= 150) {
+                violation = 'under150';
+                penaltyPercent = 10;
+            } else if (outsideDistance <= 300) {
+                violation = '150to300';
+                penaltyPercent = 20;
+            } else {
+                violation = 'over300';
+                penaltyPercent = 50;
+            }
+
+            return {
+                violation: violation,
+                penaltyPercent: penaltyPercent,
+                maxDistance: Math.round(maxDistance),
+                outsideDistance: Math.round(outsideDistance),
+                maxDistancePoint: maxDistancePoint
+            };
+        }
+
+        // Show DL violation detection result and ask for confirmation
+        function showDLViolationDetection(detection) {
+            if (!detection) return;
+
+            const violationLabels = {
+                'none': 'No Violation (within designated lane)',
+                'under150': 'Minor Violation (<150m outside DL) - 10% penalty',
+                '150to300': 'Moderate Violation (150-300m outside DL) - 20% penalty',
+                'over300': 'Major Violation (>300m outside DL) - 50% penalty'
+            };
+
+            // Auto-select the detected violation
+            const radioBtn = document.querySelector(`input[name="wsDlViolation"][value="${detection.violation}"]`);
+            if (radioBtn) {
+                radioBtn.checked = true;
+                calculateWsScore();
+            }
+
+            // Show confirmation if there's a penalty
+            if (detection.violation !== 'none') {
+                const confirmed = confirm(
+                    `DL Violation Auto-Detected:\n\n` +
+                    `${violationLabels[detection.violation]}\n\n` +
+                    `Max distance from lane center: ${detection.maxDistance}m\n` +
+                    `Distance outside safe zone: ${detection.outsideDistance}m\n\n` +
+                    `Click OK to confirm this penalty, or Cancel to select manually.`
+                );
+
+                if (!confirmed) {
+                    // Reset to no violation if not confirmed
+                    const noneBtn = document.querySelector('input[name="wsDlViolation"][value="none"]');
+                    if (noneBtn) {
+                        noneBtn.checked = true;
+                        calculateWsScore();
+                    }
+                }
+            }
         }
 
         function drawFlightPaths() {
