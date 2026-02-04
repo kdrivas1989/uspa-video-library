@@ -276,7 +276,7 @@
                                 {% if is_individual %}
                                 <td class="px-4 py-3 font-medium">
                                     {{ team.team_name }}
-                                    {% if team.members %}<span class="text-gray-600 text-sm ml-2">({{ team.members }})</span>{% endif %}
+                                    {% if team.members %}<span class="country-flag text-gray-600 text-sm ml-2" data-country="{{ team.members }}"></span>{% endif %}
                                 </td>
                                 {% else %}
                                 <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
@@ -561,7 +561,7 @@
                             {% if is_individual %}
                             <td class="px-4 py-3 font-medium">
                                 {{ team.team_name }}
-                                {% if team.members %}<span class="text-gray-600 text-sm ml-2">({{ team.members }})</span>{% endif %}
+                                {% if team.members %}<span class="country-flag text-gray-600 text-sm ml-2" data-country="{{ team.members }}"></span>{% endif %}
                             </td>
                             {% else %}
                             <td class="px-4 py-3 font-medium">{{ team.team_name }}</td>
@@ -2327,6 +2327,83 @@
         let currentClass = 'all';
         let currentEvent = eventTypes.length > 0 ? eventTypes[0] : '';
 
+        // Country code to flag emoji conversion
+        const COUNTRY_TO_ISO = {
+            'USA': 'US', 'US': 'US', 'UNITED STATES': 'US', 'AMERICA': 'US',
+            'GBR': 'GB', 'GB': 'GB', 'UK': 'GB', 'UNITED KINGDOM': 'GB', 'ENGLAND': 'GB', 'BRITAIN': 'GB',
+            'ESP': 'ES', 'ES': 'ES', 'SPAIN': 'ES',
+            'GER': 'DE', 'DE': 'DE', 'GERMANY': 'DE', 'DEUTSCHLAND': 'DE',
+            'FRA': 'FR', 'FR': 'FR', 'FRANCE': 'FR',
+            'ITA': 'IT', 'IT': 'IT', 'ITALY': 'IT', 'ITALIA': 'IT',
+            'JPN': 'JP', 'JP': 'JP', 'JAPAN': 'JP',
+            'CHN': 'CN', 'CN': 'CN', 'CHINA': 'CN',
+            'AUS': 'AU', 'AU': 'AU', 'AUSTRALIA': 'AU',
+            'CAN': 'CA', 'CA': 'CA', 'CANADA': 'CA',
+            'BRA': 'BR', 'BR': 'BR', 'BRAZIL': 'BR', 'BRASIL': 'BR',
+            'MEX': 'MX', 'MX': 'MX', 'MEXICO': 'MX',
+            'NED': 'NL', 'NL': 'NL', 'NETHERLANDS': 'NL', 'HOLLAND': 'NL',
+            'BEL': 'BE', 'BE': 'BE', 'BELGIUM': 'BE',
+            'SWE': 'SE', 'SE': 'SE', 'SWEDEN': 'SE',
+            'NOR': 'NO', 'NO': 'NO', 'NORWAY': 'NO',
+            'DEN': 'DK', 'DK': 'DK', 'DENMARK': 'DK',
+            'FIN': 'FI', 'FI': 'FI', 'FINLAND': 'FI',
+            'POL': 'PL', 'PL': 'PL', 'POLAND': 'PL', 'POLSKA': 'PL',
+            'RUS': 'RU', 'RU': 'RU', 'RUSSIA': 'RU',
+            'UKR': 'UA', 'UA': 'UA', 'UKRAINE': 'UA',
+            'AUT': 'AT', 'AT': 'AT', 'AUSTRIA': 'AT',
+            'SUI': 'CH', 'CH': 'CH', 'SWITZERLAND': 'CH', 'SWISS': 'CH',
+            'NZL': 'NZ', 'NZ': 'NZ', 'NEW ZEALAND': 'NZ',
+            'RSA': 'ZA', 'ZA': 'ZA', 'SOUTH AFRICA': 'ZA',
+            'ARG': 'AR', 'AR': 'AR', 'ARGENTINA': 'AR',
+            'COL': 'CO', 'CO': 'CO', 'COLOMBIA': 'CO',
+            'CZE': 'CZ', 'CZ': 'CZ', 'CZECH': 'CZ', 'CZECH REPUBLIC': 'CZ', 'CZECHIA': 'CZ',
+            'POR': 'PT', 'PT': 'PT', 'PORTUGAL': 'PT',
+            'IRL': 'IE', 'IE': 'IE', 'IRELAND': 'IE',
+            'IND': 'IN', 'IN': 'IN', 'INDIA': 'IN',
+            'KOR': 'KR', 'KR': 'KR', 'KOREA': 'KR', 'SOUTH KOREA': 'KR',
+            'SGP': 'SG', 'SG': 'SG', 'SINGAPORE': 'SG',
+            'HUN': 'HU', 'HU': 'HU', 'HUNGARY': 'HU',
+            'GRE': 'GR', 'GR': 'GR', 'GREECE': 'GR',
+            'ISR': 'IL', 'IL': 'IL', 'ISRAEL': 'IL',
+            'UAE': 'AE', 'AE': 'AE', 'EMIRATES': 'AE', 'DUBAI': 'AE',
+            'THA': 'TH', 'TH': 'TH', 'THAILAND': 'TH',
+            'PHL': 'PH', 'PH': 'PH', 'PHILIPPINES': 'PH',
+            'MYS': 'MY', 'MY': 'MY', 'MALAYSIA': 'MY',
+            'IDN': 'ID', 'ID': 'ID', 'INDONESIA': 'ID',
+            'VNM': 'VN', 'VN': 'VN', 'VIETNAM': 'VN',
+            'TWN': 'TW', 'TW': 'TW', 'TAIWAN': 'TW',
+            'HKG': 'HK', 'HK': 'HK', 'HONG KONG': 'HK',
+            'CHL': 'CL', 'CL': 'CL', 'CHILE': 'CL',
+            'PER': 'PE', 'PE': 'PE', 'PERU': 'PE',
+            'VEN': 'VE', 'VE': 'VE', 'VENEZUELA': 'VE',
+            'ECU': 'EC', 'EC': 'EC', 'ECUADOR': 'EC',
+            'CRI': 'CR', 'CR': 'CR', 'COSTA RICA': 'CR',
+            'PAN': 'PA', 'PA': 'PA', 'PANAMA': 'PA',
+            'DOM': 'DO', 'DO': 'DO', 'DOMINICAN REPUBLIC': 'DO',
+            'JAM': 'JM', 'JM': 'JM', 'JAMAICA': 'JM',
+            'TTO': 'TT', 'TT': 'TT', 'TRINIDAD': 'TT', 'TRINIDAD AND TOBAGO': 'TT'
+        };
+
+        function countryToFlag(country) {
+            if (!country) return '';
+            const code = COUNTRY_TO_ISO[country.toUpperCase().trim()];
+            if (!code) {
+                // Try to use first 2 chars as ISO code
+                const tryCode = country.toUpperCase().trim().slice(0, 2);
+                if (tryCode.length === 2 && /^[A-Z]{2}$/.test(tryCode)) {
+                    return String.fromCodePoint(...[...tryCode].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+                }
+                return '';
+            }
+            return String.fromCodePoint(...[...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65));
+        }
+
+        function countryWithFlag(country) {
+            if (!country) return '';
+            const flag = countryToFlag(country);
+            return flag ? `${flag} ${country}` : country;
+        }
+
         // Helper function to preserve current event/class when reloading
         function preserveEventAndReload() {
             // Store current state in sessionStorage
@@ -2341,6 +2418,15 @@
 
         // Restore event/class state on page load
         document.addEventListener('DOMContentLoaded', function() {
+            // Convert country codes to flags
+            document.querySelectorAll('.country-flag').forEach(el => {
+                const country = el.dataset.country;
+                if (country) {
+                    const flag = countryToFlag(country);
+                    el.textContent = flag ? `${flag} ${country}` : country;
+                }
+            });
+
             const savedEvent = sessionStorage.getItem('competition_currentEvent');
             const savedClass = sessionStorage.getItem('competition_currentClass');
             const savedMultiClass = sessionStorage.getItem('competition_multiEventClass');
@@ -2561,11 +2647,12 @@
                     resultsEl.innerHTML = allCompetitors.slice(0, 10).map(c => {
                         const safeName = (c.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                         const safeMembers = (c.members || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                        const flagDisplay = countryWithFlag(c.members);
                         return `
                         <div class="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
                              onclick="selectCompetitor('${safeName}', '${c.team_number || ''}', '${safeMembers}')">
-                            <div class="font-medium text-gray-800">${c.name || 'Unknown'}</div>
-                            <div class="text-xs text-gray-500">#${c.team_number || '?'}${c.members ? ' - ' + c.members : ''}</div>
+                            <div class="font-medium text-gray-800">${c.name || 'Unknown'}${flagDisplay ? ' <span class="text-sm">' + flagDisplay + '</span>' : ''}</div>
+                            <div class="text-xs text-gray-500">#${c.team_number || '?'}</div>
                         </div>`;
                     }).join('');
                     if (allCompetitors.length > 0) {
@@ -2588,11 +2675,12 @@
                 resultsEl.innerHTML = matches.map(c => {
                     const safeName = (c.name || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                     const safeMembers = (c.members || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                    const flagDisplay = countryWithFlag(c.members);
                     return `
                     <div class="p-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-0"
                          onclick="selectCompetitor('${safeName}', '${c.team_number || ''}', '${safeMembers}')">
-                        <div class="font-medium text-gray-800">${c.name || 'Unknown'}</div>
-                        <div class="text-xs text-gray-500">#${c.team_number || '?'}${c.members ? ' - ' + c.members : ''}</div>
+                        <div class="font-medium text-gray-800">${c.name || 'Unknown'}${flagDisplay ? ' <span class="text-sm">' + flagDisplay + '</span>' : ''}</div>
+                        <div class="text-xs text-gray-500">#${c.team_number || '?'}</div>
                     </div>`;
                 }).join('');
                 resultsEl.classList.remove('hidden');
@@ -2672,7 +2760,7 @@
                     </td>
                     <td class="px-3 py-2">${team.team_number || ''}</td>
                     <td class="px-3 py-2 font-medium">${team.team_name || ''}</td>
-                    <td class="px-3 py-2">${team.members || ''}</td>
+                    <td class="px-3 py-2">${team.members ? countryWithFlag(team.members) : ''}</td>
                     <td class="px-3 py-2">${team.class || ''}</td>
                     <td class="px-3 py-2 text-center">
                         <button onclick="openEditTeamModal('${team.id}', '${team.team_number || ''}', '${team.team_name || ''}', '${team.class || ''}', '${(team.members || '').replace(/'/g, "\\'")}', '${team.category || ''}', '${team.event || ''}', '${team.photo || ''}')" class="text-blue-600 hover:text-blue-800 text-sm mr-2">Edit</button>
