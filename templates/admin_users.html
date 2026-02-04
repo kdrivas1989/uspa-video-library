@@ -22,9 +22,15 @@
     <div class="container mx-auto px-4 py-8">
         <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-bold">User Management</h1>
-            <button onclick="showCreateModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">
-                + New User
-            </button>
+            <div class="flex gap-3">
+                <button onclick="showImportModal()" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    Import CSV
+                </button>
+                <button onclick="showCreateModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">
+                    + New User
+                </button>
+            </div>
         </div>
 
         <!-- Role Legend -->
@@ -190,6 +196,60 @@
         </div>
     </div>
 
+    <!-- Import CSV Modal -->
+    <div id="importModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-lg mx-4">
+            <h2 class="text-xl font-bold mb-4">Import Users from CSV</h2>
+
+            <div class="mb-4">
+                <p class="text-gray-400 text-sm mb-3">Upload a CSV file to import multiple users at once.</p>
+                <a href="/admin/users/sample-csv" download="users_import_sample.csv"
+                   class="text-blue-400 hover:text-blue-300 text-sm flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                    Download Sample CSV
+                </a>
+            </div>
+
+            <div class="bg-gray-700/50 rounded p-4 mb-4">
+                <h4 class="text-sm font-medium text-gray-300 mb-2">Required Columns:</h4>
+                <ul class="text-xs text-gray-400 space-y-1">
+                    <li><code class="bg-gray-700 px-1 rounded">username</code> - Unique login name (lowercase, no spaces)</li>
+                    <li><code class="bg-gray-700 px-1 rounded">name</code> - Full display name</li>
+                    <li><code class="bg-gray-700 px-1 rounded">role</code> - One of: judge, event_judge, chief_judge, admin</li>
+                </ul>
+                <h4 class="text-sm font-medium text-gray-300 mt-3 mb-2">Optional Columns:</h4>
+                <ul class="text-xs text-gray-400 space-y-1">
+                    <li><code class="bg-gray-700 px-1 rounded">email</code> - For password reset</li>
+                    <li><code class="bg-gray-700 px-1 rounded">signature_pin</code> - 4-6 digit PIN for signing (chief_judge/admin only)</li>
+                </ul>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-gray-400 text-sm mb-2">Select CSV File</label>
+                <input type="file" id="csvFileInput" accept=".csv"
+                       class="w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:bg-blue-600 file:text-white hover:file:bg-blue-700">
+            </div>
+
+            <div id="importPreview" class="hidden mb-4">
+                <h4 class="text-sm font-medium text-gray-300 mb-2">Preview:</h4>
+                <div id="importPreviewContent" class="bg-gray-700 rounded p-3 max-h-40 overflow-y-auto text-xs"></div>
+            </div>
+
+            <div id="importResults" class="hidden mb-4">
+                <div id="importResultsContent"></div>
+            </div>
+
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="hideImportModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">
+                    Cancel
+                </button>
+                <button type="button" onclick="importUsers()" id="importBtn" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700">
+                    Import Users
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function showCreateModal() {
             document.getElementById('createModal').classList.remove('hidden');
@@ -305,6 +365,186 @@
                 }
             } catch (err) {
                 alert('Error: ' + err.message);
+            }
+        }
+
+        // CSV Import Functions
+        let csvData = [];
+
+        function showImportModal() {
+            document.getElementById('importModal').classList.remove('hidden');
+            document.getElementById('csvFileInput').value = '';
+            document.getElementById('importPreview').classList.add('hidden');
+            document.getElementById('importResults').classList.add('hidden');
+            csvData = [];
+        }
+
+        function hideImportModal() {
+            document.getElementById('importModal').classList.add('hidden');
+        }
+
+        document.getElementById('csvFileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const text = event.target.result;
+                parseCSV(text);
+            };
+            reader.readAsText(file);
+        });
+
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) {
+                alert('CSV file must have a header row and at least one data row');
+                return;
+            }
+
+            // Parse header
+            const header = parseCSVLine(lines[0]).map(h => h.toLowerCase().trim());
+            const requiredCols = ['username', 'name', 'role'];
+            const missingCols = requiredCols.filter(col => !header.includes(col));
+
+            if (missingCols.length > 0) {
+                alert('Missing required columns: ' + missingCols.join(', '));
+                return;
+            }
+
+            // Parse data rows
+            csvData = [];
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                const values = parseCSVLine(lines[i]);
+                const row = {};
+                header.forEach((col, idx) => {
+                    row[col] = values[idx] || '';
+                });
+                csvData.push(row);
+            }
+
+            // Show preview
+            showPreview();
+        }
+
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        function showPreview() {
+            if (csvData.length === 0) {
+                document.getElementById('importPreview').classList.add('hidden');
+                return;
+            }
+
+            const validRoles = ['judge', 'event_judge', 'chief_judge', 'admin'];
+            let html = `<p class="text-green-400 mb-2">Found ${csvData.length} user(s) to import:</p>`;
+            html += '<table class="w-full text-left"><thead><tr class="text-gray-400 border-b border-gray-600">';
+            html += '<th class="pb-1">Username</th><th class="pb-1">Name</th><th class="pb-1">Role</th><th class="pb-1">Status</th>';
+            html += '</tr></thead><tbody>';
+
+            csvData.forEach((row, idx) => {
+                let status = '<span class="text-green-400">OK</span>';
+                let issues = [];
+
+                if (!row.username) issues.push('Missing username');
+                if (!row.name) issues.push('Missing name');
+                if (!row.role) issues.push('Missing role');
+                else if (!validRoles.includes(row.role.toLowerCase())) {
+                    issues.push('Invalid role: ' + row.role);
+                }
+
+                if (issues.length > 0) {
+                    status = '<span class="text-red-400">' + issues.join(', ') + '</span>';
+                }
+
+                html += `<tr class="border-b border-gray-700">`;
+                html += `<td class="py-1 font-mono">${row.username || '-'}</td>`;
+                html += `<td class="py-1">${row.name || '-'}</td>`;
+                html += `<td class="py-1">${row.role || '-'}</td>`;
+                html += `<td class="py-1">${status}</td>`;
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+
+            document.getElementById('importPreviewContent').innerHTML = html;
+            document.getElementById('importPreview').classList.remove('hidden');
+            document.getElementById('importResults').classList.add('hidden');
+        }
+
+        async function importUsers() {
+            if (csvData.length === 0) {
+                alert('No data to import. Please select a CSV file first.');
+                return;
+            }
+
+            const btn = document.getElementById('importBtn');
+            btn.disabled = true;
+            btn.textContent = 'Importing...';
+
+            try {
+                const response = await fetch('/admin/users/import-csv', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ users: csvData })
+                });
+
+                const result = await response.json();
+
+                let html = '';
+                if (result.success) {
+                    html = `<div class="bg-green-900/30 border border-green-600 rounded p-3">`;
+                    html += `<p class="text-green-400 font-medium">Import Complete!</p>`;
+                    html += `<p class="text-green-300 text-sm mt-1">Created: ${result.created} users</p>`;
+                    if (result.skipped > 0) {
+                        html += `<p class="text-yellow-400 text-sm">Skipped: ${result.skipped} (already exist)</p>`;
+                    }
+                    if (result.errors && result.errors.length > 0) {
+                        html += `<p class="text-red-400 text-sm mt-2">Errors:</p>`;
+                        html += `<ul class="text-red-300 text-xs ml-4">`;
+                        result.errors.forEach(err => {
+                            html += `<li>• ${err}</li>`;
+                        });
+                        html += '</ul>';
+                    }
+                    html += '</div>';
+
+                    // Reload after 2 seconds if any users were created
+                    if (result.created > 0) {
+                        setTimeout(() => window.location.reload(), 2000);
+                    }
+                } else {
+                    html = `<div class="bg-red-900/30 border border-red-600 rounded p-3">`;
+                    html += `<p class="text-red-400">Error: ${result.error}</p>`;
+                    html += '</div>';
+                }
+
+                document.getElementById('importResultsContent').innerHTML = html;
+                document.getElementById('importResults').classList.remove('hidden');
+                document.getElementById('importPreview').classList.add('hidden');
+            } catch (err) {
+                alert('Error: ' + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Import Users';
             }
         }
     </script>

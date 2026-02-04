@@ -2414,6 +2414,107 @@ def admin_update_user(username):
     return jsonify({'success': True, 'message': 'User updated'})
 
 
+@app.route('/admin/users/sample-csv')
+@admin_required
+def admin_users_sample_csv():
+    """Download a sample CSV file for user import."""
+    csv_content = """username,name,email,role,signature_pin
+johndoe,John Doe,john.doe@example.com,judge,
+janesmith,Jane Smith,jane.smith@example.com,event_judge,
+chiefjudge1,Chief Judge One,chief@example.com,chief_judge,1234
+adminuser,Admin User,admin@example.com,admin,5678
+judge2,Judge Two,,judge,
+"""
+    return Response(
+        csv_content,
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=users_import_sample.csv'}
+    )
+
+
+@app.route('/admin/users/import-csv', methods=['POST'])
+@admin_required
+def admin_import_users_csv():
+    """Import users from CSV data."""
+    data = request.json
+    users_data = data.get('users', [])
+
+    if not users_data:
+        return jsonify({'error': 'No users provided'}), 400
+
+    valid_roles = ['judge', 'event_judge', 'chief_judge', 'admin']
+    created = 0
+    skipped = 0
+    errors = []
+
+    for row in users_data:
+        username = row.get('username', '').strip().lower()
+        name = row.get('name', '').strip()
+        email = row.get('email', '').strip().lower()
+        role = row.get('role', '').strip().lower()
+        signature_pin = row.get('signature_pin', '').strip()
+
+        # Validate required fields
+        if not username:
+            errors.append(f"Row missing username")
+            continue
+        if not name:
+            errors.append(f"User '{username}' missing name")
+            continue
+        if not role:
+            errors.append(f"User '{username}' missing role")
+            continue
+        if role not in valid_roles:
+            errors.append(f"User '{username}' has invalid role: {role}")
+            continue
+
+        # Check if user already exists
+        existing = get_user(username)
+        if existing:
+            skipped += 1
+            continue
+
+        # Validate signature_pin format if provided
+        if signature_pin and (not signature_pin.isdigit() or len(signature_pin) < 4 or len(signature_pin) > 6):
+            errors.append(f"User '{username}' has invalid signature_pin (must be 4-6 digits)")
+            signature_pin = ''
+
+        # Create user with default password
+        import hashlib
+        default_password = 'password'
+        password_hash = hashlib.sha256(default_password.encode()).hexdigest()
+
+        user_data = {
+            'username': username,
+            'password': password_hash,
+            'role': role,
+            'name': name,
+            'email': email,
+            'must_change_password': 1,
+            'signature_pin': signature_pin
+        }
+
+        try:
+            if USE_SUPABASE:
+                supabase.table('users').insert(user_data).execute()
+            else:
+                db = get_sqlite_db()
+                db.execute('''INSERT INTO users (username, password, role, name, email, must_change_password, signature_pin)
+                             VALUES (?, ?, ?, ?, ?, ?, ?)''',
+                          (username, password_hash, role, name, email, 1, signature_pin))
+                db.commit()
+            created += 1
+        except Exception as e:
+            errors.append(f"Failed to create user '{username}': {str(e)}")
+
+    return jsonify({
+        'success': True,
+        'created': created,
+        'skipped': skipped,
+        'errors': errors
+    })
+
+
 @app.route('/admin/user/<username>/delete', methods=['POST'])
 @admin_required
 def admin_delete_user(username):

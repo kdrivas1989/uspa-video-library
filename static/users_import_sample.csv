@@ -1,0 +1,6 @@
+username,name,email,role,signature_pin
+johndoe,John Doe,john.doe@example.com,judge,
+janesmith,Jane Smith,jane.smith@example.com,event_judge,
+chiefjudge1,Chief Judge One,chief@example.com,chief_judge,1234
+adminuser,Admin User,admin@example.com,admin,5678
+judge2,Judge Two,,judge,
