@@ -13,7 +13,7 @@
 <body class="bg-gray-100 text-gray-900 min-h-screen">
     <nav class="bg-white border-b border-gray-200 p-4 sticky top-0 z-10 shadow-sm">
         <div class="container mx-auto flex justify-between items-center">
-            <a href="/" class="text-2xl font-bold text-blue-600">Video Library</a>
+            <a href="{% if is_public_view %}/results/{{ competition.id }}{% else %}/competition/{{ competition.id }}{% endif %}" class="text-2xl font-bold text-blue-600">{{ competition.name }}</a>
             <div class="flex items-center gap-4">
                 {% if is_public_view %}
                 <span class="bg-green-100 text-green-800 px-3 py-1 rounded-lg text-sm font-medium">Results View</span>
