@@ -784,6 +784,44 @@ def get_video(video_id):
         return dict(row) if row else None
 
 
+def find_duplicate_video(title, duration, url=None):
+    """Check if a video with the same title and duration already exists.
+    Returns the existing video if found, None otherwise."""
+    if USE_SUPABASE:
+        # First check by URL (exact match)
+        if url:
+            result = supabase.table('videos').select('*').eq('url', url).execute()
+            if result.data:
+                return result.data[0]
+
+        # Then check by title and duration
+        query = supabase.table('videos').select('*').eq('title', title)
+        if duration:
+            query = query.eq('duration', duration)
+        result = query.execute()
+        if result.data:
+            return result.data[0]
+    else:
+        db = get_sqlite_db()
+        # Check by URL first
+        if url:
+            cursor = db.execute('SELECT * FROM videos WHERE url = ?', (url,))
+            row = cursor.fetchone()
+            if row:
+                return dict(row)
+
+        # Check by title and duration
+        if duration:
+            cursor = db.execute('SELECT * FROM videos WHERE title = ? AND duration = ?', (title, duration))
+        else:
+            cursor = db.execute('SELECT * FROM videos WHERE title = ?', (title,))
+        row = cursor.fetchone()
+        if row:
+            return dict(row)
+
+    return None
+
+
 def save_video(video_data):
     """Save a video to database."""
     if USE_SUPABASE:
@@ -2739,6 +2777,7 @@ def bulk_import_urls():
         return jsonify({'error': 'No valid URLs found'}), 400
 
     added = 0
+    skipped = 0
     errors = []
 
     for url in urls:
@@ -2812,9 +2851,7 @@ def bulk_import_urls():
 
             final_event = event or detected_event or ''
 
-            video_id = str(uuid.uuid4())[:8]
-
-            # Get thumbnail and duration for YouTube/Vimeo
+            # Get thumbnail and duration for YouTube/Vimeo (need duration for duplicate check)
             thumbnail = None
             duration = ''
             if 'youtube.com' in url.lower() or 'youtu.be' in url.lower():
@@ -2839,6 +2876,14 @@ def bulk_import_urls():
                         mins = dur_seconds // 60
                         secs = dur_seconds % 60
                         duration = f"{mins}:{secs:02d}"
+
+            # Check for duplicate (same title + duration, or same URL)
+            existing = find_duplicate_video(title, duration, url)
+            if existing:
+                skipped += 1
+                continue
+
+            video_id = str(uuid.uuid4())[:8]
 
             save_video({
                 'id': video_id,
@@ -2866,8 +2911,9 @@ def bulk_import_urls():
     result = {
         'success': True,
         'added': added,
+        'skipped': skipped,
         'total': len(urls),
-        'message': f'Successfully imported {added} of {len(urls)} videos'
+        'message': f'Imported {added} videos, skipped {skipped} duplicates (of {len(urls)} total)'
     }
 
     if errors:
