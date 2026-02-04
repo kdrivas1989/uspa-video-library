@@ -4436,10 +4436,16 @@
 
                 const avgSpeedKmh = (totalSpeed / windowPoints.length) * 3.6;
 
+                // Get validation window start point (first point in competition window)
+                const validationPoint = windowPoints[0];
+
                 wsFlysightParsedData = {
                     time: timeSeconds.toFixed(2),
                     distance: totalDist.toFixed(0),
-                    speed: avgSpeedKmh.toFixed(2)
+                    speed: avgSpeedKmh.toFixed(2),
+                    validationLat: validationPoint.lat,
+                    validationLon: validationPoint.lon,
+                    validationAlt: validationPoint.alt
                 };
 
                 // Update display
@@ -4448,6 +4454,11 @@
                 document.getElementById('wsFlysightSpeed').textContent = wsFlysightParsedData.speed;
                 document.getElementById('wsFlysightResult').classList.remove('hidden');
                 document.getElementById('wsFlysightProgress').classList.add('hidden');
+
+                // Auto-set validation window on the map if coordinates are valid
+                if (validationPoint.lat && validationPoint.lon) {
+                    setValidationWindowFromFlysight(validationPoint.lat, validationPoint.lon);
+                }
 
                 // Update selected value display
                 updateWsSelectedDisplay();
@@ -4643,6 +4654,27 @@
                 wsValidationMarker = null;
                 updateValidationWindowUI();
                 drawFlightPaths();
+            }
+        }
+
+        function setValidationWindowFromFlysight(lat, lon) {
+            // Initialize map if not already done
+            if (!wsRefMap) {
+                initWsRefMap();
+            }
+
+            // Set the validation window marker
+            setValidationWindow(lat, lon);
+
+            // Pan map to show the validation window
+            if (wsRefMap) {
+                wsRefMap.setView([lat, lon], 14);
+            }
+
+            // Show a notification
+            const coordsEl = document.getElementById('wsValidationCoords');
+            if (coordsEl) {
+                coordsEl.innerHTML = `<span class="font-mono text-orange-700">${lat.toFixed(6)}, ${lon.toFixed(6)}</span> <span class="text-green-600 text-xs">(from FlySight)</span>`;
             }
         }
 
