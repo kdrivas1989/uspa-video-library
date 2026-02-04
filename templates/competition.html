@@ -2200,7 +2200,7 @@
             <div class="flex gap-4 mb-3">
                 <div class="flex-1">
                     <div class="flex gap-2">
-                        <input type="text" id="wsRefSearchInput" placeholder="Search city, state (e.g., Phoenix, AZ)"
+                        <input type="text" id="wsRefSearchInput" placeholder="Search location (e.g., Perris, CA or Dubai, UAE)"
                             class="flex-1 px-3 py-2 border rounded text-sm" onkeypress="if(event.key === 'Enter') searchWsRefLocation()">
                         <button onclick="searchWsRefLocation()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm whitespace-nowrap">
                             Search
@@ -5346,7 +5346,7 @@
             try {
                 // Use OpenStreetMap Nominatim geocoding service
                 const encodedQuery = encodeURIComponent(query);
-                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=5&countrycodes=us`, {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodedQuery}&limit=5`, {
                     headers: {
                         'User-Agent': 'VideoLibrary/1.0'
                     }
