@@ -135,7 +135,14 @@
         const username = '{{ username }}';
         const isEventJudge = {{ 'true' if is_event_judge else 'false' }};
 
-        const socket = io();
+        // Connect to the same origin (works for both localhost and production)
+        const socketUrl = window.location.origin;
+        const socket = io(socketUrl, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            reconnectionAttempts: 5,
+            reconnectionDelay: 1000
+        });
         const video = document.getElementById('syncVideo');
         const waitingOverlay = document.getElementById('waitingOverlay');
         const pressXOverlay = document.getElementById('pressXOverlay');

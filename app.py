@@ -234,7 +234,18 @@ def normalize_event_type(input_str):
 # SocketIO for real-time sync viewing
 try:
     from flask_socketio import SocketIO, emit, join_room, leave_room
-    socketio = SocketIO(app, cors_allowed_origins="*")
+    # Configure SocketIO to work in both development and production
+    # async_mode='threading' works without additional dependencies
+    # cors_allowed_origins="*" allows connections from any origin
+    socketio = SocketIO(
+        app,
+        cors_allowed_origins="*",
+        async_mode='threading',
+        ping_timeout=60,
+        ping_interval=25,
+        logger=False,
+        engineio_logger=False
+    )
     SOCKETIO_ENABLED = True
 except ImportError:
     SOCKETIO_ENABLED = False
@@ -322,15 +333,6 @@ CATEGORIES = {
         'description': 'Videos pending categorization',
         'subcategories': []
     },
-    'al': {
-        'name': 'Accuracy Landing',
-        'abbrev': 'AL',
-        'description': 'Chapter 8 - Accuracy Landing competition videos',
-        'subcategories': [
-            {'id': 'individual', 'name': 'Individual (Open)'},
-            {'id': 'team', 'name': 'Team'}
-        ]
-    },
     'cf': {
         'name': 'Canopy Formation',
         'abbrev': 'CF',
@@ -348,7 +350,6 @@ CATEGORIES = {
         'description': 'Chapters 12-13 - Canopy Piloting competition videos',
         'subcategories': [
             {'id': 'dsz', 'name': 'Distance/Speed/Zone (Individual)'},
-            {'id': 'team', 'name': 'Team'},
             {'id': 'freestyle', 'name': 'Freestyle'}
         ]
     },
@@ -366,8 +367,7 @@ CATEGORIES = {
         'abbrev': 'WS',
         'description': 'Chapter 14 - Wingsuit competition videos',
         'subcategories': [
-            {'id': 'acrobatic', 'name': 'Acrobatic'},
-            {'id': 'performance', 'name': 'Performance'}
+            {'id': 'acrobatic', 'name': 'Acrobatic'}
         ]
     },
     'fs': {
@@ -382,16 +382,6 @@ CATEGORIES = {
             {'id': '16way', 'name': '16-Way'},
             {'id': '10way', 'name': '10-Way'}
         ]
-    },
-    'sp': {
-        'name': 'Speed Skydiving',
-        'abbrev': 'SP',
-        'description': 'Chapter 15 - Speed Skydiving competition data',
-        'subcategories': [
-            {'id': 'individual', 'name': 'Individual (8 rounds)'},
-            {'id': 'mixed_team', 'name': 'Mixed Team (3 rounds)'}
-        ],
-        'file_type': 'flysight'  # Uses FlysSight GPS files instead of video
     },
     'indoor': {
         'name': 'Indoor',
@@ -1425,7 +1415,6 @@ def parse_filename_metadata(filename, folder_path=''):
         'cf': [r'\bcf\b', r'canopy.?formation', r'\bcrw\b'],
         'ae': [r'\bae\b', r'artistic', r'\bfreestyle\b', r'\bfreefly\b'],
         'ws': [r'\bws\b', r'wingsuit'],
-        'al': [r'\bal\b', r'accuracy.?landing', r'\baccuracy\b'],
         'indoor': [r'\bindoor\b', r'wind.?tunnel', r'\bifly\b']
     }
 
@@ -1591,13 +1580,11 @@ def detect_category_from_filename(filename):
     # Category detection patterns (order matters - more specific first)
     # Only used if not already detected as indoor
     category_patterns = {
-        'sp': ['speed skydiving', '_sp_', '-sp-', ' sp ', 'sp_', '_sp', 'speedskydiving'],
         'cp': ['canopy piloting', '_cp_', '-cp-', ' cp ', 'cp_', '_cp', 'canopypiloting', 'swooping'],
         'cf': ['canopy formation', '_cf_', '-cf-', ' cf ', 'cf_', '_cf', 'canopyformation', 'crw'],
         'fs': ['formation skydiving', '_fs_', '-fs-', ' fs ', 'fs_', '_fs', 'formationskydiving', 'rw'],
         'ae': ['artistic', '_ae_', '-ae-', ' ae ', 'ae_', '_ae', 'freestyle', 'freefly'],
         'ws': ['wingsuit', '_ws_', '-ws-', ' ws ', 'ws_', '_ws'],
-        'al': ['accuracy', 'landing', '_al_', '-al-', ' al ', 'al_', '_al'],
     }
 
     # Subcategory detection patterns
@@ -1993,13 +1980,17 @@ def video(video_id):
                 'current_score': round_score.get('score') if round_score else None
             }
 
+    # Get all users for judge selection dropdowns
+    all_users = get_all_users()
+
     return render_template('video.html',
                          video=video,
                          category=cat,
                          related_videos=related_videos,
                          competition_context=competition_context,
                          is_admin=session.get('role') == 'admin',
-                         is_event_judge=session.get('role') in ['admin', 'chief_judge', 'event_judge'])
+                         is_event_judge=session.get('role') in ['admin', 'chief_judge', 'event_judge'],
+                         users=all_users)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -3604,6 +3595,48 @@ def bulk_set_event():
     })
 
 
+@app.route('/admin/rename-event-folder', methods=['POST'])
+@admin_required
+def rename_event_folder():
+    """Rename an event folder (updates all videos with that event name)."""
+    data = request.json
+    old_name = data.get('old_name', '').strip()
+    new_name = data.get('new_name', '').strip()
+    category = data.get('category', '')
+    subcategory = data.get('subcategory', '')
+
+    if not old_name or not new_name:
+        return jsonify({'error': 'Both old and new names are required'}), 400
+
+    if old_name == new_name:
+        return jsonify({'error': 'New name must be different'}), 400
+
+    # Get all videos in this category/subcategory with the old event name
+    if subcategory:
+        videos = get_videos_by_category(category, subcategory)
+    else:
+        videos = get_videos_by_category(category)
+
+    # Filter to only videos with the old event name
+    videos_to_update = [v for v in videos if v.get('event', '') == old_name]
+
+    if not videos_to_update:
+        return jsonify({'error': f'No videos found with event "{old_name}"'}), 404
+
+    # Update all matching videos
+    success_count = 0
+    for video in videos_to_update:
+        video['event'] = new_name
+        save_video(video)
+        success_count += 1
+
+    return jsonify({
+        'success': True,
+        'message': f'Renamed folder to "{new_name}" ({success_count} videos updated)',
+        'updated_count': success_count
+    })
+
+
 @app.route('/api/video/<video_id>/set-start-time', methods=['POST'])
 def set_video_start_time(video_id):
     """Set the start time for a video (videographer/judge access)."""
@@ -3680,6 +3713,19 @@ def events_list():
                          is_admin=session.get('role') == 'admin')
 
 
+# Draw generators
+@app.route('/draw-generator')
+def draw_generator():
+    """Draw generator page for creating competition draws based on USPA rules."""
+    return render_template('draw_generator.html')
+
+
+@app.route('/draw-generator/svnh')
+def draw_generator_svnh():
+    """SkyVenture NH draw generator with meet-specific rules."""
+    return render_template('draw_generator_svnh.html')
+
+
 # Competition routes
 @app.route('/competitions')
 @chief_judge_required
@@ -3727,7 +3773,7 @@ def competition_page(comp_id):
         event_types = [competition.get('event_type', 'fs')]
 
     # Sort event_types by category order, then by custom event order
-    category_order = {'fs': 0, 'cf': 1, 'ae': 2, 'cp': 3, 'ws': 4, 'sp': 5, 'al': 6}
+    category_order = {'fs': 0, 'cf': 1, 'ae': 2, 'cp': 3, 'ws': 4}
     # Custom order within each category
     event_order = {
         # FS: 4-Way, 8-Way, 16-Way, 10-Way, 4-Way VFS, 2-Way MFS
@@ -7190,6 +7236,297 @@ if SOCKETIO_ENABLED:
                 'state': room['state']
             }, room=room_id)
 
+    # Panel judging sessions for synchronized multi-judge scoring
+    panel_sessions = {}
+    WORKING_TIME_TOLERANCE = 0.5  # seconds - all judges must press X within this time
+
+    @socketio.on('create_panel_session')
+    def on_create_panel_session(data):
+        """Create a new panel judging session (Event Judge only)."""
+        video_id = data.get('video_id')
+        panel_size = data.get('panel_size', 3)
+        judge_name = data.get('judge_name')
+
+        session_id = f"panel_{video_id}_{int(time.time())}"
+        panel_sessions[session_id] = {
+            'video_id': video_id,
+            'panel_size': panel_size,
+            'event_judge': judge_name,
+            'judges': {},  # {judge_num: {name, connected, ready, x_press_time}}
+            'scores': [],
+            'state': 'waiting_for_judges',  # waiting_for_judges -> waiting_for_ready -> playing -> waiting_for_x -> scoring -> review
+            'video_started': False,
+            'x_presses': {},  # {judge_num: timestamp}
+            'timer_running': False,
+            'timer_start': None
+        }
+
+        join_room(session_id)
+
+        emit('panel_session_created', {
+            'session_id': session_id,
+            'panel_size': panel_size,
+            'event_judge': judge_name,
+            'state': 'waiting_for_judges'
+        })
+
+    @socketio.on('join_panel_session')
+    def on_join_panel_session(data):
+        """Panel judge joins an existing session."""
+        session_id = data.get('session_id')
+        judge_name = data.get('judge_name')
+        judge_num = data.get('judge_num')
+
+        if session_id not in panel_sessions:
+            emit('panel_error', {'error': 'Session not found'})
+            return
+
+        session = panel_sessions[session_id]
+
+        # Check if judge number is already taken
+        if judge_num in session['judges'] and session['judges'][judge_num]['connected']:
+            emit('panel_error', {'error': f'Judge {judge_num} position already taken'})
+            return
+
+        join_room(session_id)
+        session['judges'][judge_num] = {
+            'name': judge_name,
+            'connected': True,
+            'ready': False,
+            'x_press_time': None
+        }
+
+        emit('panel_joined', {
+            'session_id': session_id,
+            'judge_num': judge_num,
+            'judges': session['judges'],
+            'state': session['state'],
+            'panel_size': session['panel_size']
+        })
+
+        # Notify all judges in session
+        emit('panel_update', {
+            'judges': session['judges'],
+            'state': session['state'],
+            'message': f'{judge_name} joined as Judge {judge_num}'
+        }, room=session_id)
+
+        # Check if all judges have joined
+        connected_judges = sum(1 for j in session['judges'].values() if j['connected'])
+        if connected_judges >= session['panel_size']:
+            session['state'] = 'waiting_for_ready'
+            emit('panel_state_change', {
+                'state': 'waiting_for_ready',
+                'message': 'All judges connected. Please confirm ready.'
+            }, room=session_id)
+
+    @socketio.on('panel_judge_ready')
+    def on_panel_judge_ready(data):
+        """Panel judge confirms they are ready."""
+        session_id = data.get('session_id')
+        judge_num = data.get('judge_num')
+
+        if session_id not in panel_sessions:
+            return
+
+        session = panel_sessions[session_id]
+        if judge_num in session['judges']:
+            session['judges'][judge_num]['ready'] = True
+
+        emit('panel_update', {
+            'judges': session['judges'],
+            'state': session['state'],
+            'message': f'Judge {judge_num} is ready'
+        }, room=session_id)
+
+        # Check if all judges are ready
+        ready_judges = sum(1 for j in session['judges'].values() if j.get('ready', False))
+        if ready_judges >= session['panel_size']:
+            session['state'] = 'all_ready'
+            emit('panel_state_change', {
+                'state': 'all_ready',
+                'message': 'All judges ready. Event judge can start video.'
+            }, room=session_id)
+
+    @socketio.on('panel_start_video')
+    def on_panel_start_video(data):
+        """Event judge starts the video for all judges."""
+        session_id = data.get('session_id')
+        video_time = data.get('video_time', 0)
+
+        if session_id not in panel_sessions:
+            return
+
+        session = panel_sessions[session_id]
+        session['state'] = 'playing'
+        session['video_started'] = True
+        session['x_presses'] = {}  # Reset X presses
+
+        emit('panel_video_start', {
+            'video_time': video_time,
+            'message': 'Video started. Press X when working time begins.'
+        }, room=session_id)
+
+    @socketio.on('panel_x_press')
+    def on_panel_x_press(data):
+        """Judge presses X to mark start of working time."""
+        session_id = data.get('session_id')
+        judge_num = data.get('judge_num')
+        press_time = data.get('press_time')  # Client timestamp
+
+        if session_id not in panel_sessions:
+            return
+
+        session = panel_sessions[session_id]
+
+        if session['state'] != 'playing':
+            return
+
+        # Record this judge's X press time
+        session['x_presses'][judge_num] = press_time
+
+        emit('panel_x_received', {
+            'judge_num': judge_num,
+            'x_presses': list(session['x_presses'].keys())
+        }, room=session_id)
+
+        # Check if all judges have pressed X
+        if len(session['x_presses']) >= session['panel_size']:
+            # Calculate the spread
+            times = list(session['x_presses'].values())
+            spread = max(times) - min(times)
+
+            if spread <= WORKING_TIME_TOLERANCE:
+                # All judges within tolerance - start scoring!
+                session['state'] = 'scoring'
+                session['timer_running'] = True
+                session['timer_start'] = time.time()
+
+                emit('panel_working_time_accepted', {
+                    'spread': spread,
+                    'message': f'Working time started! (spread: {spread:.2f}s)'
+                }, room=session_id)
+            else:
+                # Spread too large - reset!
+                session['state'] = 'reset_required'
+                session['x_presses'] = {}
+                # Reset judge ready status
+                for j in session['judges'].values():
+                    j['ready'] = False
+
+                emit('panel_working_time_rejected', {
+                    'spread': spread,
+                    'tolerance': WORKING_TIME_TOLERANCE,
+                    'message': f'X press spread too large ({spread:.2f}s > {WORKING_TIME_TOLERANCE}s). Video will reset.'
+                }, room=session_id)
+
+    @socketio.on('panel_reset')
+    def on_panel_reset(data):
+        """Event judge resets the session after failed X sync."""
+        session_id = data.get('session_id')
+
+        if session_id not in panel_sessions:
+            return
+
+        session = panel_sessions[session_id]
+        session['state'] = 'waiting_for_ready'
+        session['video_started'] = False
+        session['x_presses'] = {}
+        session['timer_running'] = False
+        session['timer_start'] = None
+        session['scores'] = []
+
+        # Reset judge ready status
+        for j in session['judges'].values():
+            j['ready'] = False
+
+        emit('panel_session_reset', {
+            'state': 'waiting_for_ready',
+            'message': 'Session reset. Judges please confirm ready.'
+        }, room=session_id)
+
+    @socketio.on('panel_score')
+    def on_panel_score(data):
+        """Judge submits a score (x, c, or q) during scoring."""
+        session_id = data.get('session_id')
+        judge_num = data.get('judge_num')
+        score_type = data.get('score_type')
+        position = data.get('position')
+        timestamp = data.get('timestamp')
+
+        if session_id not in panel_sessions:
+            return
+
+        session = panel_sessions[session_id]
+
+        if session['state'] != 'scoring':
+            return
+
+        # Find or create score entry for this position
+        score_entry = None
+        for s in session['scores']:
+            if s['position'] == position:
+                score_entry = s
+                break
+
+        if score_entry is None:
+            score_entry = {
+                'position': position,
+                'votes': {},
+                'timestamp': timestamp
+            }
+            session['scores'].append(score_entry)
+
+        score_entry['votes'][judge_num] = score_type
+
+        emit('panel_score_update', {
+            'position': position,
+            'judge_num': judge_num,
+            'score_type': score_type,
+            'votes': score_entry['votes'],
+            'timestamp': timestamp
+        }, room=session_id)
+
+    @socketio.on('panel_timer_stop')
+    def on_panel_timer_stop(data):
+        """Working time ended - stop scoring."""
+        session_id = data.get('session_id')
+
+        if session_id not in panel_sessions:
+            return
+
+        session = panel_sessions[session_id]
+        session['timer_running'] = False
+        session['state'] = 'review'
+
+        emit('panel_timer_stopped', {
+            'scores': session['scores'],
+            'state': 'review'
+        }, room=session_id)
+
+    @socketio.on('leave_panel_session')
+    def on_leave_panel_session(data):
+        """Judge leaves the panel session."""
+        session_id = data.get('session_id')
+        judge_num = data.get('judge_num')
+
+        if session_id in panel_sessions:
+            session = panel_sessions[session_id]
+            if judge_num in session['judges']:
+                session['judges'][judge_num]['connected'] = False
+
+            leave_room(session_id)
+
+            emit('panel_update', {
+                'judges': session['judges'],
+                'state': session['state'],
+                'message': f'Judge {judge_num} disconnected'
+            }, room=session_id)
+
+            # Clean up empty sessions
+            if all(not j['connected'] for j in session['judges'].values()):
+                del panel_sessions[session_id]
+
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5001))
@@ -7200,6 +7537,6 @@ if __name__ == '__main__':
     print(f"Open http://localhost:{port} in your browser")
     print("\nAdmin login: admin / admin123\n")
     if SOCKETIO_ENABLED:
-        socketio.run(app, debug=debug, host='0.0.0.0', port=port)
+        socketio.run(app, debug=debug, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
     else:
         app.run(debug=debug, host='0.0.0.0', port=port)

@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyVenture NH Draw Generator - Video Library</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <nav class="bg-gray-800 p-4">
+        <div class="container mx-auto flex justify-between items-center">
+            <a href="/" class="text-2xl font-bold text-blue-400">Video Library</a>
+            <div class="flex items-center gap-4">
+                <a href="/draw-generator" class="text-gray-400 hover:text-white">USPA Draw Generator</a>
+                <a href="/" class="text-gray-400 hover:text-white">Back to Videos</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8">
+        <div class="mb-6">
+            <h1 class="text-3xl font-bold">SkyVenture NH Draw Generator</h1>
+            <p class="text-gray-400">16th Annual 4-way & 2-way VFS Meet - January 31 - February 1, 2026</p>
+        </div>
+
+        <!-- Generator Controls -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <div class="grid md:grid-cols-3 gap-4 mb-6">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Event</label>
+                    <select id="eventType" onchange="updateClassOptions()" class="w-full px-3 py-2 rounded bg-gray-700 text-white">
+                        <optgroup label="4-Way FS">
+                            <option value="4way-rookie">4-Way Rookie</option>
+                            <option value="4way-intermediate">4-Way Intermediate</option>
+                            <option value="4way-advanced">4-Way Advanced</option>
+                            <option value="4way-open">4-Way Open</option>
+                        </optgroup>
+                        <optgroup label="2-Way VFS">
+                            <option value="2way-vfs-rookie">2-Way VFS Rookie</option>
+                            <option value="2way-vfs-intermediate">2-Way VFS Intermediate</option>
+                            <option value="2way-vfs-advanced">2-Way VFS Advanced</option>
+                            <option value="2way-vfs-open">2-Way VFS Open</option>
+                        </optgroup>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Number of Rounds</label>
+                    <select id="numRounds" class="w-full px-3 py-2 rounded bg-gray-700 text-white">
+                        <!-- Options populated by updateClassOptions() -->
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button onclick="generateDraw()" class="w-full px-6 py-2 bg-green-600 hover:bg-green-700 rounded font-bold">
+                        Generate Draw
+                    </button>
+                </div>
+            </div>
+
+            <!-- Event Info -->
+            <div id="eventInfo" class="text-sm p-4 bg-gray-700 rounded">
+                <div class="font-bold text-yellow-400 mb-2">4-Way Rookie Rules:</div>
+                <ul class="list-disc list-inside text-gray-300 space-y-1">
+                    <li>10 rounds, 3 points per round</li>
+                    <li>Randoms only (no blocks), excludes G (Cataccord)</li>
+                    <li>Start with Star (M) - not scored, working time starts when star breaks</li>
+                    <li>If M is drawn first, rotate to end of sequence</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Draw Results -->
+        <div id="drawResults" class="hidden">
+            <div class="flex justify-between items-center mb-4 print:hidden">
+                <h2 class="text-2xl font-bold">Draw Sheet</h2>
+                <div class="flex gap-2">
+                    <button onclick="copyDraw()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded">Copy All</button>
+                    <button onclick="printCompact()" class="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded">Print Compact (1 page)</button>
+                    <button onclick="printWithImages()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded">Print with Images (2 pages)</button>
+                </div>
+            </div>
+
+            <div id="drawContent" class="space-y-4">
+                <!-- Rounds will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Dive Pool Reference -->
+        <div class="mt-12">
+            <h2 class="text-2xl font-bold mb-4">Dive Pool Reference</h2>
+
+            <!-- 4-Way FS Pool -->
+            <div id="fs4wayPool" class="mb-8">
+                <h3 class="text-xl font-bold text-blue-400 mb-3">4-Way FS Dive Pool (USPA)</h3>
+                <div class="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h4 class="font-bold text-blue-400 mb-3">Random Formations (1 pt each)</h4>
+                    <div class="grid grid-cols-4 md:grid-cols-8 gap-2" id="fs4wayRandomsPool">
+                        <!-- Will be populated by JS -->
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2">* G excluded from Rookie | ** M rotated to end if drawn first</p>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <h4 class="font-bold text-purple-400 mb-3">Block Sequences (2 pts each)</h4>
+                    <div class="grid grid-cols-4 md:grid-cols-8 gap-2" id="fs4wayBlocksPool">
+                        <!-- Will be populated by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2-Way VFS Pool -->
+            <div id="vfs2wayPool" class="hidden">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-xl font-bold text-green-400">2-Way VFS Dive Pool (USIS Indoor)</h3>
+                    <div class="flex gap-2 text-xs">
+                        <span class="px-2 py-1 rounded" style="background-color: #ef444430; color: #ef4444">O = Open</span>
+                        <span class="px-2 py-1 rounded" style="background-color: #f9731630; color: #f97316">A = Advanced</span>
+                        <span class="px-2 py-1 rounded" style="background-color: #eab30830; color: #eab308">I = Intermediate</span>
+                        <span class="px-2 py-1 rounded" style="background-color: #22c55e30; color: #22c55e">R = Rookie</span>
+                    </div>
+                </div>
+
+                <!-- Back/Belly Pool -->
+                <div class="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h4 class="font-bold text-green-400 mb-3">🔄 Back/Belly Pool</h4>
+                    <div class="mb-4">
+                        <h5 class="text-sm text-gray-400 mb-2">Randoms (1 pt each):</h5>
+                        <div id="bbRandomsPool" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2"></div>
+                    </div>
+                    <div>
+                        <h5 class="text-sm text-gray-400 mb-2">Blocks (2 pts each):</h5>
+                        <div id="bbBlocksPool" class="grid grid-cols-2 md:grid-cols-3 gap-2"></div>
+                    </div>
+                </div>
+
+                <!-- Head-Up Pool -->
+                <div class="bg-gray-800 rounded-lg p-4 mb-4">
+                    <h4 class="font-bold text-cyan-400 mb-3">⬆️ Head-Up Pool</h4>
+                    <div class="mb-4">
+                        <h5 class="text-sm text-gray-400 mb-2">Randoms (1 pt each):</h5>
+                        <div id="huRandomsPool" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2"></div>
+                    </div>
+                    <div>
+                        <h5 class="text-sm text-gray-400 mb-2">Blocks (2 pts each):</h5>
+                        <div id="huBlocksPool" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+                    </div>
+                </div>
+
+                <!-- Head-Down Pool -->
+                <div class="bg-gray-800 rounded-lg p-4">
+                    <h4 class="font-bold text-purple-400 mb-3">⬇️ Head-Down Pool</h4>
+                    <div class="mb-4">
+                        <h5 class="text-sm text-gray-400 mb-2">Randoms (1 pt each):</h5>
+                        <div id="hdRandomsPool" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2"></div>
+                    </div>
+                    <div>
+                        <h5 class="text-sm text-gray-400 mb-2">Blocks (2 pts each):</h5>
+                        <div id="hdBlocksPool" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rules Summary -->
+        <div class="mt-8 bg-gray-800 rounded-lg p-6">
+            <h3 class="text-xl font-bold mb-4">SkyVenture NH 2026 Rules Summary</h3>
+            <div class="grid md:grid-cols-2 gap-6 text-sm">
+                <div>
+                    <h4 class="font-bold text-blue-400 mb-2">4-Way FS Classes</h4>
+                    <table class="w-full text-left">
+                        <tr class="border-b border-gray-700">
+                            <th class="py-1">Class</th>
+                            <th class="py-1">Points/Rnd</th>
+                            <th class="py-1">Pool</th>
+                            <th class="py-1">Omission</th>
+                        </tr>
+                        <tr class="border-b border-gray-700">
+                            <td class="py-1">Rookie</td>
+                            <td class="py-1">3</td>
+                            <td class="py-1">Randoms (no G)</td>
+                            <td class="py-1">-1 pt</td>
+                        </tr>
+                        <tr class="border-b border-gray-700">
+                            <td class="py-1">Intermediate</td>
+                            <td class="py-1">3-4</td>
+                            <td class="py-1">Randoms + 7,9,14</td>
+                            <td class="py-1">-1 pt</td>
+                        </tr>
+                        <tr class="border-b border-gray-700">
+                            <td class="py-1">Advanced</td>
+                            <td class="py-1">4-5</td>
+                            <td class="py-1">Randoms + 1,6,7,9,14,15,21</td>
+                            <td class="py-1">-2 pts</td>
+                        </tr>
+                        <tr>
+                            <td class="py-1">Open</td>
+                            <td class="py-1">5-6</td>
+                            <td class="py-1">All (excl 2,4,8,12,19)</td>
+                            <td class="py-1">-3 pts</td>
+                        </tr>
+                    </table>
+                </div>
+                <div>
+                    <h4 class="font-bold text-green-400 mb-2">2-Way VFS Classes (USIS Indoor)</h4>
+                    <table class="w-full text-left">
+                        <tr class="border-b border-gray-700">
+                            <th class="py-1">Class</th>
+                            <th class="py-1">Pts/Rnd</th>
+                            <th class="py-1">Pool</th>
+                        </tr>
+                        <tr class="border-b border-gray-700">
+                            <td class="py-1">Rookie ➃</td>
+                            <td class="py-1">3-4</td>
+                            <td class="py-1">BB only (all formations)</td>
+                        </tr>
+                        <tr class="border-b border-gray-700">
+                            <td class="py-1">Intermediate ➂</td>
+                            <td class="py-1">3-4</td>
+                            <td class="py-1">R1-2,9-10: BB / R3-8: HU (no HU-03)</td>
+                        </tr>
+                        <tr class="border-b border-gray-700">
+                            <td class="py-1">Advanced ➁</td>
+                            <td class="py-1">4-5</td>
+                            <td class="py-1">R1-2,9-10: BB / R3-8: HU+HD randoms, HU+HD-04</td>
+                        </tr>
+                        <tr>
+                            <td class="py-1">Open ➀</td>
+                            <td class="py-1">5-6</td>
+                            <td class="py-1">R1-2,9-10: BB / R3-8: All HU+HD</td>
+                        </tr>
+                    </table>
+                    <p class="text-xs text-gray-500 mt-2">BB=Back/Belly, HU=Head-Up, HD=Head-Down</p>
+                </div>
+            </div>
+            <p class="text-gray-500 text-xs mt-4">Working time: 35 seconds for all events. All 4-Way classes except Open start with non-scoring Star formation.</p>
+        </div>
+    </div>
+
+    <script>
+        // SkyVenture NH 2026 Meet Rules
+
+        // 4-Way FS Randoms (USPA)
+        const fs4wayRandoms = {
+            'A': 'Unipod', 'B': 'Stairstep', 'C': 'Murphy', 'D': 'Yuan',
+            'E': 'Meeker', 'F': 'Open Accord', 'G': 'Cataccord', 'H': 'Bow',
+            'J': 'Donut', 'K': 'Hook', 'L': 'Adder', 'M': 'Star',
+            'N': 'Crank', 'O': 'Satellite', 'P': 'Sidebody', 'Q': 'Phalanx'
+        };
+
+        // 4-Way FS Blocks (USPA) - numbered 1-22
+        const fs4wayBlocks = {
+            1: 'Bipole-Opal', 2: 'Sidebody-Opal', 3: 'Caterpillar-Opal', 4: 'Monopod',
+            5: 'Sidebuddies', 6: 'Stardian', 7: 'Zig-Zag', 8: 'Marquis',
+            9: 'Lepton', 10: 'Dancer', 11: 'Bunyip', 12: 'Photon',
+            13: 'Ritz', 14: 'Piver', 15: 'Compressed', 16: 'Packer',
+            17: 'Meson', 18: 'Tango', 19: 'Icepick', 20: 'Zircon',
+            21: 'Firefly', 22: 'Turbo'
+        };
+
+        // 2-Way VFS Dive Pool (FlyStation - Open Class)
+        // Classes: ➀ Open ➁ Advanced ➂ Intermediate ➃ Rookie
+
+        // Back/Belly Randoms (2-way VFS Dive Pool Open - FlyStation)
+        const vfs2wayBBRandoms = {
+            'BB-A': { name: 'Belly Star', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on opposite arm' },
+            'BB-B': { name: 'Back Star', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on opposite arm' },
+            'BB-C': { name: 'Belly Closed Accordion', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on same leg' },
+            'BB-D': { name: 'Mixed Closed Accordion', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on opposite leg' },
+            'BB-E': { name: 'Back Open Accordion', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on same arm' },
+            'BB-F': { name: 'Mixed Open Accordion', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on opposite arm' },
+            'BB-G': { name: 'Back Side Body', color: '#22c55e', classes: [1,2,3,4], grip: 'same side of the body' },
+            'BB-H': { name: 'Mixed Side Body', color: '#22c55e', classes: [1,2,3,4], grip: 'same side of the body' },
+            'BB-J': { name: 'Back Cat', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on same leg' },
+            'BB-K': { name: 'Mixed Cat', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on opposite leg' },
+            'BB-L': { name: 'Back Stair Step', color: '#22c55e', classes: [1,2,3,4], grip: 'grip on opposite leg' }
+        };
+
+        // Back/Belly Blocks (2-way VFS Dive Pool Open - FlyStation)
+        const vfs2wayBBBlocks = {
+            'BB-01': { name: 'Back Grip', color: '#16a34a', classes: [1,2,3,4], inter: '360° (Either Direction)', interName: 'Turn' },
+            'BB-02': { name: 'Back Grip', color: '#16a34a', classes: [1,2,3,4], inter: 'Over', interName: 'Over/Under' }
+        };
+
+        // Head-Up Randoms (2-way VFS Dive Pool Open - FlyStation)
+        const vfs2wayHURandoms = {
+            'HU-A': { name: 'Single Grip', color: '#06b6d4', classes: [1,2,3], grip: 'grip on opposite arm' },
+            'HU-B': { name: 'In-Facing Double Grip', color: '#06b6d4', classes: [1,2,3], grip: 'grip on opposite arm' },
+            'HU-C': { name: 'Out-Facing Double', color: '#06b6d4', classes: [1,2,3], grip: 'grip on opposite arm' },
+            'HU-D': { name: 'Hand to Foot', color: '#06b6d4', classes: [1,2,3], grip: 'grip on opposite foot' },
+            'HU-E': { name: 'Hands to Feet', color: '#06b6d4', classes: [1,2,3], grip: 'grip on opposite feet' },
+            'HU-F': { name: 'Feet to Knees', color: '#06b6d4', classes: [1,2,3], grip: 'foot dock on opposite upper leg' },
+            'HU-G': { name: 'Totem', color: '#06b6d4', classes: [1,2,3], grip: 'feet dock on top of same shoulders' },
+            'HU-H': { name: 'Foot to Foot', color: '#06b6d4', classes: [1,2,3], grip: 'foot dock on same foot' },
+            'HU-J': { name: 'Double Spock (Any Hand)', color: '#06b6d4', classes: [1,2,3], grip: 'head grips: any hand' }
+        };
+
+        // Head-Up Blocks (2-way VFS Dive Pool Open - FlyStation)
+        const vfs2wayHUBlocks = {
+            'HU-01': { name: 'Grip', color: '#0891b2', classes: [1,2,3], inter: '360° (Either Direction)', interName: 'Turn', grip: 'grip on same arm' },
+            'HU-02': { name: 'Grip', color: '#0891b2', classes: [1,2,3], inter: 'Carve (Either Direction)', interName: 'Carve', grip: 'grip on same arm' },
+            'HU-03': { name: 'Grip', color: '#0891b2', classes: [1,2], inter: '(Front or Back) Flip', interName: 'Flip', grip: 'grip on same arm' },
+            'HU-04': { name: 'Grip', color: '#0891b2', classes: [1,2,3], inter: 'Over', interName: 'Over/Under', grip: 'grip on same arm' }
+        };
+
+        // Head-Down Randoms (2-way VFS Dive Pool Open - FlyStation)
+        const vfs2wayHDRandoms = {
+            'HD-A': { name: 'Joker', color: '#a855f7', classes: [1,2], grip: 'grip on opposite arm' },
+            'HD-B': { name: 'In-Facing Double Grip', color: '#a855f7', classes: [1,2], grip: 'grip on opposite arm' },
+            'HD-C': { name: 'Vice Versa', color: '#a855f7', classes: [1,2], grip: 'grip on same arm' },
+            'HD-E': { name: 'Mind Warp', color: '#a855f7', classes: [1,2], grip: 'double-handed grip on head' },
+            'HD-F': { name: 'Double Spock (Any Hand)', color: '#a855f7', classes: [1], grip: 'head grips: any hand' },
+            'HD-G': { name: 'Sole to Sole', color: '#a855f7', classes: [1,2], grip: 'foot dock on same sole' },
+            'HD-H': { name: 'Stair Step', color: '#a855f7', classes: [1,2], grip: 'grip on opposite leg' },
+            'HD-J': { name: 'Vertical Closed Accordion', color: '#a855f7', classes: [1,2], grip: 'grip on same leg' },
+            'HD-K': { name: 'Sixty Nine', color: '#a855f7', classes: [1], grip: 'foot grip on same foot' }
+        };
+
+        // Head-Down Blocks (2-way VFS Dive Pool Open - FlyStation)
+        const vfs2wayHDBlocks = {
+            'HD-01': { name: 'Sixty Nine', color: '#7c3aed', classes: [1], inter: 'Sixty Nine', interName: 'Transition', grip: 'foot grip on same foot' },
+            'HD-02': { name: 'Grip', color: '#7c3aed', classes: [1], inter: '360° (Either Direction)', interName: 'Turn', grip: 'grip on same arm' },
+            'HD-03': { name: 'Grip', color: '#7c3aed', classes: [1], inter: 'Carve (Either Direction)', interName: 'Carve', grip: 'grip on same arm' },
+            'HD-04': { name: 'Grip', color: '#7c3aed', classes: [1,2], inter: '(Front or Back) Flip', interName: 'Flip', grip: 'grip on same arm' },
+            'HD-05': { name: 'Grip', color: '#7c3aed', classes: [1], inter: 'Half Eagle', interName: 'Half-Eagle', grip: 'grip on same arm' }
+        };
+
+        // Mixed randoms (for advanced classes that use both HU and HD)
+        const vfs2wayMixed = {
+            randoms: [] // Will be computed based on class
+        };
+
+        // Get formations available for a specific class (1=Open, 2=Advanced, 3=Intermediate, 4=Rookie)
+        function getFormationsForClass(pool, classNum) {
+            return Object.entries(pool)
+                .filter(([code, info]) => info.classes.includes(classNum))
+                .map(([code]) => code);
+        }
+
+        // Combined pools for easy access (all formations)
+        const vfs2wayBackBelly = {
+            randoms: Object.keys(vfs2wayBBRandoms),
+            blocks: Object.keys(vfs2wayBBBlocks)
+        };
+
+        const vfs2wayHeadUp = {
+            randoms: Object.keys(vfs2wayHURandoms),
+            blocks: Object.keys(vfs2wayHUBlocks)
+        };
+
+        const vfs2wayHeadDown = {
+            randoms: Object.keys(vfs2wayHDRandoms),
+            blocks: Object.keys(vfs2wayHDBlocks)
+        };
+
+        // All VFS formations combined for lookup
+        const allVFSFormations = {
+            ...vfs2wayBBRandoms, ...vfs2wayHURandoms, ...vfs2wayHDRandoms,
+            ...vfs2wayBBBlocks, ...vfs2wayHUBlocks, ...vfs2wayHDBlocks
+        };
+
+        // Map SVNH class names to USIS class numbers
+        const classMapping = {
+            'open': 1,
+            'advanced': 2,
+            'intermediate': 3,
+            'rookie': 4
+        };
+
+        // Event configurations based on SVNH rules
+        const svnhRules = {
+            '4way-rookie': {
+                name: '4-Way Rookie',
+                rounds: 10,
+                pointsPerRound: [3, 3],
+                randoms: Object.keys(fs4wayRandoms).filter(r => r !== 'G'), // Exclude G
+                blocks: [],
+                starStart: true,
+                rotateStarToEnd: true,
+                omissionPenalty: 1
+            },
+            '4way-intermediate': {
+                name: '4-Way Intermediate',
+                rounds: 10,
+                pointsPerRound: [3, 4],
+                randoms: Object.keys(fs4wayRandoms),
+                blocks: [7, 9, 14],
+                starStart: true,
+                rotateStarToEnd: true,
+                omissionPenalty: 1
+            },
+            '4way-advanced': {
+                name: '4-Way Advanced',
+                rounds: 10,
+                pointsPerRound: [4, 5],
+                randoms: Object.keys(fs4wayRandoms),
+                blocks: [1, 6, 7, 9, 14, 15, 21],
+                starStart: true,
+                rotateStarToEnd: true,
+                omissionPenalty: 2
+            },
+            '4way-open': {
+                name: '4-Way Open',
+                rounds: 10,
+                pointsPerRound: [5, 6],
+                randoms: Object.keys(fs4wayRandoms),
+                blocks: Object.keys(fs4wayBlocks).map(Number).filter(b => ![2, 4, 8, 12, 19].includes(b)),
+                starStart: false, // Walk-in start
+                rotateStarToEnd: false,
+                omissionPenalty: 3
+            },
+            '2way-vfs-rookie': {
+                name: '2-Way VFS Rookie',
+                rounds: 10,
+                pointsPerRound: [3, 4],
+                isVFS: true,
+                usisClass: 4, // Rookie = class 4
+                poolType: 'backbelly-all' // All rounds back/belly
+            },
+            '2way-vfs-intermediate': {
+                name: '2-Way VFS Intermediate',
+                rounds: 10,
+                pointsPerRound: [3, 4],
+                isVFS: true,
+                usisClass: 3, // Intermediate = class 3
+                poolType: 'mixed-headup' // R1-2, R9-10: BB, R3-8: HU (no HU-03)
+            },
+            '2way-vfs-advanced': {
+                name: '2-Way VFS Advanced',
+                rounds: 10,
+                pointsPerRound: [4, 5],
+                isVFS: true,
+                usisClass: 2, // Advanced = class 2
+                poolType: 'mixed-advanced' // R1-2, R9-10: BB, R3-8: HU + HD randoms, HU blocks + HD-04
+            },
+            '2way-vfs-open': {
+                name: '2-Way VFS Open',
+                rounds: 10,
+                pointsPerRound: [5, 6],
+                isVFS: true,
+                usisClass: 1, // Open = class 1
+                poolType: 'mixed-open' // R1-2, R9-10: BB, R3-8: All vertical
+            }
+        };
+
+        function updateClassOptions() {
+            const eventType = document.getElementById('eventType').value;
+            const rules = svnhRules[eventType];
+            const eventInfoEl = document.getElementById('eventInfo');
+            const numRoundsEl = document.getElementById('numRounds');
+
+            // Update rounds dropdown based on event rules
+            const maxRounds = rules.rounds;
+            let roundsHtml = '';
+            for (let r = 1; r <= maxRounds; r++) {
+                const label = r === 1 ? '1 Round' : `${r} Rounds${r === maxRounds ? ' (Full Meet)' : ''}`;
+                const selected = r === maxRounds ? ' selected' : '';
+                roundsHtml += `<option value="${r}"${selected}>${label}</option>`;
+            }
+            numRoundsEl.innerHTML = roundsHtml;
+
+            // Show/hide appropriate pool reference
+            document.getElementById('fs4wayPool').classList.toggle('hidden', eventType.startsWith('2way'));
+            document.getElementById('vfs2wayPool').classList.toggle('hidden', !eventType.startsWith('2way'));
+
+            // Update event info
+            let infoHtml = `<div class="font-bold text-yellow-400 mb-2">${rules.name} Rules:</div><ul class="list-disc list-inside text-gray-300 space-y-1">`;
+
+            infoHtml += `<li>${rules.rounds} rounds, ${rules.pointsPerRound[0]}${rules.pointsPerRound[1] !== rules.pointsPerRound[0] ? '-' + rules.pointsPerRound[1] : ''} points per round</li>`;
+
+            if (rules.isVFS) {
+                switch(rules.poolType) {
+                    case 'backbelly-all':
+                        infoHtml += `<li>All rounds: Back/Belly pool only</li>`;
+                        break;
+                    case 'mixed-headup':
+                        infoHtml += `<li>Rounds 1-2 & 9-10: Back/Belly pool</li>`;
+                        infoHtml += `<li>Rounds 3-8: Head-Up randoms & blocks (excluding HU-03)</li>`;
+                        break;
+                    case 'mixed-advanced':
+                        infoHtml += `<li>Rounds 1-2 & 9-10: Back/Belly pool</li>`;
+                        infoHtml += `<li>Rounds 3-8: Head-Up + Mixed-Orientation randoms, HU blocks + HD-04</li>`;
+                        break;
+                    case 'mixed-open':
+                        infoHtml += `<li>Rounds 1-2 & 9-10: Back/Belly pool</li>`;
+                        infoHtml += `<li>Rounds 3-8: All vertical randoms and blocks</li>`;
+                        break;
+                }
+            } else {
+                if (rules.blocks.length === 0) {
+                    infoHtml += `<li>Randoms only (no blocks)${eventType === '4way-rookie' ? ', excludes G (Cataccord)' : ''}</li>`;
+                } else {
+                    infoHtml += `<li>All randoms + blocks: ${rules.blocks.join(', ')}</li>`;
+                }
+                if (rules.starStart) {
+                    infoHtml += `<li>Start with Star (M) - not scored, working time starts when star breaks</li>`;
+                    infoHtml += `<li>If M is drawn first, rotate to end of sequence</li>`;
+                } else {
+                    infoHtml += `<li>Walk-in start (no star formation)</li>`;
+                }
+            }
+
+            infoHtml += `<li>Omission penalty: ${rules.omissionPenalty || 1} point${rules.omissionPenalty > 1 ? 's' : ''}</li>`;
+            infoHtml += `</ul>`;
+
+            eventInfoEl.innerHTML = infoHtml;
+
+            // Update blocks reference
+            updateBlocksReference(rules);
+            updateVFSPoolReference();
+            update4WayFSPoolReference();
+        }
+
+        function updateBlocksReference(rules) {
+            // This function is now deprecated - using update4WayFSPoolReference instead
+        }
+
+        function update4WayFSPoolReference() {
+            const randomsEl = document.getElementById('fs4wayRandomsPool');
+            const blocksEl = document.getElementById('fs4wayBlocksPool');
+
+            if (randomsEl) {
+                randomsEl.innerHTML = Object.entries(fs4wayRandoms).map(([code, name]) => {
+                    const isExcluded = code === 'G';
+                    const isStar = code === 'M';
+                    const borderColor = isExcluded ? '#ef4444' : (isStar ? '#eab308' : '#3b82f6');
+                    return `
+                        <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="border: 2px solid ${borderColor}; background: rgba(59,130,246,0.1)" onclick="openModal('/static/formations/FS-${code}.png', '${code} - ${name}')">
+                            <img src="/static/formations/FS-${code}.png" alt="${code}" class="w-full h-12 object-contain bg-white rounded mb-1">
+                            <div class="text-center">
+                                <span class="font-mono font-bold">${code}</span>
+                                <div class="text-xs text-gray-400 truncate">${name}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            if (blocksEl) {
+                blocksEl.innerHTML = Object.entries(fs4wayBlocks).map(([num, name]) => `
+                    <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="border: 2px solid #9333ea; background: rgba(147,51,234,0.1)" onclick="openModal('/static/formations/FS-${num}.png', '${num} - ${name}')">
+                        <img src="/static/formations/FS-${num}.png" alt="${num}" class="w-full h-12 object-contain bg-white rounded mb-1">
+                        <div class="text-center">
+                            <span class="font-mono font-bold">${num}</span>
+                            <div class="text-xs text-gray-400 truncate">${name}</div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function formatClassBadges(classes) {
+            const classNames = { 1: 'O', 2: 'A', 3: 'I', 4: 'R' };
+            const classColors = { 1: '#ef4444', 2: '#f97316', 3: '#eab308', 4: '#22c55e' };
+            return classes.map(c =>
+                `<span class="px-1 text-xs rounded" style="background-color: ${classColors[c]}30; color: ${classColors[c]}">${classNames[c]}</span>`
+            ).join('');
+        }
+
+        function updateVFSPoolReference() {
+            // Back/Belly Randoms
+            const bbRandomsEl = document.getElementById('bbRandomsPool');
+            if (bbRandomsEl) {
+                bbRandomsEl.innerHTML = Object.entries(vfs2wayBBRandoms).map(([code, info]) => `
+                    <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="background-color: ${info.color}20; border: 1px solid ${info.color}" onclick="openModal('/static/formations/${code}.png', '${code} - ${info.name}')">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="px-2 py-1 rounded font-mono text-sm font-bold" style="background-color: ${info.color}">${code}</span>
+                            <div class="flex gap-0.5">${formatClassBadges(info.classes)}</div>
+                        </div>
+                        <img src="/static/formations/${code}.png" alt="${code}" class="w-full h-16 object-contain bg-white rounded my-1">
+                        <div class="text-sm text-gray-300">${info.name}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Back/Belly Blocks
+            const bbBlocksEl = document.getElementById('bbBlocksPool');
+            if (bbBlocksEl) {
+                bbBlocksEl.innerHTML = Object.entries(vfs2wayBBBlocks).map(([code, info]) => `
+                    <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="background-color: ${info.color}20; border: 1px solid ${info.color}" onclick="openModal('/static/formations/${code}.png', '${code} - ${info.name}')">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="px-2 py-1 rounded font-mono text-sm font-bold" style="background-color: ${info.color}">${code}</span>
+                            <div class="flex gap-0.5">${formatClassBadges(info.classes)}</div>
+                        </div>
+                        <img src="/static/formations/${code}.png" alt="${code}" class="w-full h-20 object-contain bg-white rounded my-1">
+                        <div class="text-sm text-gray-300">${info.name}</div>
+                        <div class="text-xs text-yellow-400">↔ ${info.inter}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Head-Up Randoms
+            const huRandomsEl = document.getElementById('huRandomsPool');
+            if (huRandomsEl) {
+                huRandomsEl.innerHTML = Object.entries(vfs2wayHURandoms).map(([code, info]) => `
+                    <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="background-color: ${info.color}20; border: 1px solid ${info.color}" onclick="openModal('/static/formations/${code}.png', '${code} - ${info.name}')">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="px-2 py-1 rounded font-mono text-sm font-bold" style="background-color: ${info.color}">${code}</span>
+                            <div class="flex gap-0.5">${formatClassBadges(info.classes)}</div>
+                        </div>
+                        <img src="/static/formations/${code}.png" alt="${code}" class="w-full h-16 object-contain bg-white rounded my-1">
+                        <div class="text-sm text-gray-300">${info.name}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Head-Up Blocks
+            const huBlocksEl = document.getElementById('huBlocksPool');
+            if (huBlocksEl) {
+                huBlocksEl.innerHTML = Object.entries(vfs2wayHUBlocks).map(([code, info]) => `
+                    <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="background-color: ${info.color}20; border: 1px solid ${info.color}" onclick="openModal('/static/formations/${code}.png', '${code} - ${info.name}')">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="px-2 py-1 rounded font-mono text-sm font-bold" style="background-color: ${info.color}">${code}</span>
+                            <div class="flex gap-0.5">${formatClassBadges(info.classes)}</div>
+                        </div>
+                        <img src="/static/formations/${code}.png" alt="${code}" class="w-full h-20 object-contain bg-white rounded my-1">
+                        <div class="text-sm text-gray-300">${info.name}</div>
+                        <div class="text-xs text-yellow-400">↔ ${info.inter}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Head-Down Randoms
+            const hdRandomsEl = document.getElementById('hdRandomsPool');
+            if (hdRandomsEl) {
+                hdRandomsEl.innerHTML = Object.entries(vfs2wayHDRandoms).map(([code, info]) => `
+                    <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="background-color: ${info.color}20; border: 1px solid ${info.color}" onclick="openModal('/static/formations/${code}.png', '${code} - ${info.name}')">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="px-2 py-1 rounded font-mono text-sm font-bold" style="background-color: ${info.color}">${code}</span>
+                            <div class="flex gap-0.5">${formatClassBadges(info.classes)}</div>
+                        </div>
+                        <img src="/static/formations/${code}.png" alt="${code}" class="w-full h-16 object-contain bg-white rounded my-1">
+                        <div class="text-sm text-gray-300">${info.name}</div>
+                    </div>
+                `).join('');
+            }
+
+            // Head-Down Blocks
+            const hdBlocksEl = document.getElementById('hdBlocksPool');
+            if (hdBlocksEl) {
+                hdBlocksEl.innerHTML = Object.entries(vfs2wayHDBlocks).map(([code, info]) => `
+                    <div class="p-2 rounded cursor-pointer hover:ring-2 hover:ring-white/50 transition-all" style="background-color: ${info.color}20; border: 1px solid ${info.color}" onclick="openModal('/static/formations/${code}.png', '${code} - ${info.name}')">
+                        <div class="flex items-center justify-between gap-2 mb-1">
+                            <span class="px-2 py-1 rounded font-mono text-sm font-bold" style="background-color: ${info.color}">${code}</span>
+                            <div class="flex gap-0.5">${formatClassBadges(info.classes)}</div>
+                        </div>
+                        <img src="/static/formations/${code}.png" alt="${code}" class="w-full h-20 object-contain bg-white rounded my-1">
+                        <div class="text-sm text-gray-300">${info.name}</div>
+                        <div class="text-xs text-yellow-400">↔ ${info.inter}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function getVFSPool(eventType, roundNum) {
+            const rules = svnhRules[eventType];
+            const isBackBellyRound = (roundNum <= 2 || roundNum >= 9);
+            const classNum = rules.usisClass || 1; // Default to Open
+
+            let randoms = [];
+            let blocks = [];
+
+            if (rules.poolType === 'backbelly-all' || isBackBellyRound) {
+                // Back/Belly pool - filter by class
+                randoms = getFormationsForClass(vfs2wayBBRandoms, classNum);
+                blocks = getFormationsForClass(vfs2wayBBBlocks, classNum);
+            } else {
+                switch(rules.poolType) {
+                    case 'mixed-headup':
+                        // Intermediate: Head-Up only (no HU-03 per SVNH rules)
+                        randoms = getFormationsForClass(vfs2wayHURandoms, classNum);
+                        blocks = getFormationsForClass(vfs2wayHUBlocks, classNum).filter(b => b !== 'HU-03');
+                        break;
+                    case 'mixed-advanced':
+                        // Advanced: HU + HD randoms available for class 2, HU blocks + HD-04
+                        randoms = [
+                            ...getFormationsForClass(vfs2wayHURandoms, classNum),
+                            ...getFormationsForClass(vfs2wayHDRandoms, classNum)
+                        ];
+                        blocks = [
+                            ...getFormationsForClass(vfs2wayHUBlocks, classNum),
+                            ...getFormationsForClass(vfs2wayHDBlocks, classNum).filter(b => b === 'HD-04')
+                        ];
+                        break;
+                    case 'mixed-open':
+                        // Open: All vertical randoms and blocks available for class 1
+                        randoms = [
+                            ...getFormationsForClass(vfs2wayHURandoms, classNum),
+                            ...getFormationsForClass(vfs2wayHDRandoms, classNum)
+                        ];
+                        blocks = [
+                            ...getFormationsForClass(vfs2wayHUBlocks, classNum),
+                            ...getFormationsForClass(vfs2wayHDBlocks, classNum)
+                        ];
+                        break;
+                }
+            }
+
+            return { randoms, blocks };
+        }
+
+        function generateRound4Way(rules, usedInRound = new Set()) {
+            const [minPts, maxPts] = rules.pointsPerRound;
+            const targetPoints = minPts + Math.floor(Math.random() * (maxPts - minPts + 1));
+
+            const round = [];
+            let currentPoints = 0;
+
+            const availableRandoms = rules.randoms.filter(r => !usedInRound.has('R' + r));
+            const availableBlocks = rules.blocks.filter(b => !usedInRound.has('B' + b));
+
+            while (currentPoints < targetPoints) {
+                const canAddRandom = availableRandoms.length > 0 && (currentPoints + 1 <= targetPoints);
+                const canAddBlock = availableBlocks.length > 0 && (currentPoints + 2 <= targetPoints);
+
+                if (!canAddRandom && !canAddBlock) break;
+
+                // Prefer blocks if we have room and they're available
+                const addBlock = canAddBlock && (!canAddRandom || (Math.random() < 0.4 && currentPoints + 2 <= targetPoints));
+
+                if (addBlock) {
+                    const idx = Math.floor(Math.random() * availableBlocks.length);
+                    const block = availableBlocks.splice(idx, 1)[0];
+                    round.push({ type: 'block', value: block, points: 2, name: fs4wayBlocks[block] });
+                    usedInRound.add('B' + block);
+                    currentPoints += 2;
+                } else if (canAddRandom) {
+                    const idx = Math.floor(Math.random() * availableRandoms.length);
+                    const random = availableRandoms.splice(idx, 1)[0];
+                    round.push({ type: 'random', value: random, points: 1, name: fs4wayRandoms[random] });
+                    usedInRound.add('R' + random);
+                    currentPoints += 1;
+                }
+            }
+
+            // SVNH Rule: If M (Star) is drawn first, rotate to end
+            if (rules.rotateStarToEnd && round.length > 0 && round[0].value === 'M') {
+                const star = round.shift();
+                round.push(star);
+            }
+
+            return { formations: round, maxPoints: currentPoints };
+        }
+
+        function getVFSFormationInfo(code) {
+            // Look up the formation info from all VFS pools
+            if (vfs2wayBBRandoms[code]) return { ...vfs2wayBBRandoms[code], category: 'BB Random', isRandom: true };
+            if (vfs2wayHURandoms[code]) return { ...vfs2wayHURandoms[code], category: 'HU Random', isRandom: true };
+            if (vfs2wayHDRandoms[code]) return { ...vfs2wayHDRandoms[code], category: 'HD Random', isRandom: true };
+            if (vfs2wayBBBlocks[code]) return { ...vfs2wayBBBlocks[code], category: 'BB Block', isRandom: false };
+            if (vfs2wayHUBlocks[code]) return { ...vfs2wayHUBlocks[code], category: 'HU Block', isRandom: false };
+            if (vfs2wayHDBlocks[code]) return { ...vfs2wayHDBlocks[code], category: 'HD Block', isRandom: false };
+            return { name: code, color: '#666', category: 'Unknown', isRandom: true };
+        }
+
+        function generateRoundVFS(eventType, roundNum) {
+            const rules = svnhRules[eventType];
+            const pool = getVFSPool(eventType, roundNum);
+            const [minPts, maxPts] = rules.pointsPerRound;
+            const targetPoints = minPts + Math.floor(Math.random() * (maxPts - minPts + 1));
+
+            const round = [];
+            let currentPoints = 0;
+            const usedInRound = new Set();
+
+            const availableRandoms = [...pool.randoms];
+            const availableBlocks = [...pool.blocks];
+
+            while (currentPoints < targetPoints) {
+                const canAddRandom = availableRandoms.length > 0 && (currentPoints + 1 <= targetPoints);
+                const canAddBlock = availableBlocks.length > 0 && (currentPoints + 2 <= targetPoints);
+
+                if (!canAddRandom && !canAddBlock) break;
+
+                const addBlock = canAddBlock && (!canAddRandom || (Math.random() < 0.4 && currentPoints + 2 <= targetPoints));
+
+                if (addBlock) {
+                    const idx = Math.floor(Math.random() * availableBlocks.length);
+                    const block = availableBlocks.splice(idx, 1)[0];
+                    const info = getVFSFormationInfo(block);
+                    round.push({ type: 'block', value: block, points: 2, name: info.name, color: info.color, inter: info.inter, category: info.category });
+                    currentPoints += 2;
+                } else if (canAddRandom) {
+                    const idx = Math.floor(Math.random() * availableRandoms.length);
+                    const random = availableRandoms.splice(idx, 1)[0];
+                    const info = getVFSFormationInfo(random);
+                    round.push({ type: 'random', value: random, points: 1, name: info.name, color: info.color, category: info.category });
+                    currentPoints += 1;
+                }
+            }
+
+            const isBackBellyRound = (roundNum <= 2 || roundNum >= 9);
+            return {
+                formations: round,
+                maxPoints: currentPoints,
+                poolType: isBackBellyRound ? 'Back/Belly' : 'Vertical'
+            };
+        }
+
+        function generateDraw() {
+            const eventType = document.getElementById('eventType').value;
+            const numRounds = parseInt(document.getElementById('numRounds').value);
+            const rules = svnhRules[eventType];
+
+            const rounds = [];
+
+            for (let i = 1; i <= numRounds; i++) {
+                if (rules.isVFS) {
+                    rounds.push(generateRoundVFS(eventType, i));
+                } else {
+                    rounds.push(generateRound4Way(rules, new Set()));
+                }
+            }
+
+            displayDraw(rounds, rules);
+        }
+
+        function displayDraw(rounds, rules) {
+            const resultsEl = document.getElementById('drawResults');
+            const contentEl = document.getElementById('drawContent');
+
+            resultsEl.classList.remove('hidden');
+
+            // Find max formations in any round
+            const maxFormations = Math.max(...rounds.map(r => r.formations.length));
+
+            // Print header info
+            let html = `
+                <div id="printHeader" class="mb-4">
+                    <div class="flex justify-between items-center border-b-2 border-gray-600 pb-2 print:border-black">
+                        <div>
+                            <h1 class="text-xl font-bold print:text-black">SkyVenture NH 2026 - ${rules.name}</h1>
+                            <p class="text-sm text-gray-400 print:text-gray-600">January 31 - February 1, 2026</p>
+                        </div>
+                        <div class="text-right text-sm text-gray-400 print:text-gray-600">
+                            <div>${new Date().toLocaleDateString()}</div>
+                            <div>${rounds.length} Rounds</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Columnar layout - rounds as columns (like reference PDF)
+            html += `<div class="draw-columns overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="border-b-2 border-gray-600 print:border-black">`;
+
+            // Round headers with pool type
+            rounds.forEach((round, idx) => {
+                let poolLabel = '';
+                if (rules.isVFS && round.poolType) {
+                    poolLabel = `<div class="text-xs ${round.poolType === 'Back/Belly' ? 'text-green-400 print:text-green-700' : 'text-cyan-400 print:text-cyan-700'}">${round.poolType === 'Back/Belly' ? 'BB' : 'Vert'}</div>`;
+                }
+                html += `<th class="text-center px-1 py-2 text-sm font-bold print:text-black">
+                    <div>Round ${idx + 1}</div>
+                    ${poolLabel}
+                </th>`;
+            });
+            html += `</tr></thead><tbody>`;
+
+            // Formation rows
+            for (let formIdx = 0; formIdx < maxFormations; formIdx++) {
+                html += `<tr class="border-b border-gray-700 print:border-gray-300">`;
+
+                rounds.forEach((round) => {
+                    if (formIdx < round.formations.length) {
+                        const f = round.formations[formIdx];
+                        const imgSrc = getFormationImagePath(f.value, rules.isVFS);
+                        html += `
+                            <td class="text-center p-1 align-top">
+                                <div class="formation-cell inline-block">
+                                    <div class="formation-pic w-16 h-20 mx-auto rounded overflow-hidden border border-gray-600 print:border-gray-400 cursor-pointer"
+                                         style="background-color: white"
+                                         onclick="openModal('${imgSrc}', '${f.value} - ${f.name || ''}')">
+                                        <span class="compact-code hidden font-bold text-black text-lg">${f.value}</span>
+                                        <img src="${imgSrc}" alt="${f.value}" class="full-image w-full h-full object-contain"
+                                             onerror="this.onerror=null; this.style.display='none'; this.parentElement.querySelector('.compact-code').classList.remove('hidden')"/>
+                                    </div>
+                                </div>
+                            </td>`;
+                    } else {
+                        html += `<td></td>`;
+                    }
+                });
+
+                html += `</tr>`;
+            }
+
+            // Max points row
+            html += `<tr class="border-t-2 border-gray-600 print:border-black bg-gray-800 print:bg-gray-100">`;
+            rounds.forEach((round) => {
+                html += `<td class="text-center py-2 text-sm font-bold print:text-black">${round.maxPoints} pts</td>`;
+            });
+            html += `</tr>`;
+
+            html += `</tbody></table></div>`;
+
+            // Detailed view (hidden on print)
+            html += `<div class="detailed-view mt-6 print:hidden">`;
+            rounds.forEach((round, idx) => {
+                const roundNum = idx + 1;
+                const drawString = round.formations.map(f => f.value).join(' ');
+
+                let poolNote = '';
+                if (rules.isVFS && round.poolType) {
+                    poolNote = `<span class="text-xs ${round.poolType === 'Back/Belly' ? 'text-green-400' : 'text-cyan-400'} ml-2">[${round.poolType}]</span>`;
+                }
+
+                html += `
+                    <div class="bg-gray-800 rounded-lg p-3 mb-2">
+                        <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-bold">Round ${roundNum}${poolNote}</h3>
+                            <span class="text-gray-400 text-sm">${round.maxPoints} pts</span>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            ${round.formations.map((f, i) => {
+                                if (rules.isVFS) {
+                                    return renderVFSFormationCard(f, i);
+                                } else {
+                                    const bgColor = f.type === 'block' ? 'bg-purple-600' : 'bg-blue-600';
+                                    return `<div class="flex flex-col items-center">
+                                        <span class="text-xs text-gray-500 mb-1">${i + 1}</span>
+                                        <span class="px-3 py-2 ${bgColor} rounded font-mono text-lg">${f.value}</span>
+                                        <span class="text-xs text-gray-400 mt-1">${f.name || ''}</span>
+                                    </div>`;
+                                }
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+
+            // Formation legend for print
+            if (rules.isVFS) {
+                html += `
+                    <div id="printLegend" class="hidden print:block mt-4 text-xs border-t pt-2">
+                        <div class="font-bold mb-1">Formation Legend:</div>
+                        <div class="flex flex-wrap gap-x-4 gap-y-1">
+                            ${rounds.flatMap(r => r.formations).filter((f, i, arr) => arr.findIndex(x => x.value === f.value) === i).map(f =>
+                                `<span><strong>${f.value}</strong>: ${f.name}</span>`
+                            ).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            contentEl.innerHTML = html;
+        }
+
+        function renderVFSFormationCard(formation, index) {
+            const isBlock = formation.type === 'block';
+            const bgColor = formation.color || '#666';
+
+            // Determine icon based on category
+            let icon = '';
+            if (formation.category.includes('BB')) {
+                icon = '🔄'; // Back/Belly
+            } else if (formation.category.includes('HU')) {
+                icon = '⬆️'; // Head-Up
+            } else if (formation.category.includes('HD')) {
+                icon = '⬇️'; // Head-Down
+            }
+
+            // Create visual representation
+            let visual = '';
+            if (isBlock) {
+                // Block: show inter (transition) between formations
+                visual = `
+                    <div class="text-center text-xs text-gray-300 mb-1">${formation.inter || ''}</div>
+                    <div class="flex items-center justify-center gap-1">
+                        <div class="w-6 h-6 rounded-full border-2 border-white/50"></div>
+                        <span class="text-white/50">↔</span>
+                        <div class="w-6 h-6 rounded-full border-2 border-white/50"></div>
+                    </div>
+                `;
+            } else {
+                // Random: show formation representation
+                visual = getFormationVisual(formation.value, formation.name);
+            }
+
+            return `
+                <div class="flex flex-col items-center">
+                    <span class="text-xs text-gray-500 mb-1">${index + 1}</span>
+                    <div class="formation-card rounded-lg p-2 text-center min-w-[100px]" style="background-color: ${bgColor}">
+                        <div class="flex items-center justify-center gap-1 mb-1">
+                            <span class="font-mono font-bold text-sm">${formation.value}</span>
+                            <span class="text-xs">${icon}</span>
+                        </div>
+                        <div class="h-12 flex items-center justify-center">
+                            ${visual}
+                        </div>
+                        <div class="text-xs text-white/90 mt-1 font-medium leading-tight">${formation.name}</div>
+                        <div class="text-xs text-white/60">${formation.points} pt${formation.points > 1 ? 's' : ''}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Get image path for a formation
+        function getFormationImagePath(code, isVFS) {
+            if (isVFS) {
+                // VFS formations: BB-*, HU-*, HD-*
+                return `/static/formations/${code}.png`;
+            } else {
+                // 4-Way FS formations
+                return `/static/formations/FS-${code}.png`;
+            }
+        }
+
+        function getFormationSVG(code, name, isBlock) {
+            // VFS formations use actual images from the dive pool PDF
+            if (code.startsWith('BB-') || code.startsWith('HU-') || code.startsWith('HD-')) {
+                const imgPath = `/static/formations/${code}.png`;
+                return `<img src="${imgPath}" alt="${code}" class="w-full h-full object-contain" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'font-bold text-lg\\'>${code}</span>'"/>`;
+            }
+
+            // 4-Way FS formations use actual images from USPA dive pool PDF
+            const fsCode = isBlock ? code : code;  // Letters for randoms, numbers for blocks
+            const imgPath = `/static/formations/FS-${fsCode}.png`;
+            return `<img src="${imgPath}" alt="${code}" class="w-full h-full object-contain" onerror="this.onerror=null; this.parentElement.innerHTML='<span class=\\'font-bold text-white text-xl\\'>${code}</span>'"/>`;
+        }
+
+        function getFormationVisual(code, name) {
+            // Create simple visual representations based on formation type
+            const nameLower = name.toLowerCase();
+
+            // Back/Belly formations
+            if (code.startsWith('BB-')) {
+                if (nameLower.includes('star')) {
+                    return `<div class="flex items-center justify-center">
+                        <div class="relative w-10 h-10">
+                            <div class="absolute top-0 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white/80"></div>
+                            <div class="absolute bottom-0 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full bg-white/80"></div>
+                            <div class="absolute top-1/2 left-0 -translate-y-1/2 w-3 h-3 rounded-full bg-white/80"></div>
+                            <div class="absolute top-1/2 right-0 -translate-y-1/2 w-3 h-3 rounded-full bg-white/80"></div>
+                        </div>
+                    </div>`;
+                }
+                if (nameLower.includes('accordion')) {
+                    return `<div class="flex items-center gap-1">
+                        <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                        <div class="w-2 h-0.5 bg-white/60"></div>
+                        <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                    </div>`;
+                }
+                if (nameLower.includes('side body')) {
+                    return `<div class="flex items-center">
+                        <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                        <div class="w-4 h-4 rounded-full bg-white/80 -ml-1"></div>
+                    </div>`;
+                }
+                if (nameLower.includes('cat')) {
+                    return `<div class="flex flex-col items-center">
+                        <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                        <div class="w-4 h-4 rounded-full bg-white/80 -mt-1"></div>
+                    </div>`;
+                }
+                if (nameLower.includes('stair')) {
+                    return `<div class="flex items-end gap-0.5">
+                        <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                        <div class="w-4 h-4 rounded-full bg-white/80 mb-2"></div>
+                    </div>`;
+                }
+                // Default BB
+                return `<div class="flex items-center gap-1">
+                    <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                    <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                </div>`;
+            }
+
+            // Head-Up formations
+            if (code.startsWith('HU-')) {
+                if (nameLower.includes('totem')) {
+                    return `<div class="flex flex-col items-center">
+                        <div class="w-4 h-4 rounded-full bg-white/80 border-t-2 border-cyan-300"></div>
+                        <div class="w-4 h-4 rounded-full bg-white/80 border-t-2 border-cyan-300 -mt-1"></div>
+                    </div>`;
+                }
+                if (nameLower.includes('foot')) {
+                    return `<div class="flex items-end gap-1">
+                        <div class="w-4 h-6 rounded-t-full bg-white/80"></div>
+                        <div class="w-4 h-6 rounded-t-full bg-white/80"></div>
+                    </div>`;
+                }
+                // Default HU - show upward arrows
+                return `<div class="flex items-center gap-1">
+                    <div class="w-4 h-6 rounded-t-full bg-white/80 border-t-2 border-cyan-300"></div>
+                    <div class="w-4 h-6 rounded-t-full bg-white/80 border-t-2 border-cyan-300"></div>
+                </div>`;
+            }
+
+            // Head-Down formations
+            if (code.startsWith('HD-')) {
+                if (nameLower.includes('sixty nine') || nameLower.includes('69')) {
+                    return `<div class="flex items-center">
+                        <div class="w-4 h-6 rounded-t-full bg-white/80 rotate-180"></div>
+                        <div class="w-4 h-6 rounded-t-full bg-white/80"></div>
+                    </div>`;
+                }
+                // Default HD - show downward arrows
+                return `<div class="flex items-center gap-1">
+                    <div class="w-4 h-6 rounded-b-full bg-white/80 border-b-2 border-purple-300"></div>
+                    <div class="w-4 h-6 rounded-b-full bg-white/80 border-b-2 border-purple-300"></div>
+                </div>`;
+            }
+
+            // Default
+            return `<div class="flex items-center gap-1">
+                <div class="w-4 h-4 rounded-full bg-white/80"></div>
+                <div class="w-4 h-4 rounded-full bg-white/80"></div>
+            </div>`;
+        }
+
+        function copyDraw() {
+            const eventType = document.getElementById('eventType').value;
+            const rules = svnhRules[eventType];
+            const contentEl = document.getElementById('drawContent');
+            const rounds = contentEl.querySelectorAll('.bg-gray-800');
+
+            let text = `SkyVenture NH 2026 - ${rules.name}\n`;
+            text += '='.repeat(40) + '\n\n';
+
+            rounds.forEach((round, idx) => {
+                const drawStr = round.querySelector('.font-mono.bg-gray-700').textContent.trim();
+                const maxPts = round.querySelector('.text-gray-400.text-sm').textContent.trim();
+                text += `Round ${idx + 1}: ${drawStr} (${maxPts})\n`;
+            });
+
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Draw copied to clipboard!');
+            });
+        }
+
+        function printCompact() {
+            document.body.classList.add('print-compact');
+            document.body.classList.remove('print-with-images');
+            window.print();
+        }
+
+        function printWithImages() {
+            document.body.classList.remove('print-compact');
+            document.body.classList.add('print-with-images');
+            window.print();
+        }
+
+        // Initialize
+        updateClassOptions();
+    </script>
+
+    <style>
+        .formation-card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .formation-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .formation-chip {
+            color: white;
+            display: inline-block;
+        }
+
+        @media print {
+            @page {
+                size: letter landscape;
+                margin: 0.3in;
+            }
+            body {
+                background: white !important;
+                color: black !important;
+                font-size: 9pt !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+            nav, button, #eventInfo, .mt-12, .mt-8, .detailed-view, .mb-6, .mb-8, .bg-gray-800.rounded-lg.p-6 {
+                display: none !important;
+            }
+            #drawResults { display: block !important; margin: 0 !important; }
+            #printHeader { display: block !important; }
+            .container { max-width: 100% !important; padding: 0 !important; }
+            h2 { font-size: 12pt !important; margin-bottom: 4px !important; }
+            .draw-columns {
+                overflow: visible !important;
+            }
+            .draw-columns table {
+                width: 100% !important;
+                table-layout: fixed !important;
+            }
+            .formation-pic {
+                border: 1px solid #333 !important;
+                background: white !important;
+            }
+        }
+
+        /* Compact print mode - 1 page, no images */
+        @media print {
+            body.print-compact .formation-pic {
+                width: 40px !important;
+                height: 28px !important;
+            }
+            body.print-compact .formation-pic .full-image,
+            body.print-compact .formation-pic img {
+                display: none !important;
+            }
+            body.print-compact .formation-pic .compact-code {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                height: 100% !important;
+                font-size: 9pt !important;
+            }
+            body.print-compact td {
+                padding: 2px !important;
+            }
+            body.print-compact th {
+                font-size: 8pt !important;
+                padding: 4px 2px !important;
+            }
+            body.print-compact #printLegend {
+                display: block !important;
+                font-size: 6pt !important;
+            }
+        }
+
+        /* Print with images mode */
+        @media print {
+            body.print-with-images .formation-pic {
+                width: 60px !important;
+                height: 75px !important;
+            }
+            body.print-with-images .formation-pic .compact-code {
+                display: none !important;
+            }
+            body.print-with-images .formation-pic .full-image,
+            body.print-with-images .formation-pic img {
+                display: block !important;
+                width: 100% !important;
+                height: 100% !important;
+                object-fit: contain !important;
+            }
+            body.print-with-images td {
+                padding: 3px !important;
+            }
+            body.print-with-images th {
+                font-size: 9pt !important;
+                padding: 4px 2px !important;
+            }
+            body.print-with-images .formation-box .formation-name {
+                font-size: 5pt !important;
+                max-width: 48px !important;
+            }
+            body.print-with-images #printLegend {
+                display: none !important;
+            }
+            body.print-with-images .draw-round-row {
+                padding: 3px 0 !important;
+            }
+        }
+
+        /* Screen styles for columnar layout */
+        .draw-columns table th,
+        .draw-columns table td {
+            vertical-align: top;
+        }
+        .formation-pic {
+            transition: transform 0.2s;
+        }
+        .formation-pic:hover {
+            transform: scale(1.05);
+        }
+    </style>
+    <!-- Image Modal -->
+    <div id="imageModal" class="fixed inset-0 bg-black/80 hidden z-50 overflow-y-auto" onclick="closeModal()">
+        <div class="min-h-full flex items-center justify-center p-8">
+            <div class="relative" onclick="event.stopPropagation()">
+                <button onclick="closeModal()" class="absolute -top-8 -right-8 text-white text-3xl font-bold hover:text-gray-300">&times;</button>
+                <img id="modalImage" src="" alt="" class="bg-white rounded-lg shadow-2xl">
+                <div id="modalCaption" class="text-center text-white mt-4 text-xl font-bold"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openModal(imgSrc, caption) {
+            const modal = document.getElementById('imageModal');
+            const modalImg = document.getElementById('modalImage');
+            const modalCaption = document.getElementById('modalCaption');
+
+            modalImg.src = imgSrc;
+            modalCaption.textContent = caption;
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('imageModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // Close on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+    </script>
+</body>
+</html>
