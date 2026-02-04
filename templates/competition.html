@@ -1941,6 +1941,22 @@
 
                     <!-- WS Performance FlySight CSV Upload Section -->
                     <div id="wsFlysightUploadSection" class="hidden border-t border-gray-200 pt-4">
+                        <!-- Reference Point Assignment Warning -->
+                        <div id="wsRefPointWarning" class="hidden mb-4 p-4 bg-red-100 border-2 border-red-400 rounded-lg">
+                            <div class="flex items-start gap-3">
+                                <span class="text-2xl">⚠️</span>
+                                <div>
+                                    <p class="font-semibold text-red-800">Reference Point Not Assigned</p>
+                                    <p class="text-red-700 text-sm mt-1">This competitor must be assigned a ground reference point before scoring.</p>
+                                    <button type="button" onclick="openWsReferencePointsModal()" class="mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded text-sm">
+                                        Configure Flight Paths
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- WS Upload Content (hidden when no ref point assigned) -->
+                        <div id="wsUploadContent">
                         <!-- Task Selection -->
                         <div class="mb-4">
                             <label class="block text-gray-600 text-sm mb-2">Select Task:</label>
@@ -2075,6 +2091,7 @@
                                 Not configured - using default competition window
                             </div>
                         </div>
+                        </div> <!-- End wsUploadContent -->
                     </div>
                 </div>
 
@@ -4102,6 +4119,9 @@
                 // Clear previous WS FlySight state
                 clearWsFlysightFile();
 
+                // Check if competitor has assigned reference point
+                checkWsRefPointAssignment(teamId);
+
                 // Determine task type and display round based on internal round number
                 let taskType = 'time';
                 let displayRound = roundNum;
@@ -4585,6 +4605,79 @@
 
                 // Parse CSV on server to get Time, Distance, Speed
                 parseWsFlysightCSV(file);
+            }
+        }
+
+        async function checkWsRefPointAssignment(teamId) {
+            const warningEl = document.getElementById('wsRefPointWarning');
+            const uploadContent = document.getElementById('wsUploadContent');
+            const statusEl = document.getElementById('modalStatusText');
+
+            if (!teamId) {
+                // No team selected - show warning
+                if (warningEl) warningEl.classList.remove('hidden');
+                if (uploadContent) uploadContent.classList.add('hidden');
+                return;
+            }
+
+            try {
+                const competitionId = '{{ competition.id }}';
+                const response = await fetch(`/ws-performance/reference-points/${competitionId}`);
+                const result = await response.json();
+
+                if (result.success) {
+                    const assignments = result.competitor_assignments || {};
+                    const refPoints = result.points || [];
+
+                    // Check if this competitor has an assigned reference point
+                    const hasAssignment = assignments[teamId] !== undefined && assignments[teamId] !== null;
+                    const hasRefPoints = refPoints.length > 0;
+
+                    if (!hasRefPoints) {
+                        // No reference points configured at all
+                        if (warningEl) {
+                            warningEl.classList.remove('hidden');
+                            warningEl.querySelector('p.text-red-700').textContent = 'No ground reference points have been configured for this competition. Please configure flight paths first.';
+                        }
+                        if (uploadContent) uploadContent.classList.add('hidden');
+                        if (statusEl) {
+                            statusEl.textContent = 'Reference points required';
+                            statusEl.classList.add('text-red-500');
+                        }
+                    } else if (!hasAssignment) {
+                        // Reference points exist but competitor not assigned
+                        if (warningEl) {
+                            warningEl.classList.remove('hidden');
+                            warningEl.querySelector('p.text-red-700').textContent = 'This competitor must be assigned a ground reference point before scoring.';
+                        }
+                        if (uploadContent) uploadContent.classList.add('hidden');
+                        if (statusEl) {
+                            statusEl.textContent = 'Assign reference point first';
+                            statusEl.classList.add('text-red-500');
+                        }
+                    } else {
+                        // Competitor has assigned reference point - allow scoring
+                        if (warningEl) warningEl.classList.add('hidden');
+                        if (uploadContent) uploadContent.classList.remove('hidden');
+
+                        // Update status to show assigned point
+                        const refPointIdx = assignments[teamId];
+                        const refPoint = refPoints[refPointIdx];
+                        const wsRefPointsStatus = document.getElementById('wsRefPointsStatus');
+                        if (wsRefPointsStatus && refPoint) {
+                            wsRefPointsStatus.innerHTML = `<span class="text-green-600">Assigned to Point ${refPointIdx + 1}</span> (${refPoint.lat.toFixed(4)}, ${refPoint.lng.toFixed(4)})`;
+                        }
+                    }
+                } else {
+                    // Error fetching - assume not configured
+                    if (warningEl) warningEl.classList.remove('hidden');
+                    if (uploadContent) uploadContent.classList.add('hidden');
+                }
+            } catch (err) {
+                console.error('Error checking reference point assignment:', err);
+                // On error, allow scoring but show warning
+                if (warningEl) warningEl.classList.add('hidden');
+                if (uploadContent) uploadContent.classList.remove('hidden');
             }
         }
 
