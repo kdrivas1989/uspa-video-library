@@ -5800,6 +5800,34 @@ def add_team(comp_id):
     return jsonify({'success': True, 'id': team_id, 'message': 'Team added'})
 
 
+def find_csv_column(headers, possible_names):
+    """
+    Loose header matching for CSV imports.
+    Finds a column by checking various possible names (case-insensitive, partial matches).
+    Returns the actual header name if found, None otherwise.
+    """
+    headers_lower = {h.lower().strip().replace(' ', '_').replace('-', '_'): h for h in headers}
+
+    for name in possible_names:
+        name_normalized = name.lower().strip().replace(' ', '_').replace('-', '_')
+        # Exact match (normalized)
+        if name_normalized in headers_lower:
+            return headers_lower[name_normalized]
+        # Partial match - header contains the search term
+        for h_lower, h_orig in headers_lower.items():
+            if name_normalized in h_lower or h_lower in name_normalized:
+                return h_orig
+    return None
+
+
+def get_csv_value(row, headers, possible_names):
+    """Get value from CSV row using loose header matching."""
+    col = find_csv_column(headers, possible_names)
+    if col and col in row:
+        return row[col]
+    return ''
+
+
 @app.route('/admin/competition/<comp_id>/import-teams', methods=['POST'])
 @admin_required
 def import_teams(comp_id):
@@ -5819,24 +5847,32 @@ def import_teams(comp_id):
         content = file.read().decode('utf-8')
         reader = csv.DictReader(io.StringIO(content))
 
-        # Check for required columns in header
+        # Check for required columns in header using loose matching
         headers = reader.fieldnames or []
-        headers_lower = [h.lower() for h in headers]
+
+        # Possible names for each required column
+        name_variants = ['name', 'team_name', 'teamname', 'competitor', 'competitor_name', 'athlete', 'athlete_name', 'full_name', 'fullname']
+        class_variants = ['class', 'category', 'division', 'skill_class', 'skill_level', 'level']
+        event_variants = ['event', 'event_type', 'eventtype', 'discipline', 'event_name']
 
         # Check for name column (required)
-        has_name = any(h in headers_lower for h in ['name', 'team_name'])
-        if not has_name:
-            return jsonify({'error': 'Missing required column: name (or team_name)'}), 400
+        name_col = find_csv_column(headers, name_variants)
+        if not name_col:
+            return jsonify({'error': f'Missing required column: name. Expected one of: {", ".join(name_variants[:4])}'}), 400
 
         # Check for class column (required)
-        has_class = 'class' in headers_lower
-        if not has_class:
-            return jsonify({'error': 'Missing required column: class'}), 400
+        class_col = find_csv_column(headers, class_variants)
+        if not class_col:
+            return jsonify({'error': f'Missing required column: class. Expected one of: {", ".join(class_variants[:4])}'}), 400
 
         # Check for event column (required)
-        has_event = any(h in headers_lower for h in ['event', 'event_type'])
-        if not has_event:
-            return jsonify({'error': 'Missing required column: event (or event_type)'}), 400
+        event_col = find_csv_column(headers, event_variants)
+        if not event_col:
+            return jsonify({'error': f'Missing required column: event. Expected one of: {", ".join(event_variants[:4])}'}), 400
+
+        # Optional columns
+        number_variants = ['team_number', 'teamnumber', 'number', 'num', 'id', 'competitor_number', 'bib', 'bib_number']
+        members_variants = ['members', 'team_members', 'teammembers', 'country', 'nationality', 'nation', 'federation', 'club']
 
         imported = 0
         errors = []
@@ -5847,13 +5883,12 @@ def import_teams(comp_id):
         for row in reader:
             row_num += 1
             try:
-                # Try different column name variations
-                team_number = row.get('team_number') or row.get('Team Number') or row.get('number') or row.get('Number') or ''
-                team_name = row.get('team_name') or row.get('Team Name') or row.get('name') or row.get('Name') or ''
-                # For competitors, country goes into members field; for teams, use members
-                members = row.get('members') or row.get('Members') or row.get('team_members') or row.get('Team Members') or row.get('country') or row.get('Country') or ''
-                row_class = row.get('class') or row.get('Class') or ''
-                event_type = row.get('event') or row.get('Event') or row.get('event_type') or row.get('Event Type') or ''
+                # Use loose matching to get values
+                team_number = get_csv_value(row, headers, number_variants)
+                team_name = get_csv_value(row, headers, name_variants)
+                members = get_csv_value(row, headers, members_variants)
+                row_class = get_csv_value(row, headers, class_variants)
+                event_type = get_csv_value(row, headers, event_variants)
 
                 # Validate required fields
                 if not team_name.strip():
