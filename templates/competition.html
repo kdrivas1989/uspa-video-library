@@ -1520,15 +1520,6 @@
                                 </div>
                             </div>
 
-                            <!-- Stand Up Landing -->
-                            <div class="mb-4">
-                                <label class="flex items-center gap-3 bg-gray-300 px-4 py-2 rounded cursor-pointer hover:bg-gray-400">
-                                    <input type="checkbox" id="cpStandUp" class="w-5 h-5" checked onchange="calculateCpScore()">
-                                    <span>Stand Up Landing</span>
-                                    <span class="text-gray-500 text-sm ml-auto">(-10 pts if not checked)</span>
-                                </label>
-                            </div>
-
                             <!-- Landing Zone -->
                             <div class="mb-4">
                                 <label class="block text-gray-600 text-sm mb-2">Landing Zone (click to select)</label>
@@ -1545,6 +1536,12 @@
                                     <button type="button" onclick="selectCpZone(50)" class="cp-zone-btn px-4 py-2 rounded bg-green-500 hover:bg-green-600 text-white text-sm text-left font-bold" data-zone="50">Center (50 pts)</button>
                                     <button type="button" onclick="selectCpZone(25)" class="cp-zone-btn px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm text-left" data-zone="25">Z9 (25 pts)</button>
                                     <button type="button" onclick="selectCpZone(5)" class="cp-zone-btn px-4 py-2 rounded bg-gray-200 hover:bg-gray-300 text-gray-800 text-sm text-left" data-zone="5">Z10 (5 pts)</button>
+                                    <!-- Stand Up Landing -->
+                                    <label class="flex items-center gap-3 bg-orange-100 px-4 py-2 rounded cursor-pointer hover:bg-orange-200 mt-2 border border-orange-300">
+                                        <input type="checkbox" id="cpStandUp" class="w-5 h-5" checked onchange="calculateCpScore()">
+                                        <span class="text-gray-800">Stand Up Landing</span>
+                                        <span class="text-orange-600 text-sm ml-auto">(-10 pts if unchecked)</span>
+                                    </label>
                                 </div>
                             </div>
 
