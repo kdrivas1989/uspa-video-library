@@ -1739,6 +1739,81 @@
                         <input type="hidden" id="cfScoreValue">
                         <input type="hidden" id="cfEventType" value="4way">
                     </div>
+
+                    <!-- WS Performance Scoring Section -->
+                    <div id="wsScoreSection" class="hidden bg-gray-50 rounded-lg p-4">
+                        <h3 class="text-lg font-semibold text-purple-600 mb-4">WS Performance Scoring</h3>
+
+                        <!-- Raw Performance Value -->
+                        <div class="mb-4">
+                            <label class="block text-gray-600 text-sm mb-2">Raw Performance Value</label>
+                            <div class="flex items-center gap-4">
+                                <input type="number" id="wsRawScore" step="0.01" min="0"
+                                    class="flex-1 px-4 py-3 rounded bg-white text-gray-900 border border-gray-300 text-3xl font-mono text-center focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    placeholder="0.00" onchange="calculateWsScore()" oninput="calculateWsScore()">
+                                <div class="text-gray-500 text-sm">
+                                    <div id="wsScoreTypeLabel">Time (sec) / Distance (m)</div>
+                                    <div class="text-xs">from FlySight data</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Designated Lane Violation -->
+                        <div class="mb-4 bg-orange-50 border border-orange-200 rounded p-3">
+                            <label class="block text-gray-700 font-semibold text-sm mb-2">Designated Lane (DL) Violation</label>
+                            <p class="text-xs text-gray-500 mb-3">Distance outside the 600m Designated Lane (measured perpendicular to DL boundary)</p>
+                            <div class="space-y-2">
+                                <label class="flex items-center gap-3 bg-white px-4 py-2 rounded cursor-pointer hover:bg-gray-50 border">
+                                    <input type="radio" name="wsDlViolation" value="none" checked onchange="calculateWsScore()">
+                                    <span class="text-sm text-gray-700">No violation (within DL)</span>
+                                    <span class="ml-auto text-green-600 font-medium">100%</span>
+                                </label>
+                                <label class="flex items-center gap-3 bg-white px-4 py-2 rounded cursor-pointer hover:bg-yellow-50 border border-yellow-200">
+                                    <input type="radio" name="wsDlViolation" value="under150" onchange="calculateWsScore()">
+                                    <span class="text-sm text-gray-700">&lt; 150m outside DL</span>
+                                    <span class="ml-auto text-yellow-600 font-medium">-10%</span>
+                                </label>
+                                <label class="flex items-center gap-3 bg-white px-4 py-2 rounded cursor-pointer hover:bg-orange-50 border border-orange-200">
+                                    <input type="radio" name="wsDlViolation" value="150to300" onchange="calculateWsScore()">
+                                    <span class="text-sm text-gray-700">150-300m outside DL</span>
+                                    <span class="ml-auto text-orange-600 font-medium">-20%</span>
+                                </label>
+                                <label class="flex items-center gap-3 bg-white px-4 py-2 rounded cursor-pointer hover:bg-red-50 border border-red-300">
+                                    <input type="radio" name="wsDlViolation" value="over300" onchange="calculateWsScore()">
+                                    <span class="text-sm text-gray-700">&gt; 300m outside DL (first infringement)</span>
+                                    <span class="ml-auto text-red-600 font-medium">-50%</span>
+                                </label>
+                                <label class="flex items-center gap-3 bg-red-100 px-4 py-2 rounded cursor-pointer hover:bg-red-200 border border-red-400">
+                                    <input type="radio" name="wsDlViolation" value="over300repeat" onchange="calculateWsScore()">
+                                    <span class="text-sm text-gray-700">&gt; 300m outside DL (subsequent infringement)</span>
+                                    <span class="ml-auto text-red-700 font-bold">ZERO</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- WS Score Calculation Display -->
+                        <div class="bg-white rounded p-4 mt-4">
+                            <div class="grid grid-cols-3 gap-4 text-center">
+                                <div>
+                                    <div class="text-gray-600 text-xs mb-1">Raw Value</div>
+                                    <span id="wsRawDisplay" class="text-2xl font-mono text-purple-400">0.00</span>
+                                </div>
+                                <div>
+                                    <div class="text-gray-600 text-xs mb-1">DL Penalty</div>
+                                    <span id="wsPenaltyDisplay" class="text-2xl font-mono text-green-400">0%</span>
+                                </div>
+                                <div>
+                                    <div class="text-gray-600 text-xs mb-1">Final Score</div>
+                                    <span id="wsFinalScore" class="text-2xl font-mono text-blue-500 font-bold">0.00</span>
+                                </div>
+                            </div>
+                            <div id="wsScoreBreakdown" class="text-center text-gray-500 text-sm mt-2">
+                                0.00 × 100% = 0.00
+                            </div>
+                        </div>
+                        <input type="hidden" id="wsScoreValue">
+                        <input type="hidden" id="wsDlPenaltyValue">
+                    </div>
                     {% endif %}
 
                     <!-- Video Upload Section (for videographers - not for Speed Skydiving) -->
@@ -2098,10 +2173,14 @@
                 <!-- Map -->
                 <div class="flex-1">
                     <div id="wsRefMap" style="height: 450px; border-radius: 8px; border: 2px solid #e5e7eb;"></div>
-                    <div class="flex gap-4 mt-2 text-xs">
+                    <div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
                         <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-orange-500"></span> Validation Window</span>
                         <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500"></span> Reference Points</span>
-                        <span class="flex items-center gap-1"><span class="w-3 h-3 bg-blue-300 opacity-50"></span> 600m Designated Lane</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-black"></span> Flight Path</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 bg-green-500 opacity-60"></span> Safe Lane</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 bg-yellow-500 opacity-60"></span> 10% Penalty</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 bg-orange-500 opacity-60"></span> 20% Penalty</span>
+                        <span class="flex items-center gap-1"><span class="w-3 h-3 bg-red-600 opacity-60"></span> 50% Penalty</span>
                     </div>
                 </div>
 
@@ -3715,6 +3794,74 @@
             document.getElementById('cfOmissionPenalty').textContent = '-0';
             document.getElementById('cfFinalScore').textContent = '0';
             document.getElementById('cfScoreBreakdown').textContent = '0 formations - 0 omission penalty = 0';
+
+        // =====================
+        // WS PERFORMANCE SCORING
+        // =====================
+
+        function calculateWsScore() {
+            const rawScore = parseFloat(document.getElementById('wsRawScore').value) || 0;
+            const dlViolation = document.querySelector('input[name="wsDlViolation"]:checked')?.value || 'none';
+
+            // Determine penalty percentage based on DL violation
+            let penaltyPercent = 0;
+            let penaltyDisplay = '0%';
+            let multiplier = 1.0;
+
+            switch (dlViolation) {
+                case 'none':
+                    penaltyPercent = 0;
+                    penaltyDisplay = '0%';
+                    multiplier = 1.0;
+                    break;
+                case 'under150':
+                    penaltyPercent = 10;
+                    penaltyDisplay = '-10%';
+                    multiplier = 0.9;
+                    break;
+                case '150to300':
+                    penaltyPercent = 20;
+                    penaltyDisplay = '-20%';
+                    multiplier = 0.8;
+                    break;
+                case 'over300':
+                    penaltyPercent = 50;
+                    penaltyDisplay = '-50%';
+                    multiplier = 0.5;
+                    break;
+                case 'over300repeat':
+                    penaltyPercent = 100;
+                    penaltyDisplay = 'ZERO';
+                    multiplier = 0;
+                    break;
+            }
+
+            const finalScore = rawScore * multiplier;
+
+            // Update displays
+            document.getElementById('wsRawDisplay').textContent = rawScore.toFixed(2);
+            document.getElementById('wsPenaltyDisplay').textContent = penaltyDisplay;
+            document.getElementById('wsPenaltyDisplay').className = `text-2xl font-mono ${penaltyPercent === 0 ? 'text-green-400' : penaltyPercent < 50 ? 'text-yellow-500' : 'text-red-500'}`;
+            document.getElementById('wsFinalScore').textContent = finalScore.toFixed(2);
+            document.getElementById('wsScoreBreakdown').textContent =
+                `${rawScore.toFixed(2)} × ${(multiplier * 100).toFixed(0)}% = ${finalScore.toFixed(2)}`;
+
+            // Store values for submission
+            document.getElementById('wsScoreValue').value = finalScore;
+            document.getElementById('wsDlPenaltyValue').value = dlViolation;
+        }
+
+        function resetWsScoring() {
+            document.getElementById('wsRawScore').value = '';
+            document.querySelectorAll('input[name="wsDlViolation"]').forEach(r => r.checked = r.value === 'none');
+            document.getElementById('wsRawDisplay').textContent = '0.00';
+            document.getElementById('wsPenaltyDisplay').textContent = '0%';
+            document.getElementById('wsPenaltyDisplay').className = 'text-2xl font-mono text-green-400';
+            document.getElementById('wsFinalScore').textContent = '0.00';
+            document.getElementById('wsScoreBreakdown').textContent = '0.00 × 100% = 0.00';
+            document.getElementById('wsScoreValue').value = '';
+            document.getElementById('wsDlPenaltyValue').value = 'none';
+        }
             document.getElementById('cfScoreValue').value = '0';
         }
 
@@ -3803,11 +3950,15 @@
             // Get WS FlySight section
             const wsFlysightUploadSection = document.getElementById('wsFlysightUploadSection');
 
+            // Get WS Score section
+            const wsScoreSection = document.getElementById('wsScoreSection');
+
             if ((isCp || fallbackIsCp) && standardScoreSection && cpScoreSection) {
                 // Canopy Piloting - show CP-specific scoring (no video upload)
                 standardScoreSection.classList.add('hidden');
                 cpScoreSection.classList.remove('hidden');
                 if (cfScoreSection) cfScoreSection.classList.add('hidden');
+                if (wsScoreSection) wsScoreSection.classList.add('hidden');
                 videoUploadSection.classList.add('hidden');
                 flysightUploadSection.classList.add('hidden');
                 if (videoPlayerSection) videoPlayerSection.classList.add('hidden');
@@ -3841,6 +3992,7 @@
                 // Canopy Formation - show CF-specific scoring
                 standardScoreSection.classList.add('hidden');
                 if (cpScoreSection) cpScoreSection.classList.add('hidden');
+                if (wsScoreSection) wsScoreSection.classList.add('hidden');
                 cfScoreSection.classList.remove('hidden');
                 videoUploadSection.classList.remove('hidden');
                 flysightUploadSection.classList.add('hidden');
@@ -3856,6 +4008,7 @@
                 if (standardScoreSection) standardScoreSection.classList.add('hidden');
                 if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 if (cfScoreSection) cfScoreSection.classList.add('hidden');
+                if (wsScoreSection) wsScoreSection.classList.add('hidden');
                 videoUploadSection.classList.add('hidden');
                 flysightUploadSection.classList.remove('hidden');
                 videoPlayerSection.classList.add('hidden');
@@ -3863,7 +4016,7 @@
                 document.getElementById('modalStatusText').classList.remove('text-green-400', 'text-yellow-400');
                 if (wsFlysightUploadSection) wsFlysightUploadSection.classList.add('hidden');
             } else if (isWsPerformance || fallbackIsWsPerformance) {
-                // WS Performance - FlySight CSV upload only (no manual entry)
+                // WS Performance - FlySight CSV upload + DL violation scoring
                 if (standardScoreSection) standardScoreSection.classList.add('hidden');
                 if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 if (cfScoreSection) cfScoreSection.classList.add('hidden');
@@ -3871,6 +4024,13 @@
                 flysightUploadSection.classList.add('hidden');
                 videoPlayerSection.classList.add('hidden');
                 if (wsFlysightUploadSection) wsFlysightUploadSection.classList.remove('hidden');
+
+                // Show WS scoring section for DL violations
+                const wsScoreSection = document.getElementById('wsScoreSection');
+                if (wsScoreSection) {
+                    wsScoreSection.classList.remove('hidden');
+                    resetWsScoring();
+                }
 
                 // Clear previous WS FlySight state
                 clearWsFlysightFile();
@@ -3903,6 +4063,7 @@
                 if (standardScoreSection) standardScoreSection.classList.remove('hidden');
                 if (cpScoreSection) cpScoreSection.classList.add('hidden');
                 if (cfScoreSection) cfScoreSection.classList.add('hidden');
+                if (wsScoreSection) wsScoreSection.classList.add('hidden');
                 videoUploadSection.classList.remove('hidden');
                 flysightUploadSection.classList.add('hidden');
                 if (scoreInput) {
@@ -4505,41 +4666,93 @@
             if (!wsValidationMarker || wsRefMarkers.length === 0) return;
 
             const validationLatLng = wsValidationMarker.getLatLng();
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444']; // blue, green, amber, red
 
             wsRefMarkers.forEach((marker, idx) => {
                 const refLatLng = marker.getLatLng();
 
-                // Draw the Designated Flight Path (line)
-                const flightPath = L.polyline([
+                // Zone distances from center line (in meters)
+                // Designated Lane: 300m each side (600m total)
+                // 10% penalty: 150m beyond DL (300-450m from center)
+                // 20% penalty: 150-300m beyond DL (450-600m from center)
+                // 50% penalty: >300m beyond DL (600m+ from center)
+
+                // Draw zones from outermost to innermost so inner zones overlay outer ones
+
+                // Red zone: 50% penalty (>300m outside DL, 600-900m from center for visibility)
+                const redWidth = 900;
+                const redP1Left = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, redWidth, 'left');
+                const redP1Right = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, redWidth, 'right');
+                const redP2Left = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, redWidth, 'right');
+                const redP2Right = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, redWidth, 'left');
+                const redZone = L.polygon([redP1Left, redP1Right, redP2Right, redP2Left], {
+                    color: '#dc2626',
+                    weight: 1,
+                    opacity: 0.3,
+                    fillColor: '#dc2626',
+                    fillOpacity: 0.25
+                }).addTo(wsRefMap);
+                redZone.bindPopup(`<b>50% Penalty Zone</b><br>>300m outside Designated Lane`);
+                wsFlightLanes.push(redZone);
+
+                // Orange zone: 20% penalty (150-300m outside DL, 450-600m from center)
+                const orangeWidth = 600;
+                const orangeP1Left = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, orangeWidth, 'left');
+                const orangeP1Right = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, orangeWidth, 'right');
+                const orangeP2Left = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, orangeWidth, 'right');
+                const orangeP2Right = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, orangeWidth, 'left');
+                const orangeZone = L.polygon([orangeP1Left, orangeP1Right, orangeP2Right, orangeP2Left], {
+                    color: '#f97316',
+                    weight: 1,
+                    opacity: 0.3,
+                    fillColor: '#f97316',
+                    fillOpacity: 0.3
+                }).addTo(wsRefMap);
+                orangeZone.bindPopup(`<b>20% Penalty Zone</b><br>150-300m outside Designated Lane`);
+                wsFlightLanes.push(orangeZone);
+
+                // Yellow zone: 10% penalty (<150m outside DL, 300-450m from center)
+                const yellowWidth = 450;
+                const yellowP1Left = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, yellowWidth, 'left');
+                const yellowP1Right = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, yellowWidth, 'right');
+                const yellowP2Left = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, yellowWidth, 'right');
+                const yellowP2Right = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, yellowWidth, 'left');
+                const yellowZone = L.polygon([yellowP1Left, yellowP1Right, yellowP2Right, yellowP2Left], {
+                    color: '#eab308',
+                    weight: 1,
+                    opacity: 0.3,
+                    fillColor: '#eab308',
+                    fillOpacity: 0.35
+                }).addTo(wsRefMap);
+                yellowZone.bindPopup(`<b>10% Penalty Zone</b><br><150m outside Designated Lane`);
+                wsFlightLanes.push(yellowZone);
+
+                // Green zone: Designated Lane (safe zone, 300m from center = 600m total width)
+                const greenWidth = 300;
+                const greenP1Left = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, greenWidth, 'left');
+                const greenP1Right = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, greenWidth, 'right');
+                const greenP2Left = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, greenWidth, 'right');
+                const greenP2Right = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, greenWidth, 'left');
+                const greenZone = L.polygon([greenP1Left, greenP1Right, greenP2Right, greenP2Left], {
+                    color: '#16a34a',
+                    weight: 2,
+                    opacity: 0.8,
+                    fillColor: '#22c55e',
+                    fillOpacity: 0.4
+                }).addTo(wsRefMap);
+                greenZone.bindPopup(`<b>Designated Lane ${idx + 1}</b><br>600m wide - No penalty`);
+                wsFlightLanes.push(greenZone);
+
+                // Black center line (Designated Flight Path)
+                const centerLine = L.polyline([
                     [validationLatLng.lat, validationLatLng.lng],
                     [refLatLng.lat, refLatLng.lng]
                 ], {
-                    color: colors[idx % colors.length],
+                    color: '#000000',
                     weight: 3,
-                    opacity: 0.8,
-                    dashArray: '10, 5'
+                    opacity: 0.9
                 }).addTo(wsRefMap);
-                wsFlightPaths.push(flightPath);
-
-                // Draw the 600m Designated Lane (polygon)
-                const laneWidth = 300; // 300m on each side = 600m total
-                const p1Left = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, laneWidth, 'left');
-                const p1Right = offsetPoint(validationLatLng.lat, validationLatLng.lng, refLatLng.lat, refLatLng.lng, laneWidth, 'right');
-                const p2Left = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, laneWidth, 'right');
-                const p2Right = offsetPoint(refLatLng.lat, refLatLng.lng, validationLatLng.lat, validationLatLng.lng, laneWidth, 'left');
-
-                const lane = L.polygon([
-                    p1Left, p1Right, p2Right, p2Left
-                ], {
-                    color: colors[idx % colors.length],
-                    weight: 1,
-                    opacity: 0.5,
-                    fillColor: colors[idx % colors.length],
-                    fillOpacity: 0.15
-                }).addTo(wsRefMap);
-                lane.bindPopup(`<b>Designated Lane ${idx + 1}</b><br>600m wide corridor`);
-                wsFlightLanes.push(lane);
+                centerLine.bindPopup(`<b>Designated Flight Path ${idx + 1}</b><br>Center line of corridor`);
+                wsFlightPaths.push(centerLine);
             });
         }
 
