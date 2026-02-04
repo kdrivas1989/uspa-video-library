@@ -2053,6 +2053,9 @@
                                         <div id="wsFlightTrackMap" style="height: 300px; border-radius: 8px; border: 2px solid #e5e7eb;"></div>
                                         <div class="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-xs">
                                             <span class="flex items-center gap-1"><span class="w-3 h-0.5 bg-purple-600"></span> Flight Track</span>
+                                            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-blue-500 border border-white"></span> Reference Point</span>
+                                            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-green-500 border border-white"></span> Start</span>
+                                            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-red-500 border border-white"></span> End</span>
                                             <span class="flex items-center gap-1"><span class="w-3 h-3 bg-green-500 opacity-60"></span> Safe Lane</span>
                                             <span class="flex items-center gap-1"><span class="w-3 h-3 bg-yellow-500 opacity-60"></span> 10%</span>
                                             <span class="flex items-center gap-1"><span class="w-3 h-3 bg-orange-500 opacity-60"></span> 20%</span>
@@ -4519,11 +4522,11 @@
             vwMarker.bindPopup('<b>Validation Window</b>');
             wsFlightTrackLayers.push(vwMarker);
 
-            // Reference point marker
+            // Reference point marker (blue dot)
             const refMarker = L.circleMarker([refLat, refLng], {
-                radius: 6, fillColor: '#3b82f6', color: '#fff', weight: 2, fillOpacity: 1
+                radius: 10, fillColor: '#3b82f6', color: '#fff', weight: 3, fillOpacity: 1
             }).addTo(wsFlightTrackMap);
-            refMarker.bindPopup('<b>Reference Point</b>');
+            refMarker.bindPopup('<b>Ground Reference Point</b><br>Designated Lane Target');
             wsFlightTrackLayers.push(refMarker);
         }
 
