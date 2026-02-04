@@ -1071,12 +1071,45 @@
                     <p class="text-gray-500 text-sm">
                         The Chief Judge's name will appear as an electronic signature on printed PDF results when verified with their PIN.
                     </p>
+                    <div id="signaturePreviewContainer" class="hidden mt-4 p-3 bg-gray-50 rounded border">
+                        <label class="block text-gray-600 text-sm mb-2">Current Signature</label>
+                        <img id="signaturePreview" class="max-h-16 border border-gray-300 bg-white" alt="Signature">
+                        <button type="button" onclick="openSignatureCreator()" class="mt-2 text-blue-600 hover:text-blue-800 text-sm underline">Edit Signature</button>
+                    </div>
+                    <div id="noSignatureContainer" class="hidden mt-4">
+                        <button type="button" onclick="openSignatureCreator()" class="text-blue-600 hover:text-blue-800 text-sm underline">Create Signature for Selected Chief Judge</button>
+                    </div>
                 </div>
                 <div class="flex justify-end gap-2 mt-6">
                     <button type="button" onclick="hideChiefJudgeModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                     <button type="submit" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white">Save</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Signature Creation Modal -->
+    <div id="signatureModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 w-full max-w-lg mx-4">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Create Signature</h2>
+                <button onclick="closeSignatureModal()" class="text-gray-500 hover:text-gray-700 text-2xl">&times;</button>
+            </div>
+            <p class="text-gray-600 text-sm mb-4">Draw your signature in the box below using your mouse or touch screen.</p>
+
+            <div class="border-2 border-gray-300 rounded bg-white mb-4">
+                <canvas id="signatureCanvas" width="450" height="150" class="w-full cursor-crosshair"></canvas>
+            </div>
+
+            <div class="flex justify-between">
+                <button onclick="clearSignatureCanvas()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400 text-sm">
+                    Clear
+                </button>
+                <div class="flex gap-2">
+                    <button onclick="closeSignatureModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
+                    <button onclick="saveSignature()" class="px-4 py-2 rounded bg-green-600 hover:bg-green-700 text-white">Save Signature</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2954,6 +2987,14 @@
             document.getElementById('bulkEditModal').classList.add('hidden');
         }
 
+        // Signature canvas variables
+        let signatureCanvas = null;
+        let signatureCtx = null;
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let currentSignerUsername = '';
+
         async function showChiefJudgeModal() {
             document.getElementById('chiefJudgeModal').classList.remove('hidden');
 
@@ -2972,17 +3013,191 @@
                     result.signers.forEach(signer => {
                         const option = document.createElement('option');
                         option.value = signer.username;
-                        option.textContent = `${signer.name} (${signer.role === 'admin' ? 'Admin' : 'Chief Judge'})`;
+                        option.dataset.hasSignature = signer.has_signature ? 'true' : 'false';
+                        option.textContent = `${signer.name} (${signer.role === 'admin' ? 'Admin' : 'Chief Judge'})${signer.has_signature ? ' ✓' : ''}`;
                         if (signer.username === '{{ competition.chief_judge or "" }}') {
                             option.selected = true;
                         }
                         select.appendChild(option);
                     });
+
+                    // Add change handler to show/hide signature preview
+                    select.onchange = loadSelectedSignature;
+
+                    // Load signature for currently selected
+                    loadSelectedSignature();
                 } else {
                     noSignersMsg.classList.remove('hidden');
+                    document.getElementById('signaturePreviewContainer').classList.add('hidden');
+                    document.getElementById('noSignatureContainer').classList.add('hidden');
                 }
             } catch (err) {
                 console.error('Error loading signers:', err);
+            }
+        }
+
+        async function loadSelectedSignature() {
+            const select = document.getElementById('chiefJudgeSelect');
+            const username = select.value;
+            const previewContainer = document.getElementById('signaturePreviewContainer');
+            const noSigContainer = document.getElementById('noSignatureContainer');
+
+            if (!username) {
+                previewContainer.classList.add('hidden');
+                noSigContainer.classList.add('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/signature/${username}`);
+                const result = await response.json();
+
+                if (result.success && result.has_signature) {
+                    document.getElementById('signaturePreview').src = result.signature_data;
+                    previewContainer.classList.remove('hidden');
+                    noSigContainer.classList.add('hidden');
+                } else {
+                    previewContainer.classList.add('hidden');
+                    noSigContainer.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.error('Error loading signature:', err);
+                previewContainer.classList.add('hidden');
+                noSigContainer.classList.add('hidden');
+            }
+        }
+
+        function openSignatureCreator() {
+            const select = document.getElementById('chiefJudgeSelect');
+            currentSignerUsername = select.value;
+
+            if (!currentSignerUsername) {
+                alert('Please select a Chief Judge first');
+                return;
+            }
+
+            document.getElementById('signatureModal').classList.remove('hidden');
+            initSignatureCanvas();
+        }
+
+        function closeSignatureModal() {
+            document.getElementById('signatureModal').classList.add('hidden');
+        }
+
+        function initSignatureCanvas() {
+            signatureCanvas = document.getElementById('signatureCanvas');
+            signatureCtx = signatureCanvas.getContext('2d');
+
+            // Clear canvas
+            clearSignatureCanvas();
+
+            // Set drawing style
+            signatureCtx.strokeStyle = '#1a365d';  // Dark blue
+            signatureCtx.lineWidth = 2;
+            signatureCtx.lineCap = 'round';
+            signatureCtx.lineJoin = 'round';
+
+            // Mouse events
+            signatureCanvas.addEventListener('mousedown', startDrawing);
+            signatureCanvas.addEventListener('mousemove', draw);
+            signatureCanvas.addEventListener('mouseup', stopDrawing);
+            signatureCanvas.addEventListener('mouseout', stopDrawing);
+
+            // Touch events
+            signatureCanvas.addEventListener('touchstart', handleTouchStart);
+            signatureCanvas.addEventListener('touchmove', handleTouchMove);
+            signatureCanvas.addEventListener('touchend', stopDrawing);
+        }
+
+        function getCanvasCoords(e) {
+            const rect = signatureCanvas.getBoundingClientRect();
+            const scaleX = signatureCanvas.width / rect.width;
+            const scaleY = signatureCanvas.height / rect.height;
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+
+        function startDrawing(e) {
+            isDrawing = true;
+            const coords = getCanvasCoords(e);
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+
+            const coords = getCanvasCoords(e);
+            signatureCtx.beginPath();
+            signatureCtx.moveTo(lastX, lastY);
+            signatureCtx.lineTo(coords.x, coords.y);
+            signatureCtx.stroke();
+
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousedown', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            signatureCanvas.dispatchEvent(mouseEvent);
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const mouseEvent = new MouseEvent('mousemove', {
+                clientX: touch.clientX,
+                clientY: touch.clientY
+            });
+            signatureCanvas.dispatchEvent(mouseEvent);
+        }
+
+        function clearSignatureCanvas() {
+            if (signatureCtx) {
+                signatureCtx.fillStyle = '#ffffff';
+                signatureCtx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+            }
+        }
+
+        async function saveSignature() {
+            if (!currentSignerUsername) {
+                alert('No user selected');
+                return;
+            }
+
+            // Get canvas data as PNG
+            const signatureData = signatureCanvas.toDataURL('image/png');
+
+            try {
+                const response = await fetch(`/api/signature/${currentSignerUsername}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ signature_data: signatureData })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert('Signature saved successfully!');
+                    closeSignatureModal();
+                    loadSelectedSignature();  // Refresh preview
+                } else {
+                    alert('Error: ' + (result.error || 'Failed to save signature'));
+                }
+            } catch (err) {
+                console.error('Error saving signature:', err);
+                alert('Error saving signature');
             }
         }
 

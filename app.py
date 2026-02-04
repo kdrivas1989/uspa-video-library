@@ -703,6 +703,12 @@ def init_db():
         except:
             pass
 
+        # Add signature_data column if it doesn't exist (stores base64 PNG of signature)
+        try:
+            cursor.execute('ALTER TABLE users ADD COLUMN signature_data TEXT')
+        except:
+            pass
+
         # Video assignments table (for chief judge to assign videos to judges)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS video_assignments (
@@ -5061,9 +5067,58 @@ def get_signers():
             signers.append({
                 'username': user['username'],
                 'name': user['name'],
-                'role': user['role']
+                'role': user['role'],
+                'has_signature': bool(user.get('signature_data'))
             })
     return jsonify({'success': True, 'signers': signers})
+
+
+@app.route('/api/signature/<username>', methods=['GET'])
+def get_signature(username):
+    """Get signature image for a user (returns base64 PNG)."""
+    user = get_user(username)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    signature_data = user.get('signature_data', '')
+    return jsonify({
+        'success': True,
+        'signature_data': signature_data,
+        'has_signature': bool(signature_data)
+    })
+
+
+@app.route('/api/signature/<username>', methods=['POST'])
+def save_signature(username):
+    """Save signature image for a user (base64 PNG data)."""
+    # Only allow users to save their own signature, or admins to save anyone's
+    if session.get('username') != username and session.get('role') != 'admin':
+        return jsonify({'error': 'Not authorized'}), 403
+
+    user = get_user(username)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.json
+    signature_data = data.get('signature_data', '')
+
+    # Validate it looks like base64 PNG data
+    if signature_data and not signature_data.startswith('data:image/png;base64,'):
+        return jsonify({'error': 'Invalid signature format. Must be base64 PNG.'}), 400
+
+    # Update user with signature data
+    user['signature_data'] = signature_data
+
+    if USE_SUPABASE:
+        supabase.table('users').update({'signature_data': signature_data}).eq('username', username).execute()
+    else:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE users SET signature_data = ? WHERE username = ?', (signature_data, username))
+        conn.commit()
+        conn.close()
+
+    return jsonify({'success': True, 'message': 'Signature saved'})
 
 
 @app.route('/admin/competition/<comp_id>/set-chief-judge', methods=['POST'])
@@ -6098,9 +6153,13 @@ def print_competition_pdf(comp_id):
     if chief_judge_name and pin_verified:
         elements.append(Spacer(1, 0.4*inch))
 
+        # Check if user has a drawn signature
+        chief_judge_user = get_user(competition.get('chief_judge', ''))
+        signature_data = chief_judge_user.get('signature_data', '') if chief_judge_user else ''
+
         # Create signature block
         sig_width = 250
-        sig_height = 80
+        sig_height = 100 if signature_data else 80
 
         # Create a drawing for the signature
         d = Drawing(sig_width, sig_height)
@@ -6114,22 +6173,22 @@ def print_competition_pdf(comp_id):
                     fontSize=8, fillColor=colors.Color(0.5, 0.5, 0.5),
                     textAnchor='middle'))
 
+        # Add timestamp
+        d.add(String(sig_width/2, sig_height - 25, f"Electronically signed: {print_datetime}",
+                    fontSize=7, fillColor=colors.Color(0.5, 0.5, 0.5),
+                    textAnchor='middle'))
+
         # Add signature line
         d.add(Line(20, 25, sig_width - 20, 25, strokeColor=colors.Color(0.3, 0.3, 0.3), strokeWidth=0.5))
-
-        # Add the signature name in italic style (simulating handwriting)
-        d.add(String(sig_width/2, 32, chief_judge_name,
-                    fontSize=16, fillColor=colors.Color(0.1, 0.1, 0.4),
-                    textAnchor='middle', fontName='Times-Italic'))
 
         # Add title below signature line
         d.add(String(sig_width/2, 10, "Chief Judge",
                     fontSize=9, fillColor=colors.Color(0.3, 0.3, 0.3),
                     textAnchor='middle'))
 
-        # Add timestamp
-        d.add(String(sig_width/2, sig_height - 25, f"Electronically signed: {print_datetime}",
-                    fontSize=7, fillColor=colors.Color(0.5, 0.5, 0.5),
+        # Add name below title
+        d.add(String(sig_width/2, 2, chief_judge_name,
+                    fontSize=7, fillColor=colors.Color(0.4, 0.4, 0.4),
                     textAnchor='middle'))
 
         # Wrap drawing in a right-aligned table to position it
@@ -6138,6 +6197,33 @@ def print_competition_pdf(comp_id):
             ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
         ]))
         elements.append(sig_table)
+
+        # If user has a drawn signature, add it as an image on top
+        if signature_data:
+            import base64
+            try:
+                # Remove the data URL prefix
+                if signature_data.startswith('data:image/png;base64,'):
+                    base64_data = signature_data.split(',')[1]
+                else:
+                    base64_data = signature_data
+
+                # Decode and create image
+                sig_image_data = base64.b64decode(base64_data)
+                sig_image_buffer = BytesIO(sig_image_data)
+
+                # Create image with reportlab
+                sig_img = Image(sig_image_buffer, width=180, height=45)
+
+                # Add to a right-aligned table
+                sig_img_table = Table([[sig_img]], colWidths=[sig_width])
+                sig_img_table.setStyle(TableStyle([
+                    ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                    ('TOPPADDING', (0, 0), (-1, -1), -60),  # Overlap with signature box
+                ]))
+                elements.append(sig_img_table)
+            except Exception as e:
+                print(f"Error adding signature image to PDF: {e}")
 
     doc.build(elements)
 
