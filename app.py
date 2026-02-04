@@ -49,12 +49,15 @@ try:
     if SUPABASE_URL and SUPABASE_KEY:
         supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
         USE_SUPABASE = True
+        print(f"[STARTUP] Supabase connected: URL={SUPABASE_URL[:30]}...")
     else:
         USE_SUPABASE = False
         supabase = None
-except ImportError:
+        print(f"[STARTUP] Supabase NOT configured - using SQLite. URL={SUPABASE_URL}, KEY={'set' if SUPABASE_KEY else 'not set'}")
+except ImportError as e:
     USE_SUPABASE = False
     supabase = None
+    print(f"[STARTUP] Supabase import failed: {e} - using SQLite")
 
 # Supabase Storage bucket name
 SUPABASE_BUCKET = 'videos'
@@ -1881,6 +1884,37 @@ def clear_completed_conversions():
         for jid in to_remove:
             del conversion_jobs[jid]
     return jsonify({'success': True, 'cleared': len(to_remove)})
+
+
+@app.route('/debug/db-status')
+def debug_db_status():
+    """Debug endpoint to check database connection status."""
+    try:
+        status = {
+            'use_supabase': USE_SUPABASE,
+            'supabase_url': SUPABASE_URL[:30] + '...' if SUPABASE_URL else None,
+            'supabase_key_set': bool(SUPABASE_KEY),
+        }
+
+        if USE_SUPABASE:
+            # Test query
+            result = supabase.table('videos').select('category').execute()
+            categories = {}
+            for v in result.data:
+                cat = v.get('category', 'unknown')
+                categories[cat] = categories.get(cat, 0) + 1
+            status['total_videos'] = len(result.data)
+            status['categories'] = categories
+        else:
+            db = get_sqlite_db()
+            cursor = db.execute('SELECT category, COUNT(*) FROM videos GROUP BY category')
+            categories = {row[0]: row[1] for row in cursor.fetchall()}
+            status['total_videos'] = sum(categories.values())
+            status['categories'] = categories
+
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e), 'use_supabase': USE_SUPABASE}), 500
 
 
 @app.route('/')
