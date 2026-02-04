@@ -1652,7 +1652,8 @@ def detect_category_from_filename(filename):
     detected_event = None
 
     # Check for "indoor" first - it takes priority as main category
-    indoor_patterns = ['indoor', 'wind tunnel', 'windtunnel', 'ifly', 'tunnel']
+    # VFS (Vertical Formation Skydiving) is typically indoor/tunnel
+    indoor_patterns = ['indoor', 'wind tunnel', 'windtunnel', 'ifly', 'tunnel', 'vfs']
     is_indoor = any(pattern in name_lower for pattern in indoor_patterns)
 
     if is_indoor:
@@ -1668,13 +1669,13 @@ def detect_category_from_filename(filename):
         'ws': ['wingsuit', '_ws_', '-ws-', ' ws ', 'ws_', '_ws'],
     }
 
-    # Subcategory detection patterns
+    # Subcategory detection patterns (order matters - more specific first)
     subcategory_patterns = {
         'indoor': {
-            '4way_vfs': ['4way vfs', '4-way vfs', '4wayvfs', 'vfs', 'vertical'],
-            '4way_fs': ['4way', '4-way', '4 way', 'fs4', 'fs 4', 'fs-4'],
-            '2way_vfs': ['2way vfs', '2-way vfs', '2wayvfs'],
+            '2way_vfs': ['2way vfs', '2-way vfs', '2wayvfs', '2 way vfs', 'vfs - 2', 'vfs 2'],
+            '4way_vfs': ['4way vfs', '4-way vfs', '4wayvfs', '4 way vfs', 'vfs - 4', 'vfs 4', 'vfs', 'vertical'],
             '2way_fs': ['2way', '2-way', '2 way', 'mfs', 'fs2', 'fs 2', 'fs-2'],
+            '4way_fs': ['4way', '4-way', '4 way', 'fs4', 'fs 4', 'fs-4'],
             '8way': ['8way', '8-way', '8 way', 'fs8', 'fs 8', 'fs-8'],
         },
         'cp': {
