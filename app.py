@@ -2840,6 +2840,99 @@ def export_urls():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/admin/fetch-vimeo-account', methods=['POST'])
+@admin_required
+def fetch_vimeo_account():
+    """Fetch all videos from a Vimeo account using their API."""
+    data = request.json
+    token = data.get('token', '').strip()
+    folder = data.get('folder', '').strip()
+
+    if not token:
+        return jsonify({'success': False, 'error': 'Access token is required'}), 400
+
+    try:
+        videos = []
+        page = 1
+        per_page = 100  # Max allowed by Vimeo API
+
+        while True:
+            # Build API URL
+            if folder:
+                # If folder specified, try to fetch from that folder/showcase
+                api_url = f"https://api.vimeo.com/me/projects/{folder}/videos?page={page}&per_page={per_page}"
+            else:
+                # Fetch all videos from account
+                api_url = f"https://api.vimeo.com/me/videos?page={page}&per_page={per_page}"
+
+            req = urllib.request.Request(api_url)
+            req.add_header('Authorization', f'Bearer {token}')
+            req.add_header('Accept', 'application/vnd.vimeo.*+json;version=3.4')
+
+            try:
+                with urllib.request.urlopen(req, timeout=30) as response:
+                    result = json.loads(response.read().decode('utf-8'))
+            except urllib.error.HTTPError as e:
+                if e.code == 401:
+                    return jsonify({'success': False, 'error': 'Invalid access token'}), 401
+                elif e.code == 404:
+                    return jsonify({'success': False, 'error': f'Folder "{folder}" not found'}), 404
+                else:
+                    return jsonify({'success': False, 'error': f'Vimeo API error: {e.code}'}), e.code
+
+            # Extract video data
+            for video in result.get('data', []):
+                video_uri = video.get('uri', '')
+                video_id = video_uri.split('/')[-1] if video_uri else ''
+
+                # Get the link - prefer the direct link
+                link = video.get('link', '')
+
+                # Check if video has privacy hash (unlisted videos)
+                privacy = video.get('privacy', {})
+                if privacy.get('view') == 'unlisted':
+                    # For unlisted videos, we need to include the hash
+                    # The hash is in the embed.html field
+                    embed = video.get('embed', {})
+                    embed_html = embed.get('html', '')
+                    # Extract hash from embed URL if available
+                    if 'player.vimeo.com' in embed_html and '?h=' in embed_html:
+                        import re
+                        hash_match = re.search(r'\?h=([a-f0-9]+)', embed_html)
+                        if hash_match:
+                            link = f"https://vimeo.com/{video_id}/{hash_match.group(1)}"
+
+                videos.append({
+                    'id': video_id,
+                    'title': video.get('name', 'Untitled'),
+                    'url': link,
+                    'duration': video.get('duration', 0),
+                    'thumbnail': video.get('pictures', {}).get('sizes', [{}])[-1].get('link', ''),
+                    'created': video.get('created_time', ''),
+                    'privacy': privacy.get('view', 'anybody')
+                })
+
+            # Check if there are more pages
+            paging = result.get('paging', {})
+            if paging.get('next'):
+                page += 1
+            else:
+                break
+
+            # Safety limit
+            if page > 50:
+                break
+
+        return jsonify({
+            'success': True,
+            'videos': videos,
+            'total': len(videos)
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/admin/upload-video', methods=['POST'])
 @admin_required
 def upload_video():

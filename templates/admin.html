@@ -282,6 +282,54 @@ https://www.youtube.com/watch?v=xxxxx"
                 class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"></textarea>
         </div>
 
+        <!-- Fetch from Vimeo Account -->
+        <div class="bg-gray-800 rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4">Fetch Videos from Vimeo Account</h2>
+            <p class="text-gray-400 text-sm mb-4">
+                Connect to your Vimeo account to fetch all video URLs.
+                <a href="https://developer.vimeo.com/apps" target="_blank" class="text-blue-400 hover:underline">Get your access token here</a>
+                (create an app, then generate a personal access token with "public" and "private" scope).
+            </p>
+            <div class="grid md:grid-cols-2 gap-4 mb-4">
+                <div>
+                    <label class="block text-gray-300 mb-2">Vimeo Access Token</label>
+                    <input type="password" id="vimeoAccessToken" placeholder="Enter your Vimeo access token"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <p class="text-xs text-gray-500 mt-1">Token is not stored - only used for this session</p>
+                </div>
+                <div>
+                    <label class="block text-gray-300 mb-2">Folder/Showcase (optional)</label>
+                    <input type="text" id="vimeoFolder" placeholder="Leave empty for all videos"
+                        class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <p class="text-xs text-gray-500 mt-1">Folder ID or showcase name to filter</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4 mb-4">
+                <button type="button" onclick="fetchVimeoVideos()"
+                    class="bg-cyan-600 hover:bg-cyan-700 px-6 py-2 rounded-lg font-semibold transition">
+                    Fetch Vimeo Videos
+                </button>
+                <button type="button" onclick="copyVimeoUrls()"
+                    class="bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg font-semibold transition">
+                    Copy URLs
+                </button>
+                <button type="button" onclick="importVimeoToBulk()"
+                    class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-semibold transition">
+                    Send to Bulk Import
+                </button>
+                <span id="vimeoFetchStatus" class="text-gray-400 text-sm"></span>
+            </div>
+            <div class="mb-2 flex items-center justify-between">
+                <span id="vimeoVideoCount" class="text-gray-400 text-sm"></span>
+                <label class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" id="vimeoIncludeTitles" checked class="rounded bg-gray-700 border-gray-600">
+                    <span class="text-gray-400">Include titles</span>
+                </label>
+            </div>
+            <textarea id="vimeoUrlsOutput" rows="10" readonly placeholder="Enter your Vimeo access token and click 'Fetch Vimeo Videos'..."
+                class="w-full px-4 py-3 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"></textarea>
+        </div>
+
         {% if dropbox_app_key %}
         <!-- Bulk Upload from Dropbox -->
         <div class="bg-gray-800 rounded-lg p-6 mb-8">
@@ -690,6 +738,118 @@ https://www.youtube.com/watch?v=xxxxx"
                 alert('URLs copied to clipboard');
             });
         }
+
+        // ============================================
+        // VIMEO ACCOUNT FETCH FUNCTIONS
+        // ============================================
+
+        let vimeoVideos = [];
+
+        async function fetchVimeoVideos() {
+            const token = document.getElementById('vimeoAccessToken').value.trim();
+            const folder = document.getElementById('vimeoFolder').value.trim();
+            const statusEl = document.getElementById('vimeoFetchStatus');
+            const outputEl = document.getElementById('vimeoUrlsOutput');
+            const countEl = document.getElementById('vimeoVideoCount');
+
+            if (!token) {
+                alert('Please enter your Vimeo access token');
+                return;
+            }
+
+            statusEl.textContent = 'Fetching videos from Vimeo...';
+            outputEl.value = 'Loading...';
+            countEl.textContent = '';
+
+            try {
+                const response = await fetch('/admin/fetch-vimeo-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: token, folder: folder })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    vimeoVideos = result.videos;
+                    displayVimeoVideos();
+                    statusEl.textContent = '';
+                    statusEl.classList.remove('text-red-400');
+                } else {
+                    outputEl.value = 'Error: ' + result.error;
+                    statusEl.textContent = result.error;
+                    statusEl.classList.add('text-red-400');
+                }
+            } catch (err) {
+                outputEl.value = 'Error: ' + err.message;
+                statusEl.textContent = err.message;
+                statusEl.classList.add('text-red-400');
+            }
+        }
+
+        function displayVimeoVideos() {
+            const includeTitles = document.getElementById('vimeoIncludeTitles').checked;
+            const outputEl = document.getElementById('vimeoUrlsOutput');
+            const countEl = document.getElementById('vimeoVideoCount');
+
+            if (vimeoVideos.length === 0) {
+                outputEl.value = 'No videos found in your Vimeo account';
+                countEl.textContent = '0 videos';
+                return;
+            }
+
+            let output;
+            if (includeTitles) {
+                output = vimeoVideos.map(v => `${v.title}\n${v.url}`).join('\n\n');
+            } else {
+                output = vimeoVideos.map(v => v.url).join('\n');
+            }
+
+            outputEl.value = output;
+            countEl.textContent = `${vimeoVideos.length} video${vimeoVideos.length !== 1 ? 's' : ''} found`;
+        }
+
+        function copyVimeoUrls() {
+            const outputEl = document.getElementById('vimeoUrlsOutput');
+            if (!outputEl.value || outputEl.value.includes('Enter your Vimeo') || outputEl.value.includes('Loading')) {
+                alert('Please fetch videos first');
+                return;
+            }
+
+            navigator.clipboard.writeText(outputEl.value).then(() => {
+                const countEl = document.getElementById('vimeoVideoCount');
+                const originalText = countEl.textContent;
+                countEl.textContent = 'Copied to clipboard!';
+                countEl.classList.add('text-green-400');
+                setTimeout(() => {
+                    countEl.textContent = originalText;
+                    countEl.classList.remove('text-green-400');
+                }, 2000);
+            }).catch(err => {
+                outputEl.select();
+                document.execCommand('copy');
+                alert('URLs copied to clipboard');
+            });
+        }
+
+        function importVimeoToBulk() {
+            if (vimeoVideos.length === 0) {
+                alert('Please fetch videos first');
+                return;
+            }
+
+            // Copy just the URLs to the bulk import textarea
+            const urls = vimeoVideos.map(v => v.url).join('\n');
+            document.getElementById('bulkUrlsInput').value = urls;
+
+            // Scroll to the bulk import section
+            document.getElementById('bulkUrlsInput').scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            alert(`${vimeoVideos.length} Vimeo URLs copied to Bulk Import section. Set your category and click Import.`);
+        }
+
+        // Update display when checkbox changes
+        document.getElementById('vimeoIncludeTitles')?.addEventListener('change', displayVimeoVideos);
 
         function handleDragOver(e) {
             e.preventDefault();
