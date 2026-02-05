@@ -53,6 +53,7 @@
                         <th class="px-6 py-3 text-left text-sm font-medium">Name</th>
                         <th class="px-6 py-3 text-left text-sm font-medium">Email</th>
                         <th class="px-6 py-3 text-left text-sm font-medium">Role</th>
+                        <th class="px-6 py-3 text-left text-sm font-medium">Assigned Categories</th>
                         <th class="px-6 py-3 text-center text-sm font-medium">PIN</th>
                         <th class="px-6 py-3 text-right text-sm font-medium">Actions</th>
                     </tr>
@@ -73,6 +74,24 @@
                             {% else %}
                             <span class="bg-gray-600 text-white text-xs px-2 py-1 rounded">Judge</span>
                             {% endif %}
+                        </td>
+                        <td class="px-6 py-4">
+                            {% set assigned = user.assigned_categories|default('')|string %}
+                            {% if assigned and assigned != '' and assigned != '[]' %}
+                                {% set cat_list = assigned|replace('[', '')|replace(']', '')|replace('"', '')|replace("'", '')|split(',') %}
+                                <div class="flex flex-wrap gap-1">
+                                {% for cat_id in cat_list %}
+                                    {% set cat_id = cat_id|trim %}
+                                    {% if cat_id and cat_id in categories %}
+                                    <span class="bg-cyan-600 text-white text-xs px-2 py-0.5 rounded">{{ categories[cat_id].abbrev }}</span>
+                                    {% endif %}
+                                {% endfor %}
+                                </div>
+                            {% else %}
+                                <span class="text-gray-500 text-sm">All</span>
+                            {% endif %}
+                            <button onclick="showAssignCategoriesModal('{{ user.username }}', '{{ user.name }}', '{{ assigned|replace("'", "\\'")|e }}')"
+                                class="text-cyan-400 hover:text-cyan-300 text-xs ml-2">[Edit]</button>
                         </td>
                         <td class="px-6 py-4 text-center">
                             {% if user.signature_pin %}
@@ -260,7 +279,42 @@
         </div>
     </div>
 
+    <!-- Assign Categories Modal -->
+    <div id="assignCategoriesModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">
+            <h2 class="text-xl font-bold mb-2">Assign Categories</h2>
+            <p class="text-gray-400 text-sm mb-4">User: <span id="assignCategoriesUsername" class="text-white font-medium"></span></p>
+            <p class="text-gray-400 text-xs mb-4">Select which categories this judge can access. Leave all unchecked for full access.</p>
+
+            <input type="hidden" id="assignCategoriesUser">
+
+            <div class="space-y-2 max-h-64 overflow-y-auto">
+                {% for cat_id, cat in categories.items() %}
+                {% if cat_id != 'uncategorized' %}
+                <label class="flex items-center gap-3 p-2 rounded hover:bg-gray-700 cursor-pointer">
+                    <input type="checkbox" id="cat_{{ cat_id }}" value="{{ cat_id }}"
+                        class="w-5 h-5 rounded bg-gray-700 border-gray-600 text-cyan-500 focus:ring-cyan-500">
+                    <span class="bg-cyan-600 text-white text-xs px-2 py-0.5 rounded">{{ cat.abbrev }}</span>
+                    <span class="text-white">{{ cat.name }}</span>
+                </label>
+                {% endif %}
+                {% endfor %}
+            </div>
+
+            <div class="flex justify-end gap-3 mt-6">
+                <button type="button" onclick="hideAssignCategoriesModal()" class="px-4 py-2 rounded bg-gray-600 hover:bg-gray-500">
+                    Cancel
+                </button>
+                <button type="button" onclick="saveAssignedCategories()" class="px-4 py-2 rounded bg-cyan-600 hover:bg-cyan-700">
+                    Save Assignments
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        const categories = {{ categories | tojson }};
+
         function showCreateModal() {
             document.getElementById('createModal').classList.remove('hidden');
             document.getElementById('newUsername').value = '';
@@ -294,6 +348,66 @@
                 pinContainer.classList.add('hidden');
             }
         }
+
+        function showAssignCategoriesModal(username, name, assignedJson) {
+            document.getElementById('assignCategoriesModal').classList.remove('hidden');
+            document.getElementById('assignCategoriesUser').value = username;
+            document.getElementById('assignCategoriesUsername').textContent = name + ' (' + username + ')';
+
+            // Uncheck all first
+            for (const catId of Object.keys(categories)) {
+                const checkbox = document.getElementById('cat_' + catId);
+                if (checkbox) checkbox.checked = false;
+            }
+
+            // Parse assigned categories and check them
+            if (assignedJson && assignedJson !== '' && assignedJson !== '[]') {
+                try {
+                    const assigned = JSON.parse(assignedJson);
+                    for (const catId of assigned) {
+                        const checkbox = document.getElementById('cat_' + catId);
+                        if (checkbox) checkbox.checked = true;
+                    }
+                } catch (e) {
+                    console.error('Failed to parse assigned categories:', e);
+                }
+            }
+        }
+
+        function hideAssignCategoriesModal() {
+            document.getElementById('assignCategoriesModal').classList.add('hidden');
+        }
+
+        async function saveAssignedCategories() {
+            const username = document.getElementById('assignCategoriesUser').value;
+
+            // Collect checked categories
+            const selected = [];
+            for (const catId of Object.keys(categories)) {
+                const checkbox = document.getElementById('cat_' + catId);
+                if (checkbox && checkbox.checked) {
+                    selected.push(catId);
+                }
+            }
+
+            try {
+                const response = await fetch('/admin/user/' + username + '/assign-categories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ categories: selected })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    window.location.reload();
+                } else {
+                    alert(result.error || 'Failed to assign categories');
+                }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
 
         function hideEditModal() {
             document.getElementById('editModal').classList.add('hidden');

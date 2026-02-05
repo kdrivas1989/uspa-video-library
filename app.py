@@ -825,6 +825,12 @@ def init_db():
         except:
             pass
 
+        # Add assigned_categories column for judge category restrictions (JSON array)
+        try:
+            cursor.execute('ALTER TABLE users ADD COLUMN assigned_categories TEXT')
+        except:
+            pass
+
         # Video assignments table (for chief judge to assign videos to judges)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS video_assignments (
@@ -1080,6 +1086,7 @@ def save_user(user_data):
     must_change = user_data.get('must_change_password', 0)
     email = user_data.get('email', '')
     signature_pin = user_data.get('signature_pin', '')
+    assigned_categories = user_data.get('assigned_categories', '')
     if USE_SUPABASE:
         # Only send fields that exist in Supabase users table
         supabase_data = {
@@ -1089,7 +1096,8 @@ def save_user(user_data):
             'name': user_data['name'],
             'email': email,
             'must_change_password': must_change,
-            'signature_pin': signature_pin
+            'signature_pin': signature_pin,
+            'assigned_categories': assigned_categories
         }
         existing = supabase.table('users').select('username').eq('username', user_data['username']).execute()
         if existing.data:
@@ -1099,9 +1107,9 @@ def save_user(user_data):
     else:
         db = get_sqlite_db()
         db.execute('''
-            INSERT OR REPLACE INTO users (username, password, role, name, email, must_change_password, signature_pin)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (user_data['username'], user_data['password'], user_data['role'], user_data['name'], email, must_change, signature_pin))
+            INSERT OR REPLACE INTO users (username, password, role, name, email, must_change_password, signature_pin, assigned_categories)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_data['username'], user_data['password'], user_data['role'], user_data['name'], email, must_change, signature_pin, assigned_categories))
         db.commit()
 
 
@@ -2160,6 +2168,25 @@ def favicon():
     """Return empty favicon to avoid 404 errors."""
     return '', 204
 
+def get_user_assigned_categories(username):
+    """Get list of category IDs assigned to a user. Returns None if all categories are allowed."""
+    if not username:
+        return None
+    user = get_user(username)
+    if not user:
+        return None
+    assigned = user.get('assigned_categories', '')
+    if not assigned or assigned == '[]':
+        return None  # No restrictions - can see all categories
+    try:
+        cat_list = json.loads(assigned)
+        if not cat_list:
+            return None
+        return cat_list
+    except:
+        return None
+
+
 @app.route('/')
 def index():
     """Home page showing all categories."""
@@ -2171,6 +2198,11 @@ def index():
     recent_videos = all_videos[:8] if all_videos else []
 
     user_role = session.get('role', '')
+    username = session.get('username')
+
+    # Get assigned categories for the current user (for filtering)
+    assigned_categories = get_user_assigned_categories(username)
+
     return render_template('index.html',
                          categories=CATEGORIES,
                          category_counts=category_counts,
@@ -2179,7 +2211,8 @@ def index():
                          is_chief_judge=has_role('chief_judge'),
                          is_logged_in=bool(session.get('username')),
                          user_name=session.get('name', ''),
-                         user_role=user_role)
+                         user_role=user_role,
+                         assigned_categories=assigned_categories)
 
 
 @app.route('/category/<cat_id>')
@@ -2187,6 +2220,12 @@ def category(cat_id):
     """Show videos in a category."""
     if cat_id not in CATEGORIES:
         return "Category not found", 404
+
+    # Check if user has access to this category
+    username = session.get('username')
+    assigned_categories = get_user_assigned_categories(username)
+    if assigned_categories and cat_id != 'uncategorized' and cat_id not in assigned_categories:
+        return "You don't have access to this category", 403
 
     cat = CATEGORIES[cat_id]
     subcategory = request.args.get('sub')
@@ -2512,6 +2551,7 @@ def admin_users():
     return render_template('admin_users.html',
                          users=users,
                          roles=ROLES,
+                         categories=CATEGORIES,
                          is_admin=True)
 
 
@@ -2596,6 +2636,41 @@ def admin_update_user(username):
 
     save_user(update_data)
     return jsonify({'success': True, 'message': 'User updated'})
+
+
+@app.route('/admin/user/<username>/assign-categories', methods=['POST'])
+@admin_required
+def admin_assign_categories(username):
+    """Assign categories to a judge/user."""
+    user = get_user(username)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.json
+    categories = data.get('categories', [])
+
+    # Validate categories
+    valid_categories = []
+    for cat in categories:
+        if cat in CATEGORIES:
+            valid_categories.append(cat)
+
+    # Store as JSON string
+    assigned_categories = json.dumps(valid_categories) if valid_categories else ''
+
+    # Update user with new category assignments
+    if USE_SUPABASE:
+        supabase.table('users').update({'assigned_categories': assigned_categories}).eq('username', username).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('UPDATE users SET assigned_categories = ? WHERE username = ?', (assigned_categories, username))
+        db.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'Assigned {len(valid_categories)} categories to {username}',
+        'categories': valid_categories
+    })
 
 
 @app.route('/admin/users/sample-csv')
