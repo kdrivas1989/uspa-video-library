@@ -64,8 +64,11 @@
             </div>
             <div class="bg-gray-800 rounded-lg p-6">
                 <p class="text-gray-400 text-sm mb-3">Generate thumbnails for S3 videos (5 at a time)</p>
-                <button onclick="refreshThumbnails()" id="refreshThumbsBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm">
+                <button onclick="refreshThumbnails(true)" id="refreshThumbsBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm">
                     Generate Thumbnails
+                </button>
+                <button onclick="stopThumbnailGeneration()" id="stopThumbsBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm hidden ml-2">
+                    Stop
                 </button>
                 <p id="refreshThumbsMessage" class="text-sm mt-2 hidden"></p>
                 <p id="refreshThumbsProgress" class="text-xs text-gray-500 mt-1 hidden"></p>
@@ -921,14 +924,31 @@
 
         let thumbsProcessed = 0;
         let thumbsTotal = 0;
+        let thumbsRunning = false;
 
-        async function refreshThumbnails(autoContinue = false) {
+        function stopThumbnailGeneration() {
+            thumbsRunning = false;
             const btn = document.getElementById('refreshThumbsBtn');
+            const stopBtn = document.getElementById('stopThumbsBtn');
+            const msgDiv = document.getElementById('refreshThumbsMessage');
+
+            btn.disabled = false;
+            btn.textContent = 'Resume';
+            stopBtn.classList.add('hidden');
+            msgDiv.textContent = `Stopped. ${thumbsProcessed} thumbnails generated so far.`;
+            msgDiv.className = 'text-sm mt-2 text-yellow-400';
+        }
+
+        async function refreshThumbnails(autoContinue = true) {
+            const btn = document.getElementById('refreshThumbsBtn');
+            const stopBtn = document.getElementById('stopThumbsBtn');
             const msgDiv = document.getElementById('refreshThumbsMessage');
             const progressDiv = document.getElementById('refreshThumbsProgress');
 
+            thumbsRunning = true;
             btn.disabled = true;
             btn.textContent = 'Generating...';
+            stopBtn.classList.remove('hidden');
             msgDiv.textContent = 'Downloading videos and generating thumbnails...';
             msgDiv.className = 'text-sm mt-2 text-yellow-400';
             msgDiv.classList.remove('hidden');
@@ -950,18 +970,20 @@
                         console.log('Thumbnail errors:', result.errors);
                     }
 
-                    // Auto-continue if there are more to process
-                    if (result.remaining > 0 && autoContinue) {
+                    // Auto-continue if there are more to process and not stopped
+                    if (result.remaining > 0 && thumbsRunning) {
                         btn.textContent = `Processing... (${result.remaining} left)`;
                         setTimeout(() => refreshThumbnails(true), 1000);
                     } else if (result.remaining > 0) {
                         btn.disabled = false;
-                        btn.textContent = `Continue (${result.remaining} left)`;
-                        btn.onclick = () => refreshThumbnails(true);
+                        btn.textContent = `Resume (${result.remaining} left)`;
+                        stopBtn.classList.add('hidden');
                     } else {
                         btn.disabled = false;
                         btn.textContent = 'Generate Thumbnails';
+                        stopBtn.classList.add('hidden');
                         msgDiv.textContent = `Done! Generated ${thumbsProcessed} thumbnails.`;
+                        thumbsRunning = false;
                     }
                 } else {
                     msgDiv.textContent = result.error || 'Error generating thumbnails';
@@ -969,12 +991,16 @@
                     if (result.trace) console.log('Error trace:', result.trace);
                     btn.disabled = false;
                     btn.textContent = 'Retry';
+                    stopBtn.classList.add('hidden');
+                    thumbsRunning = false;
                 }
             } catch (error) {
                 msgDiv.textContent = 'Error: ' + error.message;
                 msgDiv.className = 'text-sm mt-2 text-red-400';
                 btn.disabled = false;
                 btn.textContent = 'Retry';
+                stopBtn.classList.add('hidden');
+                thumbsRunning = false;
             }
         }
 
