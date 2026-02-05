@@ -4401,16 +4401,19 @@ def delete_score(team_id, score_id):
 @admin_required
 def bulk_move_videos():
     """Move multiple videos to a new category at once."""
+    print(f"[BULK-MOVE] Starting, USE_SUPABASE={USE_SUPABASE}")
     try:
         data = request.json
         if not data:
             return jsonify({'error': 'No data provided'}), 400
     except Exception as e:
+        print(f"[BULK-MOVE] JSON error: {e}")
         return jsonify({'error': f'Invalid JSON: {str(e)}'}), 400
 
     video_ids = data.get('video_ids', [])
     new_category = data.get('category', '')
     new_subcategory = data.get('subcategory', '')
+    print(f"[BULK-MOVE] Moving {len(video_ids)} videos to {new_category}")
 
     if not video_ids:
         return jsonify({'error': 'No videos selected'}), 400
@@ -4422,21 +4425,22 @@ def bulk_move_videos():
     errors = []
     for video_id in video_ids:
         try:
-            video = get_video(video_id)
-            if video:
-                # Update only category fields directly in Supabase
-                if USE_SUPABASE:
-                    supabase.table('videos').update({
-                        'category': new_category,
-                        'subcategory': new_subcategory
-                    }).eq('id', video_id).execute()
-                else:
-                    video['category'] = new_category
-                    video['subcategory'] = new_subcategory
-                    save_video(video)
-                success_count += 1
+            if USE_SUPABASE:
+                supabase.table('videos').update({
+                    'category': new_category,
+                    'subcategory': new_subcategory
+                }).eq('id', video_id).execute()
+            else:
+                db = get_sqlite_db()
+                db.execute('UPDATE videos SET category = ?, subcategory = ? WHERE id = ?',
+                          (new_category, new_subcategory, video_id))
+                db.commit()
+            success_count += 1
         except Exception as e:
+            print(f"[BULK-MOVE] Error on {video_id}: {e}")
             errors.append(f'{video_id}: {str(e)}')
+
+    print(f"[BULK-MOVE] Done: {success_count} moved, {len(errors)} errors")
 
     if errors:
         return jsonify({
