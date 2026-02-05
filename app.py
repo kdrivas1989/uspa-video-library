@@ -649,6 +649,10 @@ def init_db():
             cursor.execute('ALTER TABLE videos ADD COLUMN start_time REAL DEFAULT 0')
         except:
             pass
+        try:
+            cursor.execute('ALTER TABLE videos ADD COLUMN draw TEXT')
+        except:
+            pass
 
         # Competitions tables
         cursor.execute('''
@@ -960,11 +964,17 @@ def find_duplicate_video(title, duration, url=None):
 def save_video(video_data):
     """Save a video to database."""
     if USE_SUPABASE:
+        # Filter to only include core Supabase columns (start_time/draw handled separately)
+        known_columns = {'id', 'title', 'description', 'url', 'thumbnail', 'category',
+                        'subcategory', 'tags', 'duration', 'created_at', 'views',
+                        'video_type', 'local_file', 'event', 'team', 'round_num', 'jump_num'}
+        filtered_data = {k: v for k, v in video_data.items() if k in known_columns}
+
         existing = supabase.table('videos').select('id').eq('id', video_data['id']).execute()
         if existing.data:
-            supabase.table('videos').update(video_data).eq('id', video_data['id']).execute()
+            supabase.table('videos').update(filtered_data).eq('id', video_data['id']).execute()
         else:
-            supabase.table('videos').insert(video_data).execute()
+            supabase.table('videos').insert(filtered_data).execute()
     else:
         db = get_sqlite_db()
         db.execute('''
@@ -4469,8 +4479,19 @@ def set_video_start_time(video_id):
     if start_time < 0:
         start_time = 0
 
-    video['start_time'] = start_time
-    save_video(video)
+    # Update start_time directly in database
+    if USE_SUPABASE:
+        try:
+            supabase.table('videos').update({'start_time': start_time}).eq('id', video_id).execute()
+        except Exception as e:
+            error_msg = str(e)
+            if 'start_time' in error_msg and 'column' in error_msg:
+                return jsonify({'error': 'Please add start_time column (type: float8) to your Supabase videos table'}), 400
+            raise
+    else:
+        db = get_sqlite_db()
+        db.execute('UPDATE videos SET start_time = ? WHERE id = ?', (start_time, video_id))
+        db.commit()
 
     return jsonify({'success': True, 'message': 'Start time saved', 'start_time': start_time})
 
@@ -4526,8 +4547,21 @@ def save_video_draw(video_id):
 
     # Store as JSON string
     import json
-    video['draw'] = json.dumps(draw)
-    save_video(video)
+    draw_json = json.dumps(draw)
+
+    # Update draw directly in database
+    if USE_SUPABASE:
+        try:
+            supabase.table('videos').update({'draw': draw_json}).eq('id', video_id).execute()
+        except Exception as e:
+            error_msg = str(e)
+            if 'draw' in error_msg and 'column' in error_msg:
+                return jsonify({'error': 'Please add draw column (type: text) to your Supabase videos table'}), 400
+            raise
+    else:
+        db = get_sqlite_db()
+        db.execute('UPDATE videos SET draw = ? WHERE id = ?', (draw_json, video_id))
+        db.commit()
 
     return jsonify({'success': True, 'message': 'Draw saved'})
 
