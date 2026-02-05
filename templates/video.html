@@ -76,9 +76,13 @@
             <!-- Main Video Area with Draw Panel -->
             <div class="flex gap-4">
                 <!-- Draw Panel (Left Side) -->
-                <div id="drawPanel" class="hidden w-20 flex-shrink-0">
+                <div id="drawPanel" class="hidden w-24 flex-shrink-0">
                     <div class="bg-gray-800 rounded-lg p-2 sticky top-20">
-                        <div class="text-center text-xs text-gray-400 mb-2 font-medium">DRAW</div>
+                        <div class="text-center text-xs text-gray-400 mb-1 font-medium">DRAW</div>
+                        <div id="drawPointsDisplay" class="text-center mb-2 p-1 bg-gray-700 rounded">
+                            <span class="text-cyan-400 font-bold text-sm" id="drawTotalPoints">0</span>
+                            <span class="text-gray-400 text-xs">pts</span>
+                        </div>
                         <div id="drawPanelList" class="space-y-1">
                             <!-- Formations will be listed here -->
                         </div>
@@ -5207,6 +5211,7 @@
         function updateDrawPanel() {
             const panel = document.getElementById('drawPanel');
             const list = document.getElementById('drawPanelList');
+            const pointsDisplay = document.getElementById('drawTotalPoints');
 
             if (videoDraw.length === 0) {
                 panel.classList.add('hidden');
@@ -5214,6 +5219,20 @@
             }
 
             panel.classList.remove('hidden');
+
+            // Calculate total points
+            let totalPoints = 0;
+            const formationsWithPoints = videoDraw.map(f => {
+                const isBlock = /^\d+$/.test(f);
+                const points = isBlock ? 2 : 1;
+                totalPoints += points;
+                return { formation: f, points, isBlock };
+            });
+
+            // Update points display
+            if (pointsDisplay) {
+                pointsDisplay.textContent = totalPoints;
+            }
 
             list.innerHTML = videoDraw.map((f, i) => {
                 let bgClass = 'bg-gray-700';
@@ -5235,13 +5254,14 @@
                     textClass = 'text-white';
                 }
 
-                const isBlock = f.match(/^\d+$/);
+                const isBlock = /^\d+$/.test(f);
+                const pts = isBlock ? 2 : 1;
 
                 return `
                     <div class="flex items-center gap-1" id="drawItem_${i}">
                         <span class="text-xs text-gray-500 w-4">${i + 1}</span>
-                        <div class="flex-1 text-center py-1 rounded ${bgClass} ${textClass} ${borderClass} font-mono text-sm transition-all duration-200">
-                            ${f}
+                        <div class="flex-1 text-center py-1 rounded ${bgClass} ${textClass} ${borderClass} font-mono text-xs transition-all duration-200">
+                            ${f}<span class="text-[10px] opacity-60 ml-0.5">${pts}</span>
                         </div>
                     </div>
                 `;
