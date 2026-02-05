@@ -4506,6 +4506,14 @@ def bulk_set_event():
     })
 
 
+def get_ffmpeg_path():
+    """Get path to ffmpeg binary - checks custom location first, then system."""
+    custom_path = '/opt/render/project/src/bin/ffmpeg'
+    if os.path.exists(custom_path):
+        return custom_path
+    return 'ffmpeg'  # Use system ffmpeg
+
+
 def generate_thumbnail_from_s3_video(video_url, video_id):
     """Generate thumbnail from S3 video URL using ffmpeg (streams directly, no full download)."""
     import tempfile
@@ -4514,6 +4522,7 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
         return None
 
     temp_thumb = None
+    ffmpeg = get_ffmpeg_path()
 
     try:
         # Create temp file for thumbnail
@@ -4521,15 +4530,15 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
         temp_thumb.close()
 
         # Use ffmpeg to read directly from URL (streams only what's needed)
-        print(f"[THUMB] Generating thumbnail for {video_id}...")
+        print(f"[THUMB] Generating thumbnail for {video_id} using {ffmpeg}...")
         result = subprocess.run([
-            'ffmpeg', '-y',
+            ffmpeg, '-y',
             '-ss', '2',  # Seek to 2 seconds BEFORE opening (faster)
             '-i', video_url,
             '-vframes', '1',
             '-vf', 'scale=320:-1',
             temp_thumb.name
-        ], capture_output=True, timeout=15)
+        ], capture_output=True, timeout=30)
 
         if result.returncode != 0:
             print(f"[THUMB] FFmpeg error for {video_id}: {result.stderr.decode()[:200]}")
@@ -4578,12 +4587,13 @@ def refresh_thumbnails():
         return jsonify({'error': 'This feature requires S3 to be configured'}), 400
 
     # Check if ffmpeg is available
+    ffmpeg = get_ffmpeg_path()
     try:
-        result = subprocess.run(['ffmpeg', '-version'], capture_output=True, timeout=5)
+        result = subprocess.run([ffmpeg, '-version'], capture_output=True, timeout=5)
         if result.returncode != 0:
-            return jsonify({'error': 'ffmpeg not available on server'}), 500
+            return jsonify({'error': f'ffmpeg not available at {ffmpeg}'}), 500
     except FileNotFoundError:
-        return jsonify({'error': 'ffmpeg is not installed on this server'}), 500
+        return jsonify({'error': f'ffmpeg not found at {ffmpeg}. Run build.sh first.'}), 500
     except Exception as e:
         return jsonify({'error': f'ffmpeg check failed: {str(e)}'}), 500
 
