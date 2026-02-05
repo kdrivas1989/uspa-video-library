@@ -3998,6 +3998,54 @@ def fix_duplicates():
     })
 
 
+def extract_title_pattern(title):
+    """Extract a pattern from a video title for matching similar videos.
+
+    Examples:
+    - "4-Way FS Round 1 Team Alpha" -> matches "4-Way FS Round 2 Team Alpha"
+    - "Team Beta - Rd 3 - 4way" -> matches "Team Beta - Rd 1 - 4way"
+    - "Nationals 2024 - FS Open - Jump 5" -> matches "Nationals 2024 - FS Open - Jump 1"
+    """
+    import re
+
+    # Normalize the title
+    normalized = title.lower().strip()
+
+    # Replace round/jump numbers with a placeholder
+    # Match patterns like: round 1, rd 1, r1, jump 1, j1, #1, etc.
+    pattern = re.sub(r'\b(round|rd|r|jump|j|draw|d|#)\s*(\d+)\b', r'\1 {NUM}', normalized, flags=re.IGNORECASE)
+    pattern = re.sub(r'\b(\d+)\s*(round|rd|r|jump|j|draw|d)\b', r'{NUM} \2', pattern, flags=re.IGNORECASE)
+
+    # Also replace standalone numbers that look like round numbers (1-20)
+    pattern = re.sub(r'\b([1-9]|1[0-9]|20)\b', '{NUM}', pattern)
+
+    return pattern
+
+
+def find_similar_uncategorized_videos(title, exclude_id=None):
+    """Find uncategorized videos with similar title patterns."""
+    pattern = extract_title_pattern(title)
+    if not pattern or pattern == title.lower():
+        return []
+
+    all_videos = get_all_videos()
+    similar = []
+
+    for video in all_videos:
+        # Skip if not uncategorized or is the same video
+        if video.get('category') != 'uncategorized':
+            continue
+        if exclude_id and video.get('id') == exclude_id:
+            continue
+
+        # Check if this video's title matches the pattern
+        video_pattern = extract_title_pattern(video.get('title', ''))
+        if video_pattern == pattern:
+            similar.append(video)
+
+    return similar
+
+
 @app.route('/admin/edit-video/<video_id>', methods=['POST'])
 @admin_required
 def edit_video(video_id):
@@ -4008,9 +4056,12 @@ def edit_video(video_id):
     if not video:
         return jsonify({'error': 'Video not found'}), 404
 
-    # Check if category is being manually changed
+    old_category = video.get('category', 'uncategorized')
     new_category = data.get('category')
-    if new_category and new_category != video.get('category'):
+    new_subcategory = data.get('subcategory', '')
+
+    # Check if category is being manually changed
+    if new_category and new_category != old_category:
         video['category_auto'] = False  # Mark as manually categorized
 
     video['title'] = data.get('title', video['title']).strip()
@@ -4022,6 +4073,27 @@ def edit_video(video_id):
     video['event'] = data.get('event', video.get('event', '')).strip()
 
     save_video(video)
+
+    # Auto-move similar videos if moving from uncategorized to a category
+    auto_moved = 0
+    if old_category == 'uncategorized' and new_category and new_category != 'uncategorized':
+        similar_videos = find_similar_uncategorized_videos(video['title'], exclude_id=video_id)
+        for similar in similar_videos:
+            similar['category'] = new_category
+            similar['subcategory'] = new_subcategory
+            similar['category_auto'] = False  # Mark as manually categorized
+            # Also copy the event if set
+            if video.get('event'):
+                similar['event'] = video['event']
+            save_video(similar)
+            auto_moved += 1
+
+    if auto_moved > 0:
+        return jsonify({
+            'success': True,
+            'message': f'Video updated. Also moved {auto_moved} similar video(s) to the same category.',
+            'auto_moved': auto_moved
+        })
 
     return jsonify({'success': True, 'message': 'Video updated'})
 
