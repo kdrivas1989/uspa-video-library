@@ -4550,9 +4550,11 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
         ], capture_output=True, timeout=30)
 
         if result.returncode != 0:
-            err = result.stderr.decode()[:150]
+            stderr = result.stderr.decode()
+            # Get last 200 chars where actual error is
+            err = stderr[-200:] if len(stderr) > 200 else stderr
             print(f"[THUMB] FFmpeg error for {video_id}: {err}")
-            return None, f"ffmpeg: {err}"
+            return None, f"{err}"
 
         # Check if thumbnail was created
         if not os.path.exists(temp_thumb.name) or os.path.getsize(temp_thumb.name) == 0:
