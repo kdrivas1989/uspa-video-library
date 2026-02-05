@@ -530,6 +530,7 @@
         async function bulkMove() {
             const newCategory = document.getElementById('bulkCategory').value;
             const newSubcategory = document.getElementById('bulkSubcategory').value;
+            const moveBtn = document.querySelector('button[onclick="bulkMove()"]');
 
             if (!newCategory) {
                 alert('Please select a category');
@@ -550,6 +551,10 @@
                 return;
             }
 
+            // Show progress
+            moveBtn.disabled = true;
+            moveBtn.innerHTML = `<span class="flex items-center gap-2"><svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Moving...</span>`;
+
             try {
                 const response = await fetch('/admin/bulk-move-videos', {
                     method: 'POST',
@@ -560,15 +565,34 @@
                         subcategory: newSubcategory
                     })
                 });
+
+                // Check if response is JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    throw new Error('Server returned non-JSON response: ' + text.substring(0, 100));
+                }
+
                 const result = await response.json();
                 if (result.success) {
-                    alert(result.message);
-                    location.reload();
+                    moveBtn.innerHTML = `Moved ${result.moved_count}!`;
+                    moveBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    moveBtn.classList.add('bg-blue-600');
+                    if (result.errors && result.errors.length > 0) {
+                        console.error('Move errors:', result.errors);
+                        alert(`${result.message}\n\nErrors:\n${result.errors.join('\n')}`);
+                    }
+                    setTimeout(() => location.reload(), 1000);
                 } else {
+                    moveBtn.disabled = false;
+                    moveBtn.innerHTML = 'Move';
                     alert(result.error || 'Failed to move videos');
                 }
             } catch (err) {
+                moveBtn.disabled = false;
+                moveBtn.innerHTML = 'Move';
                 alert('Error: ' + err.message);
+                console.error('Move error:', err);
             }
         }
 

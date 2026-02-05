@@ -4401,7 +4401,13 @@ def delete_score(team_id, score_id):
 @admin_required
 def bulk_move_videos():
     """Move multiple videos to a new category at once."""
-    data = request.json
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Invalid JSON: {str(e)}'}), 400
+
     video_ids = data.get('video_ids', [])
     new_category = data.get('category', '')
     new_subcategory = data.get('subcategory', '')
@@ -4413,13 +4419,32 @@ def bulk_move_videos():
         return jsonify({'error': 'No category specified'}), 400
 
     success_count = 0
+    errors = []
     for video_id in video_ids:
-        video = get_video(video_id)
-        if video:
-            video['category'] = new_category
-            video['subcategory'] = new_subcategory
-            save_video(video)
-            success_count += 1
+        try:
+            video = get_video(video_id)
+            if video:
+                # Update only category fields directly in Supabase
+                if USE_SUPABASE:
+                    supabase.table('videos').update({
+                        'category': new_category,
+                        'subcategory': new_subcategory
+                    }).eq('id', video_id).execute()
+                else:
+                    video['category'] = new_category
+                    video['subcategory'] = new_subcategory
+                    save_video(video)
+                success_count += 1
+        except Exception as e:
+            errors.append(f'{video_id}: {str(e)}')
+
+    if errors:
+        return jsonify({
+            'success': success_count > 0,
+            'message': f'Moved {success_count} video(s), {len(errors)} failed',
+            'moved_count': success_count,
+            'errors': errors
+        })
 
     return jsonify({
         'success': True,
