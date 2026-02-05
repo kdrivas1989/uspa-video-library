@@ -219,6 +219,14 @@ DROPBOX_APP_KEY = os.environ.get('DROPBOX_APP_KEY', '')
 ADMIN_PIN = os.environ.get('ADMIN_PIN', '1234')  # Default PIN for dangerous operations
 CHIEF_JUDGE_PIN = os.environ.get('CHIEF_JUDGE_PIN', '9999')  # PIN for Chief Judge to approve scores
 
+# Custom Jinja2 filter for split
+@app.template_filter('split')
+def split_filter(value, separator=','):
+    """Split a string by separator."""
+    if not value:
+        return []
+    return [x.strip() for x in str(value).split(separator) if x.strip()]
+
 # Event type display names mapping
 EVENT_DISPLAY_NAMES = {
     'fs_4way_fs': '4-Way FS',
