@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ video.title }} - KD Video Library</title>
+    <title>{{ video.title }} - Video Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
@@ -12,7 +12,7 @@
 <body class="bg-gray-900 text-white min-h-screen">
     <nav id="mainNav" class="bg-gray-800 p-4 sticky top-0 z-10 transition-all duration-300">
         <div class="container mx-auto flex justify-between items-center">
-            <a href="/" class="text-2xl font-bold text-blue-400">KD Video Library</a>
+            <a href="/" class="text-2xl font-bold text-blue-400">Video Library</a>
             <div class="flex items-center gap-4">
                 <form action="/search" method="GET" class="flex">
                     <input type="text" name="q" placeholder="Search videos..."
@@ -1010,7 +1010,7 @@
 
     <footer class="bg-gray-800 mt-12 py-8">
         <div class="container mx-auto px-4 text-center text-gray-400">
-            <p>KD Video Library - Competition footage for judges and competitors</p>
+            <p>Video Library - Competition footage for judges and competitors</p>
             <p class="text-sm mt-2 text-gray-500">Keyboard: Space = Play/Pause | ,/. = Frame step | ←/→ = 0.1s step | 1-4 = Speed (25%-100%) | H = Hide/Show Nav</p>
             <p class="text-sm mt-1 text-gray-500">Scoring: X = Start/Point (+1) | C = Bust (0 pts) | Q = Omission (-1) | P = →Point | B = →Bust | N = NV</p>
         </div>
@@ -4872,7 +4872,7 @@
                 const result = await response.json();
                 if (result.success) {
                     document.getElementById('videoTitle').textContent = newTitle;
-                    document.title = newTitle + ' - KD Video Library';
+                    document.title = newTitle + ' - Video Library';
                     hideEditTitleModal();
                 } else {
                     alert(result.error || 'Failed to rename video');
