@@ -1171,6 +1171,44 @@
                     checkReplayAutoStart(video.currentTime);
                 }
             });
+            // Pause timer when video pauses
+            video.addEventListener('pause', () => {
+                if (timerRunning && timerInterval) {
+                    clearInterval(timerInterval);
+                    timerInterval = null;
+                    document.getElementById('timerStatus').textContent = 'Paused';
+                    document.getElementById('timerStatus').classList.remove('text-green-400');
+                    document.getElementById('timerStatus').classList.add('text-yellow-400');
+                }
+            });
+            // Resume timer when video plays
+            video.addEventListener('play', () => {
+                if (timerRunning && !timerInterval) {
+                    // Resume the timer interval
+                    document.getElementById('timerStatus').textContent = 'Running';
+                    document.getElementById('timerStatus').classList.remove('text-yellow-400');
+                    document.getElementById('timerStatus').classList.add('text-green-400');
+                    timerInterval = setInterval(() => {
+                        elapsedTime = (video.currentTime - timerVideoStartTime) * 1000;
+                        if (isSpeedEvent) {
+                            updateSpeedDisplay();
+                        } else if (isCountUpEvent) {
+                            updateCountUpDisplay();
+                        } else {
+                            const duration = getEventDuration();
+                            timeRemaining = Math.max(0, duration - Math.floor(elapsedTime / 1000));
+                            updateRunningTimeDisplay();
+                            if (timeRemaining <= 0) {
+                                video.pause();
+                                stopTimer();
+                                document.getElementById('timerStatus').textContent = 'Time!';
+                                document.getElementById('timerStatus').classList.remove('text-green-400');
+                                document.getElementById('timerStatus').classList.add('text-yellow-400');
+                            }
+                        }
+                    }, 100);
+                }
+            });
         }
 
         // Check for replay auto-start on Vimeo videos
