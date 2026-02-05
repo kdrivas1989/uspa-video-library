@@ -941,9 +941,49 @@
                     {% if video.duration %}
                     <span>{{ video.duration }}</span>
                     {% endif %}
-                    <span>{{ video.views }} views</span>
                     <span>{{ video.created_at[:10] }}</span>
                 </div>
+
+                <!-- Categorization Panel (shown for uncategorized videos) -->
+                {% if video.category == 'uncategorized' and (is_admin or is_event_judge) %}
+                <div class="bg-yellow-900/30 border border-yellow-700 rounded-lg p-4 mb-6">
+                    <div class="flex items-center gap-2 mb-3">
+                        <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                        <span class="text-yellow-500 font-medium">This video is uncategorized</span>
+                    </div>
+                    <div class="flex flex-wrap items-end gap-3">
+                        <div>
+                            <label class="block text-gray-400 text-xs mb-1">Category</label>
+                            <select id="videoCategorySelect" onchange="updateSubcategoryOptions()" class="px-3 py-2 rounded bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                                <option value="">Select category...</option>
+                                {% for cat_id, cat in categories.items() %}
+                                {% if cat_id != 'uncategorized' %}
+                                <option value="{{ cat_id }}">{{ cat.name }} ({{ cat.abbrev }})</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-gray-400 text-xs mb-1">Subcategory</label>
+                            <select id="videoSubcategorySelect" class="px-3 py-2 rounded bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
+                                <option value="">None</option>
+                            </select>
+                        </div>
+                        <button onclick="categorizeVideo()" class="px-4 py-2 bg-yellow-600 hover:bg-yellow-700 rounded text-sm font-medium">
+                            Categorize
+                        </button>
+                        <button onclick="autoCategorizeFromFilename()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm font-medium" title="Auto-detect category from video title">
+                            Auto-detect
+                        </button>
+                        <button onclick="categorizeAllInFolder()" class="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm font-medium" title="Categorize all videos in same folder with same pattern">
+                            Categorize Folder
+                        </button>
+                    </div>
+                    <p id="categorizeStatus" class="text-sm mt-2 hidden"></p>
+                </div>
+                {% endif %}
 
                 {% if video.description %}
                 <div class="bg-gray-800 rounded-lg p-6 mb-6">
@@ -5132,6 +5172,192 @@
 
         // Load draw when page loads
         loadVideoDraw();
+
+        // ===== Video Categorization Functions =====
+        const categoriesData = {{ categories|tojson|safe }};
+
+        function updateSubcategoryOptions() {
+            const categorySelect = document.getElementById('videoCategorySelect');
+            const subcatSelect = document.getElementById('videoSubcategorySelect');
+            if (!categorySelect || !subcatSelect) return;
+
+            const catId = categorySelect.value;
+            subcatSelect.innerHTML = '<option value="">None</option>';
+
+            if (catId && categoriesData[catId] && categoriesData[catId].subcategories) {
+                for (const sub of categoriesData[catId].subcategories) {
+                    const option = document.createElement('option');
+                    option.value = sub.id;
+                    option.textContent = sub.name;
+                    subcatSelect.appendChild(option);
+                }
+            }
+        }
+
+        async function categorizeVideo() {
+            const categorySelect = document.getElementById('videoCategorySelect');
+            const subcatSelect = document.getElementById('videoSubcategorySelect');
+            const statusEl = document.getElementById('categorizeStatus');
+
+            const category = categorySelect?.value;
+            const subcategory = subcatSelect?.value || '';
+
+            if (!category) {
+                alert('Please select a category');
+                return;
+            }
+
+            statusEl.textContent = 'Saving...';
+            statusEl.classList.remove('hidden', 'text-green-400', 'text-red-400');
+            statusEl.classList.add('text-yellow-400');
+
+            try {
+                const response = await fetch('/admin/edit-video/{{ video.id }}', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: '{{ video.title|replace("'", "\\'")|replace("\n", " ") }}',
+                        category: category,
+                        subcategory: subcategory,
+                        event: '{{ video.event|default("", true) }}'
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    let msg = 'Video categorized successfully!';
+                    if (result.auto_moved > 0) {
+                        msg += ` Also moved ${result.auto_moved} similar video(s).`;
+                    }
+                    statusEl.textContent = msg;
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-green-400');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    statusEl.textContent = 'Error: ' + (result.error || 'Failed to categorize');
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-red-400');
+                }
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+                statusEl.classList.remove('text-yellow-400');
+                statusEl.classList.add('text-red-400');
+            }
+        }
+
+        async function autoCategorizeFromFilename() {
+            const statusEl = document.getElementById('categorizeStatus');
+            statusEl.textContent = 'Detecting category from filename...';
+            statusEl.classList.remove('hidden', 'text-green-400', 'text-red-400');
+            statusEl.classList.add('text-yellow-400');
+
+            try {
+                const response = await fetch('/admin/auto-categorize', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_ids: ['{{ video.id }}'],
+                        scope: 'selected'
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success && result.categorized > 0) {
+                    statusEl.textContent = 'Category detected! Reloading...';
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-green-400');
+                    setTimeout(() => location.reload(), 1000);
+                } else {
+                    statusEl.textContent = 'Could not auto-detect category from filename';
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-red-400');
+                }
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+                statusEl.classList.remove('text-yellow-400');
+                statusEl.classList.add('text-red-400');
+            }
+        }
+
+        async function categorizeAllInFolder() {
+            const categorySelect = document.getElementById('videoCategorySelect');
+            const subcatSelect = document.getElementById('videoSubcategorySelect');
+            const statusEl = document.getElementById('categorizeStatus');
+
+            const category = categorySelect?.value;
+            const subcategory = subcatSelect?.value || '';
+
+            if (!category) {
+                alert('Please select a category first');
+                return;
+            }
+
+            const videoEvent = '{{ video.event|default("", true) }}';
+            if (!videoEvent) {
+                alert('This video is not in a folder/event. Use "Categorize" for single video or "Auto-detect" to try filename matching.');
+                return;
+            }
+
+            if (!confirm(`Categorize all videos in folder "${videoEvent}" to ${categoriesData[category]?.name || category}?`)) {
+                return;
+            }
+
+            statusEl.textContent = 'Categorizing folder...';
+            statusEl.classList.remove('hidden', 'text-green-400', 'text-red-400');
+            statusEl.classList.add('text-yellow-400');
+
+            try {
+                // First get all videos in this folder
+                const searchResponse = await fetch('/api/videos-by-event?event=' + encodeURIComponent(videoEvent));
+                const searchResult = await searchResponse.json();
+
+                if (!searchResult.success || !searchResult.videos || searchResult.videos.length === 0) {
+                    statusEl.textContent = 'No videos found in this folder';
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-red-400');
+                    return;
+                }
+
+                // Get uncategorized videos only
+                const uncategorizedIds = searchResult.videos
+                    .filter(v => v.category === 'uncategorized')
+                    .map(v => v.id);
+
+                if (uncategorizedIds.length === 0) {
+                    statusEl.textContent = 'All videos in this folder are already categorized';
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-green-400');
+                    return;
+                }
+
+                // Move all uncategorized videos
+                const moveResponse = await fetch('/admin/bulk-move-videos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_ids: uncategorizedIds,
+                        category: category,
+                        subcategory: subcategory
+                    })
+                });
+
+                const moveResult = await moveResponse.json();
+                if (moveResult.success) {
+                    statusEl.textContent = `Categorized ${moveResult.moved_count} video(s) in folder!`;
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-green-400');
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    statusEl.textContent = 'Error: ' + (moveResult.error || 'Failed to categorize folder');
+                    statusEl.classList.remove('text-yellow-400');
+                    statusEl.classList.add('text-red-400');
+                }
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+                statusEl.classList.remove('text-yellow-400');
+                statusEl.classList.add('text-red-400');
+            }
+        }
     </script>
 
     <!-- Bust Reasons Modal (fixed position, outside all other containers) -->

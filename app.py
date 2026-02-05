@@ -2208,6 +2208,7 @@ def video(video_id):
     return render_template('video.html',
                          video=video,
                          category=cat,
+                         categories=CATEGORIES,
                          related_videos=related_videos,
                          competition_context=competition_context,
                          is_admin=session.get('role') == 'admin',
@@ -4282,6 +4283,23 @@ def set_video_start_time(video_id):
     save_video(video)
 
     return jsonify({'success': True, 'message': 'Start time saved', 'start_time': start_time})
+
+
+@app.route('/api/videos-by-event')
+def api_videos_by_event():
+    """Get all videos in a specific event/folder."""
+    event = request.args.get('event', '').strip()
+    if not event:
+        return jsonify({'success': False, 'error': 'Event name required'}), 400
+
+    all_videos = get_all_videos()
+    videos = [v for v in all_videos if v.get('event', '') == event]
+
+    return jsonify({
+        'success': True,
+        'videos': videos,
+        'total': len(videos)
+    })
 
 
 @app.route('/video/<video_id>/draw', methods=['GET'])
