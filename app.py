@@ -4523,11 +4523,12 @@ def get_ffmpeg_path():
 
 
 def generate_thumbnail_from_s3_video(video_url, video_id):
-    """Generate thumbnail from S3 video URL using ffmpeg (streams directly, no full download)."""
+    """Generate thumbnail from S3 video URL using ffmpeg (streams directly, no full download).
+    Returns (thumbnail_url, error_message) tuple."""
     import tempfile
 
     if not USE_S3:
-        return None
+        return None, "S3 not configured"
 
     temp_thumb = None
     ffmpeg = get_ffmpeg_path()
@@ -4549,13 +4550,14 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
         ], capture_output=True, timeout=30)
 
         if result.returncode != 0:
-            print(f"[THUMB] FFmpeg error for {video_id}: {result.stderr.decode()[:200]}")
-            return None
+            err = result.stderr.decode()[:150]
+            print(f"[THUMB] FFmpeg error for {video_id}: {err}")
+            return None, f"ffmpeg: {err}"
 
         # Check if thumbnail was created
         if not os.path.exists(temp_thumb.name) or os.path.getsize(temp_thumb.name) == 0:
             print(f"[THUMB] Thumbnail file not created or empty for {video_id}")
-            return None
+            return None, "Empty output"
 
         # Upload thumbnail to S3
         with open(temp_thumb.name, 'rb') as f:
@@ -4566,15 +4568,16 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
 
         if thumb_url:
             print(f"[THUMB] Uploaded: {thumb_url}")
+            return thumb_url, None
 
-        return thumb_url
+        return None, "S3 upload failed"
 
     except subprocess.TimeoutExpired:
         print(f"[THUMB] Timeout for {video_id}")
-        return None
+        return None, "Timeout"
     except Exception as e:
         print(f"[THUMB] Error for {video_id}: {e}")
-        return None
+        return None, str(e)
     finally:
         # Clean up temp file
         try:
@@ -4629,12 +4632,13 @@ def refresh_thumbnails():
                 continue
 
             thumbnail = None
+            err_msg = None
 
             # S3/CloudFront videos - generate thumbnail
             if 's3.' in url or 'cloudfront' in url or (AWS_S3_BUCKET and AWS_S3_BUCKET in url):
-                thumbnail = generate_thumbnail_from_s3_video(url, video_id)
+                thumbnail, err_msg = generate_thumbnail_from_s3_video(url, video_id)
                 if not thumbnail:
-                    errors.append(f"{video_id}: Failed to generate")
+                    errors.append(f"{video_id}: {err_msg or 'Unknown error'}")
             # Vimeo
             elif 'vimeo.com' in url:
                 meta = fetch_vimeo_metadata(url)
