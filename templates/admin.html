@@ -696,6 +696,7 @@
                 // Use folder-detected values, or fall back to manual inputs
                 const eventToUse = fileEvent || manualEvent;
                 const categoryToUse = fileCategory || manualCategory;
+                const willAutoDetect = !categoryToUse;
 
                 progressDiv.innerHTML = `
                     <div class="flex items-center gap-3">
@@ -706,18 +707,20 @@
                         ${uploaded} uploaded, ${failed} failed
                         ${eventToUse ? `<span class="text-cyan-400 ml-2">Event: ${eventToUse}</span>` : ''}
                         ${categoryToUse ? `<span class="text-green-400 ml-2">Category: ${categoryToUse}</span>` : ''}
+                        ${willAutoDetect ? `<span class="text-yellow-400 ml-2">Auto-detecting from filename...</span>` : ''}
                     </div>
                 `;
 
                 const formData = new FormData();
                 formData.append('file', file);
-                formData.append('category', categoryToUse);
+                formData.append('category', categoryToUse || '');  // Empty string triggers auto-detect
                 formData.append('subcategory', manualSubcategory);
                 formData.append('event', eventToUse);
                 formData.append('title', file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
                 formData.append('background', 'true');
-                if (categoryToUse) {
-                    formData.append('folder_name', categoryToUse);
+                // Always send folder_name if we have one - helps with detection
+                if (fileCategory) {
+                    formData.append('folder_name', fileCategory);
                 }
 
                 const ext = file.name.split('.').pop().toLowerCase();
