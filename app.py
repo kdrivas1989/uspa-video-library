@@ -3816,6 +3816,137 @@ def s3_status():
     })
 
 
+@app.route('/admin/migrate-to-s3', methods=['POST'])
+@admin_required
+def migrate_to_s3():
+    """Migrate existing videos to AWS S3."""
+    if not USE_S3:
+        return jsonify({'error': 'S3 is not configured'}), 400
+
+    import requests
+    import socket
+
+    videos = get_all_videos()
+
+    # Filter videos that need migration (not already on S3, have a valid URL)
+    to_migrate = []
+    for v in videos:
+        video_type = v.get('video_type', 'url')
+        url = v.get('url', '')
+
+        # Skip if already on S3
+        if video_type == 's3':
+            continue
+
+        # Skip if already pointing to our S3 bucket
+        if AWS_S3_BUCKET and AWS_S3_BUCKET in url:
+            continue
+
+        # Skip local files and invalid URLs
+        if video_type == 'local' or not url or not url.startswith('http'):
+            continue
+
+        to_migrate.append(v)
+
+    if not to_migrate:
+        return jsonify({'success': True, 'message': 'No videos to migrate', 'migrated': 0, 'failed': 0})
+
+    migrated = 0
+    failed = 0
+    errors = []
+
+    # Set a shorter timeout for downloads
+    old_timeout = socket.getdefaulttimeout()
+    socket.setdefaulttimeout(30)
+
+    try:
+        for video in to_migrate:
+            video_id = video.get('id')
+            url = video.get('url', '')
+            title = video.get('title', '')
+            category = video.get('category', 'uncategorized')
+            subcategory = video.get('subcategory', '')
+
+            try:
+                # Download video from URL
+                print(f"[S3 MIGRATE] Downloading: {title} ({video_id})")
+
+                # Skip streaming service URLs that can't be downloaded
+                if 'vimeo.com' in url or 'youtube.com' in url or 'youtu.be' in url:
+                    errors.append(f"{title}: Streaming service videos cannot be migrated")
+                    failed += 1
+                    continue
+
+                # Download the video
+                response = requests.get(download_url, timeout=60, stream=True)
+                response.raise_for_status()
+
+                # Check content type
+                content_type = response.headers.get('Content-Type', 'video/mp4')
+                if 'video' not in content_type and 'octet-stream' not in content_type:
+                    errors.append(f"{title}: Not a video file (content-type: {content_type})")
+                    failed += 1
+                    continue
+
+                # Read file data
+                file_data = response.content
+
+                # Determine file extension
+                ext = '.mp4'
+                if 'webm' in content_type:
+                    ext = '.webm'
+                elif 'quicktime' in content_type or 'mov' in url.lower():
+                    ext = '.mov'
+                elif '.mov' in url.lower():
+                    ext = '.mov'
+                elif '.webm' in url.lower():
+                    ext = '.webm'
+
+                # Create S3 filename
+                s3_filename = f"{video_id}{ext}"
+                s3_folder = f"{category}/{subcategory}" if subcategory else category
+
+                # Upload to S3
+                print(f"[S3 MIGRATE] Uploading to S3: {s3_folder}/{s3_filename}")
+                new_url = upload_to_s3(file_data, s3_filename, content_type if 'video' in content_type else 'video/mp4', s3_folder)
+
+                if not new_url:
+                    errors.append(f"{title}: S3 upload failed")
+                    failed += 1
+                    continue
+
+                # Update database
+                video['url'] = new_url
+                video['video_type'] = 's3'
+                video['s3_key'] = f"{s3_folder}/{s3_filename}"
+                save_video(video)
+
+                print(f"[S3 MIGRATE] Success: {title}")
+                migrated += 1
+
+            except requests.exceptions.Timeout:
+                errors.append(f"{title}: Download timeout")
+                failed += 1
+            except requests.exceptions.RequestException as e:
+                errors.append(f"{title}: Download failed - {str(e)}")
+                failed += 1
+            except Exception as e:
+                errors.append(f"{title}: {str(e)}")
+                failed += 1
+
+    finally:
+        socket.setdefaulttimeout(old_timeout)
+
+    return jsonify({
+        'success': True,
+        'message': f'Migration complete: {migrated} migrated, {failed} failed',
+        'migrated': migrated,
+        'failed': failed,
+        'total': len(to_migrate),
+        'errors': errors[:20]  # Limit errors returned
+    })
+
+
 @app.route('/admin/import-folder', methods=['POST'])
 @admin_required
 def import_folder():
@@ -4135,37 +4266,6 @@ def browse_folders():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
-
-@app.route('/admin/fix-dropbox-urls', methods=['POST'])
-@admin_required
-def fix_dropbox_urls():
-    """Fix Dropbox URLs for proper streaming playback."""
-    fixed = 0
-    try:
-        if USE_SUPABASE:
-            # Get all videos with Dropbox URLs
-            result = supabase.table('videos').select('id, url').execute()
-            for video in result.data:
-                if video.get('url') and 'dropbox.com' in video['url']:
-                    new_url = convert_dropbox_url_for_streaming(video['url'])
-                    if new_url != video['url']:
-                        supabase.table('videos').update({'url': new_url}).eq('id', video['id']).execute()
-                        fixed += 1
-        else:
-            db = get_sqlite_db()
-            cursor = db.execute("SELECT id, url FROM videos WHERE url LIKE '%dropbox.com%'")
-            videos = cursor.fetchall()
-            for video in videos:
-                new_url = convert_dropbox_url_for_streaming(video['url'])
-                if new_url != video['url']:
-                    db.execute("UPDATE videos SET url = ? WHERE id = ?", (new_url, video['id']))
-                    fixed += 1
-            db.commit()
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-    return jsonify({'success': True, 'message': f'Fixed {fixed} Dropbox video URLs'})
 
 
 @app.route('/admin/fix-duplicates', methods=['POST'])
