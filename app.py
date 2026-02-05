@@ -4600,8 +4600,8 @@ def refresh_thumbnails():
         if not missing_thumbs:
             return jsonify({'success': True, 'message': 'All videos already have thumbnails', 'updated': 0})
 
-        # Process 20 videos per request
-        batch = missing_thumbs[:20]
+        # Process 100 videos per request
+        batch = missing_thumbs[:100]
         updated = 0
         errors = []
 
