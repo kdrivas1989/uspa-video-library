@@ -21,8 +21,12 @@
                         Search
                     </button>
                 </form>
-                {% if is_admin or is_chief_judge %}
+                {% if is_chief_judge or is_admin %}
                 <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Video Upload</a>
+                {% endif %}
+                {% if is_admin %}
+                <a href="/competitions" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Competitions</a>
+                <a href="/admin/users" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg">Admin</a>
                 {% endif %}
                 <button onclick="toggleNav()" class="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-sm" title="Hide navbar (H)">
                     ▲ Hide
@@ -45,7 +49,7 @@
                 <span class="text-gray-400 ml-2">({{ competition_context.competition_name }})</span>
             </div>
             <div class="flex items-center gap-3">
-                {% if is_admin or is_chief_judge %}
+                {% if is_chief_judge or is_admin %}
                 <button onclick="showQuickScoreModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm font-medium">
                     Enter Score
                 </button>
@@ -920,7 +924,7 @@
                 <!-- Video Info -->
                 <div class="flex items-center gap-3 mb-4">
                     <h1 id="videoTitle" class="text-2xl font-bold">{{ video.title }}</h1>
-                    {% if is_admin or is_chief_judge %}
+                    {% if is_chief_judge or is_admin %}
                     <button onclick="showEditTitleModal()" class="text-gray-400 hover:text-blue-400" title="Rename video">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
@@ -4821,7 +4825,7 @@
         </div>
     </div>
 
-    {% if is_admin or is_chief_judge %}
+    {% if is_chief_judge or is_admin %}
     <!-- Edit Title Modal -->
     <div id="editTitleModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
         <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4">

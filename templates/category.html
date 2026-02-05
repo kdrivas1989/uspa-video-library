@@ -18,9 +18,12 @@
                         Search
                     </button>
                 </form>
-                <a href="/competitions" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">Competitions</a>
-                {% if is_admin or is_chief_judge %}
+                {% if is_chief_judge or is_admin %}
                 <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Video Upload</a>
+                {% endif %}
+                {% if is_admin %}
+                <a href="/competitions" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Competitions</a>
+                <a href="/admin/users" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg">Admin</a>
                 {% endif %}
             </div>
         </div>
@@ -138,7 +141,7 @@
         <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="videosGrid">
             {% for video in videos_by_event.get(current_event, []) %}
             <div class="video-card bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition relative" data-id="{{ video.id }}">
-                {% if is_admin or is_chief_judge %}
+                {% if is_chief_judge or is_admin %}
                 <div class="absolute top-2 left-2 z-10">
                     <input type="checkbox" class="video-checkbox w-5 h-5 rounded bg-gray-700 border-gray-500 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         value="{{ video.id }}" onchange="updateSelectedCount()">
@@ -166,7 +169,7 @@
                         <h3 class="font-semibold text-white line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
                     </a>
                     <div class="flex justify-between items-center mt-2 text-sm text-gray-400">
-                        {% if is_admin or is_chief_judge %}
+                        {% if is_chief_judge or is_admin %}
                         <select onchange="moveToCategory('{{ video.id }}', this.value)"
                             class="bg-gray-700 text-white text-xs px-2 py-1 rounded cursor-pointer hover:bg-gray-600">
                             {% for c_id, c in all_categories.items() %}
@@ -189,7 +192,7 @@
             {% for event_name in event_list %}
             <div class="event-folder mb-6">
                 <div class="flex items-center gap-3 mb-4 cursor-pointer group">
-                    {% if is_admin or is_chief_judge %}
+                    {% if is_chief_judge or is_admin %}
                     <input type="checkbox" class="folder-checkbox w-5 h-5 rounded bg-gray-700 border-gray-500 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         data-folder="{{ loop.index }}" onclick="event.stopPropagation(); selectFolderVideos('{{ loop.index }}')" title="Select all videos in folder">
                     {% endif %}
@@ -200,7 +203,7 @@
                         <div class="flex-1">
                             <div class="flex items-center gap-2">
                                 <h2 id="folder-name-{{ loop.index }}" class="text-lg font-semibold text-white group-hover:text-green-400 transition">{{ event_name }}</h2>
-                                {% if is_admin or is_chief_judge %}
+                                {% if is_chief_judge or is_admin %}
                                 <button onclick="event.stopPropagation(); renameFolder('{{ loop.index }}', '{{ event_name }}')"
                                     class="p-1 text-gray-400 hover:text-blue-400 hover:bg-gray-700 rounded transition" title="Rename folder">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -218,7 +221,7 @@
                 </div>
                 {% set folder_index = loop.index %}
                 <div id="folder-content-{{ folder_index }}" class="hidden pl-4 border-l-2 border-gray-700">
-                    {% if is_admin or is_chief_judge %}
+                    {% if is_chief_judge or is_admin %}
                     {% set num_videos = videos_by_event[event_name]|length %}
                     {% set num_rows = (num_videos + 3) // 4 %}
                     <div class="flex items-center gap-2 mb-2 flex-wrap">
@@ -234,7 +237,7 @@
                     <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" data-folder="{{ folder_index }}">
                         {% for video in videos_by_event[event_name] %}
                         <div class="video-card bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition relative" data-id="{{ video.id }}" data-row-index="{{ loop.index0 // 4 }}">
-                            {% if is_admin or is_chief_judge %}
+                            {% if is_chief_judge or is_admin %}
                             <div class="absolute top-2 left-2 z-10">
                                 <input type="checkbox" class="video-checkbox w-5 h-5 rounded bg-gray-700 border-gray-500 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                     value="{{ video.id }}" onchange="updateSelectedCount()">
@@ -262,7 +265,7 @@
                                     <h3 class="font-medium text-white text-sm line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
                                 </a>
                                 <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
-                                    {% if is_admin or is_chief_judge %}
+                                    {% if is_chief_judge or is_admin %}
                                     <select onchange="moveToCategory('{{ video.id }}', this.value)"
                                         class="bg-gray-700 text-white text-xs px-1 py-0.5 rounded cursor-pointer hover:bg-gray-600">
                                         {% for c_id, c in all_categories.items() %}
@@ -301,7 +304,7 @@
                     <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {% for video in videos_no_event %}
                         <div class="video-card bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition relative" data-id="{{ video.id }}">
-                            {% if is_admin or is_chief_judge %}
+                            {% if is_chief_judge or is_admin %}
                             <div class="absolute top-2 left-2 z-10">
                                 <input type="checkbox" class="video-checkbox w-5 h-5 rounded bg-gray-700 border-gray-500 text-blue-600 focus:ring-blue-500 cursor-pointer"
                                     value="{{ video.id }}" onchange="updateSelectedCount()">
@@ -329,7 +332,7 @@
                                     <h3 class="font-medium text-white text-sm line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
                                 </a>
                                 <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
-                                    {% if is_admin or is_chief_judge %}
+                                    {% if is_chief_judge or is_admin %}
                                     <select onchange="moveToCategory('{{ video.id }}', this.value)"
                                         class="bg-gray-700 text-white text-xs px-1 py-0.5 rounded cursor-pointer hover:bg-gray-600">
                                         {% for c_id, c in all_categories.items() %}
@@ -355,7 +358,7 @@
         <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6" id="videosGrid">
             {% for video in videos %}
             <div class="video-card bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition relative" data-id="{{ video.id }}">
-                {% if is_admin or is_chief_judge %}
+                {% if is_chief_judge or is_admin %}
                 <div class="absolute top-2 left-2 z-10">
                     <input type="checkbox" class="video-checkbox w-5 h-5 rounded bg-gray-700 border-gray-500 text-blue-600 focus:ring-blue-500 cursor-pointer"
                         value="{{ video.id }}" onchange="updateSelectedCount()">
@@ -383,7 +386,7 @@
                         <h3 class="font-semibold text-white line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
                     </a>
                     <div class="flex justify-between items-center mt-2 text-sm text-gray-400">
-                        {% if is_admin or is_chief_judge %}
+                        {% if is_chief_judge or is_admin %}
                         <select onchange="moveToCategory('{{ video.id }}', this.value)"
                             class="bg-gray-700 text-white text-xs px-2 py-1 rounded cursor-pointer hover:bg-gray-600">
                             {% for c_id, c in all_categories.items() %}
@@ -470,7 +473,7 @@
         }
     </script>
 
-    {% if is_admin or is_chief_judge %}
+    {% if is_chief_judge or is_admin %}
     <script>
         const categories = {{ all_categories | tojson | safe }};
 
