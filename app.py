@@ -4102,10 +4102,16 @@ def delete_video(video_id):
 @admin_required
 def get_video_details(video_id):
     """Get video details for editing."""
-    video = get_video(video_id)
-    if not video:
-        return jsonify({'error': 'Video not found'}), 404
-    return jsonify(video)
+    try:
+        video = get_video(video_id)
+        if not video:
+            return jsonify({'error': 'Video not found'}), 404
+        # Ensure all values are JSON serializable
+        safe_video = {k: (str(v) if not isinstance(v, (str, int, float, bool, list, dict, type(None))) else v)
+                      for k, v in video.items()}
+        return jsonify(safe_video)
+    except Exception as e:
+        return jsonify({'error': f'Error loading video: {str(e)}'}), 500
 
 
 def convert_dropbox_url_for_streaming(url):
@@ -4303,7 +4309,12 @@ def find_similar_uncategorized_videos(title, exclude_id=None):
 @admin_required
 def edit_video(video_id):
     """Edit a video."""
-    data = request.json
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+    except Exception as e:
+        return jsonify({'error': f'Invalid JSON: {str(e)}'}), 400
 
     video = get_video(video_id)
     if not video:
