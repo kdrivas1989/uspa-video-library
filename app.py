@@ -4540,6 +4540,7 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
 
         # Use ffmpeg to read directly from URL (streams only what's needed)
         print(f"[THUMB] Generating thumbnail for {video_id} using {ffmpeg}...")
+        print(f"[THUMB] URL: {video_url[:100]}...")
         result = subprocess.run([
             ffmpeg, '-y',
             '-ss', '2',  # Seek to 2 seconds BEFORE opening (faster)
@@ -4549,17 +4550,28 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
             temp_thumb.name
         ], capture_output=True, timeout=30)
 
+        stderr = result.stderr.decode()
+        print(f"[THUMB] Return code: {result.returncode}, stderr length: {len(stderr)}")
+
         if result.returncode != 0:
-            stderr = result.stderr.decode()
-            # Get last 200 chars where actual error is
-            err = stderr[-200:] if len(stderr) > 200 else stderr
+            # Look for actual error lines (not version info)
+            err_lines = [l for l in stderr.split('\n') if 'error' in l.lower() or 'invalid' in l.lower() or 'denied' in l.lower() or 'failed' in l.lower()]
+            if err_lines:
+                err = '; '.join(err_lines)[:200]
+            else:
+                err = stderr[-300:] if len(stderr) > 300 else stderr
             print(f"[THUMB] FFmpeg error for {video_id}: {err}")
             return None, f"{err}"
 
         # Check if thumbnail was created
-        if not os.path.exists(temp_thumb.name) or os.path.getsize(temp_thumb.name) == 0:
+        file_exists = os.path.exists(temp_thumb.name)
+        file_size = os.path.getsize(temp_thumb.name) if file_exists else 0
+        print(f"[THUMB] File exists: {file_exists}, size: {file_size}")
+
+        if not file_exists or file_size == 0:
             print(f"[THUMB] Thumbnail file not created or empty for {video_id}")
-            return None, "Empty output"
+            # Return more of stderr for debugging
+            return None, f"Empty output. stderr: {stderr[-500:]}"
 
         # Upload thumbnail to S3
         with open(temp_thumb.name, 'rb') as f:
