@@ -4401,60 +4401,41 @@ def delete_score(team_id, score_id):
 @admin_required
 def bulk_move_videos():
     """Move multiple videos to a new category at once."""
-    print(f"[BULK-MOVE] Starting, USE_SUPABASE={USE_SUPABASE}")
     try:
-        data = request.json
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-    except Exception as e:
-        print(f"[BULK-MOVE] JSON error: {e}")
-        return jsonify({'error': f'Invalid JSON: {str(e)}'}), 400
+        data = request.json or {}
+        video_ids = data.get('video_ids', [])
+        new_category = data.get('category', '')
+        new_subcategory = data.get('subcategory', '')
 
-    video_ids = data.get('video_ids', [])
-    new_category = data.get('category', '')
-    new_subcategory = data.get('subcategory', '')
-    print(f"[BULK-MOVE] Moving {len(video_ids)} videos to {new_category}")
+        if not video_ids:
+            return jsonify({'error': 'No videos selected'}), 400
+        if not new_category:
+            return jsonify({'error': 'No category specified'}), 400
 
-    if not video_ids:
-        return jsonify({'error': 'No videos selected'}), 400
+        # Limit batch size to avoid memory issues
+        if len(video_ids) > 50:
+            video_ids = video_ids[:50]
 
-    if not new_category:
-        return jsonify({'error': 'No category specified'}), 400
+        if USE_SUPABASE:
+            # Single batch update for all videos using IN filter
+            supabase.table('videos').update({
+                'category': new_category,
+                'subcategory': new_subcategory
+            }).in_('id', video_ids).execute()
+        else:
+            db = get_sqlite_db()
+            placeholders = ','.join('?' * len(video_ids))
+            db.execute(f'UPDATE videos SET category = ?, subcategory = ? WHERE id IN ({placeholders})',
+                      [new_category, new_subcategory] + video_ids)
+            db.commit()
 
-    success_count = 0
-    errors = []
-    for video_id in video_ids:
-        try:
-            if USE_SUPABASE:
-                supabase.table('videos').update({
-                    'category': new_category,
-                    'subcategory': new_subcategory
-                }).eq('id', video_id).execute()
-            else:
-                db = get_sqlite_db()
-                db.execute('UPDATE videos SET category = ?, subcategory = ? WHERE id = ?',
-                          (new_category, new_subcategory, video_id))
-                db.commit()
-            success_count += 1
-        except Exception as e:
-            print(f"[BULK-MOVE] Error on {video_id}: {e}")
-            errors.append(f'{video_id}: {str(e)}')
-
-    print(f"[BULK-MOVE] Done: {success_count} moved, {len(errors)} errors")
-
-    if errors:
         return jsonify({
-            'success': success_count > 0,
-            'message': f'Moved {success_count} video(s), {len(errors)} failed',
-            'moved_count': success_count,
-            'errors': errors
+            'success': True,
+            'message': f'Moved {len(video_ids)} video(s)',
+            'moved_count': len(video_ids)
         })
-
-    return jsonify({
-        'success': True,
-        'message': f'Moved {success_count} video(s)',
-        'moved_count': success_count
-    })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/admin/bulk-set-event', methods=['POST'])
