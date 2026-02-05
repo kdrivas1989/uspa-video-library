@@ -113,20 +113,9 @@
                     <span id="uploadDestinationLabel" class="text-blue-400">Local/Supabase</span>
                 </div>
             </div>
-            <p class="text-gray-400 text-sm mb-4">Upload video files or a folder. Folder name will be used to auto-detect category.</p>
-
-            <!-- Upload Mode Toggle -->
-            <div class="flex gap-4 mb-4">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="uploadMode" value="files" checked onchange="toggleUploadMode()" class="text-purple-500">
-                    <span class="text-gray-300">Select Files</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="radio" name="uploadMode" value="folder" onchange="toggleUploadMode()" class="text-purple-500">
-                    <span class="text-gray-300">Select Folder</span>
-                    <span class="text-gray-500 text-xs">(uses folder name for category)</span>
-                </label>
-            </div>
+            <p class="text-gray-400 text-sm mb-4">
+                Drop files or folders. For nested folders: <span class="text-cyan-400">MainFolder</span> = Event, <span class="text-green-400">Subfolder</span> = Category
+            </p>
 
             <div id="manualCategorySection" class="flex flex-wrap gap-4 items-end mb-4">
                 <div class="w-48">
@@ -162,14 +151,14 @@
             <div id="dropZone"
                 class="border-2 border-dashed border-gray-600 rounded-lg p-8 text-center cursor-pointer hover:border-purple-500 transition"
                 ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
-                onclick="triggerFileInput()">
-                <input type="file" id="fileInput" multiple accept="video/*" class="hidden" onchange="handleFileSelect(event)">
-                <input type="file" id="folderInput" webkitdirectory directory multiple class="hidden" onchange="handleFolderSelect(event)">
+                onclick="document.getElementById('fileInput').click()">
+                <input type="file" id="fileInput" multiple accept="video/*,.mts,.m2ts,.avi,.mkv" class="hidden" onchange="handleFileSelect(event)">
                 <svg class="w-12 h-12 mx-auto text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                 </svg>
-                <p id="dropZoneText" class="text-gray-400">Drag & drop videos here or click to browse</p>
+                <p class="text-gray-400">Drag & drop files or folders here</p>
                 <p class="text-gray-500 text-sm mt-2">MP4, WebM, MOV, MTS, AVI, MKV</p>
+                <p class="text-gray-600 text-xs mt-1">Folder structure: EventName/Category/videos.mp4</p>
             </div>
             <div id="uploadProgress" class="mt-4 hidden"></div>
             <div id="uploadResults" class="mt-4 hidden"></div>
@@ -584,55 +573,6 @@
 
         let uploadFolderName = '';
 
-        function toggleUploadMode() {
-            const mode = document.querySelector('input[name="uploadMode"]:checked').value;
-            const dropZoneText = document.getElementById('dropZoneText');
-            const manualSection = document.getElementById('manualCategorySection');
-
-            if (mode === 'folder') {
-                dropZoneText.textContent = 'Click to select a folder';
-                // When folder mode, category will be auto-detected from folder name
-            } else {
-                dropZoneText.textContent = 'Drag & drop videos here or click to browse';
-            }
-        }
-
-        function triggerFileInput() {
-            const mode = document.querySelector('input[name="uploadMode"]:checked').value;
-            if (mode === 'folder') {
-                document.getElementById('folderInput').click();
-            } else {
-                document.getElementById('fileInput').click();
-            }
-        }
-
-        function handleFolderSelect(e) {
-            const files = Array.from(e.target.files).filter(f =>
-                f.type.startsWith('video/') ||
-                f.name.toLowerCase().match(/\.(mp4|webm|mov|m4v|ogg|ogv|mts|m2ts|avi|mkv)$/));
-
-            if (files.length === 0) {
-                alert('No video files found in the selected folder');
-                return;
-            }
-
-            // Extract folder name from the first file's path
-            const firstFile = files[0];
-            const pathParts = firstFile.webkitRelativePath.split('/');
-            uploadFolderName = pathParts.length > 1 ? pathParts[0] : '';
-
-            if (uploadFolderName) {
-                console.log('Folder name:', uploadFolderName);
-                // Use folder name as event name if event field is empty
-                const eventInput = document.getElementById('uploadEvent');
-                if (!eventInput.value) {
-                    eventInput.value = uploadFolderName;
-                }
-            }
-
-            uploadFiles(files, uploadFolderName);
-        }
-
         function handleDragOver(e) {
             e.preventDefault();
             e.currentTarget.classList.add('border-purple-500', 'bg-gray-700');
@@ -648,8 +588,7 @@
             e.currentTarget.classList.remove('border-purple-500', 'bg-gray-700');
 
             const items = e.dataTransfer.items;
-            let folderName = '';
-            let allFiles = [];
+            let allFiles = []; // Each item: { file, event, category }
 
             // Check if any item is a directory
             if (items && items.length > 0) {
@@ -662,41 +601,35 @@
                 // Process entries (files and folders)
                 for (const entry of entries) {
                     if (entry.isDirectory) {
-                        folderName = entry.name;
-                        const folderFiles = await readDirectoryFiles(entry);
+                        // Main folder = event name
+                        const eventName = entry.name;
+                        const folderFiles = await readDirectoryFilesWithPath(entry, eventName, '');
                         allFiles = allFiles.concat(folderFiles);
                     } else if (entry.isFile) {
                         const file = await getFileFromEntry(entry);
-                        if (file) allFiles.push(file);
+                        if (file) allFiles.push({ file, event: '', category: '' });
                     }
                 }
             }
 
             // Fallback to regular file handling if no entries API
             if (allFiles.length === 0) {
-                allFiles = Array.from(e.dataTransfer.files);
+                allFiles = Array.from(e.dataTransfer.files).map(f => ({ file: f, event: '', category: '' }));
             }
 
             // Filter for video files
-            const videoFiles = allFiles.filter(f => f.type.startsWith('video/') ||
-                f.name.toLowerCase().match(/\.(mp4|webm|mov|m4v|ogg|ogv|mts|m2ts|avi|mkv)$/));
+            const videoFiles = allFiles.filter(f => f.file.type.startsWith('video/') ||
+                f.file.name.toLowerCase().match(/\.(mp4|webm|mov|m4v|ogg|ogv|mts|m2ts|avi|mkv)$/));
 
             if (videoFiles.length > 0) {
-                if (folderName) {
-                    // Auto-fill event if empty
-                    const eventInput = document.getElementById('uploadEvent');
-                    if (!eventInput.value) {
-                        eventInput.value = folderName;
-                    }
-                }
-                uploadFiles(videoFiles, folderName);
+                uploadFilesWithMetadata(videoFiles);
             } else if (allFiles.length > 0) {
                 alert('No video files found in the dropped items');
             }
         }
 
-        // Helper to read all files from a directory entry
-        async function readDirectoryFiles(dirEntry) {
+        // Read directory files with path tracking for event/category
+        async function readDirectoryFilesWithPath(dirEntry, eventName, categoryName) {
             const files = [];
             const reader = dirEntry.createReader();
 
@@ -710,9 +643,14 @@
                 for (const entry of entries) {
                     if (entry.isFile) {
                         const file = await getFileFromEntry(entry);
-                        if (file) files.push(file);
+                        if (file) {
+                            files.push({ file, event: eventName, category: categoryName });
+                        }
                     } else if (entry.isDirectory) {
-                        const subFiles = await readDirectoryFiles(entry);
+                        // Subfolder = category (if we don't have one yet)
+                        // Sub-subfolder = keep same event/category
+                        const subCategory = categoryName || entry.name;
+                        const subFiles = await readDirectoryFilesWithPath(entry, eventName, subCategory);
                         files.push(...subFiles);
                     }
                 }
@@ -731,10 +669,121 @@
         function handleFileSelect(e) {
             const files = Array.from(e.target.files);
             if (files.length > 0) {
-                uploadFiles(files);
+                // Convert to new format with empty metadata
+                const filesWithMeta = files.map(f => ({ file: f, event: '', category: '' }));
+                uploadFilesWithMetadata(filesWithMeta);
             }
         }
 
+        async function uploadFilesWithMetadata(filesWithMeta) {
+            const manualCategory = document.getElementById('uploadCategory').value;
+            const manualSubcategory = document.getElementById('uploadSubcategory').value;
+            const manualEvent = document.getElementById('uploadEvent').value;
+
+            const progressDiv = document.getElementById('uploadProgress');
+            const resultsDiv = document.getElementById('uploadResults');
+            progressDiv.classList.remove('hidden');
+            resultsDiv.classList.add('hidden');
+
+            let uploaded = 0;
+            let failed = 0;
+            let backgroundJobs = 0;
+            const results = [];
+
+            for (let i = 0; i < filesWithMeta.length; i++) {
+                const { file, event: fileEvent, category: fileCategory } = filesWithMeta[i];
+
+                // Use folder-detected values, or fall back to manual inputs
+                const eventToUse = fileEvent || manualEvent;
+                const categoryToUse = fileCategory || manualCategory;
+
+                progressDiv.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
+                        <span>Uploading ${i + 1}/${filesWithMeta.length}: ${file.name}</span>
+                    </div>
+                    <div class="mt-2 text-sm text-gray-400">
+                        ${uploaded} uploaded, ${failed} failed
+                        ${eventToUse ? `<span class="text-cyan-400 ml-2">Event: ${eventToUse}</span>` : ''}
+                        ${categoryToUse ? `<span class="text-green-400 ml-2">Category: ${categoryToUse}</span>` : ''}
+                    </div>
+                `;
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('category', categoryToUse);
+                formData.append('subcategory', manualSubcategory);
+                formData.append('event', eventToUse);
+                formData.append('title', file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+                formData.append('background', 'true');
+                if (categoryToUse) {
+                    formData.append('folder_name', categoryToUse);
+                }
+
+                const ext = file.name.split('.').pop().toLowerCase();
+                const s3Compatible = ['mp4', 'webm', 'mov', 'm4v', 'ogg', 'ogv'].includes(ext);
+                const uploadUrl = (s3Enabled && s3Compatible) ? '/admin/upload-to-s3' : '/admin/upload-video';
+
+                try {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 120000);
+
+                    const response = await fetch(uploadUrl, {
+                        method: 'POST',
+                        body: formData,
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeoutId);
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        if (result.background) {
+                            backgroundJobs++;
+                            results.push({ name: file.name, success: true, background: true });
+                            startConversionPolling();
+                        } else {
+                            uploaded++;
+                            results.push({ name: file.name, success: true, s3: s3Enabled && s3Compatible });
+                        }
+                    } else {
+                        failed++;
+                        results.push({ name: file.name, success: false, error: result.error });
+                    }
+                } catch (error) {
+                    failed++;
+                    const errorMsg = error.name === 'AbortError' ? 'Upload timeout (2 min)' : error.message;
+                    results.push({ name: file.name, success: false, error: errorMsg });
+                }
+            }
+
+            progressDiv.classList.add('hidden');
+            resultsDiv.classList.remove('hidden');
+
+            let statusMsg = '';
+            if (uploaded > 0) statusMsg += `${uploaded} uploaded`;
+            if (backgroundJobs > 0) statusMsg += `${statusMsg ? ', ' : ''}${backgroundJobs} converting`;
+            if (failed > 0) statusMsg += `${statusMsg ? ', ' : ''}${failed} failed`;
+
+            resultsDiv.innerHTML = `
+                <div class="bg-gray-700 rounded-lg p-4">
+                    <p class="font-semibold mb-2">${statusMsg}</p>
+                    <div class="max-h-32 overflow-y-auto text-sm">
+                        ${results.map(r => `
+                            <div class="${r.success ? (r.background ? 'text-yellow-400' : 'text-green-400') : 'text-red-400'}">
+                                ${r.success ? (r.background ? '⏳' : '✓') : '✗'} ${r.name} ${r.background ? '(converting...)' : ''} ${r.s3 ? '(S3)' : ''} ${r.error ? '- ' + r.error : ''}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            if (uploaded > 0 || backgroundJobs > 0) {
+                setTimeout(() => location.reload(), 2000);
+            }
+        }
+
+        // Legacy function for backwards compatibility
         async function uploadFiles(files, folderName = '') {
             const category = document.getElementById('uploadCategory').value;
             const subcategory = document.getElementById('uploadSubcategory').value;
