@@ -508,19 +508,12 @@ CATEGORIES = {
             {'id': '2way_mfs', 'name': '2-Way MFS'},
             {'id': '8way', 'name': '8-Way'},
             {'id': '16way', 'name': '16-Way'},
-            {'id': '10way', 'name': '10-Way'}
-        ]
-    },
-    'indoor': {
-        'name': 'Indoor',
-        'abbrev': 'IND',
-        'description': 'Indoor skydiving competition videos',
-        'subcategories': [
-            {'id': '4way_fs', 'name': '4-Way FS'},
-            {'id': '4way_vfs', 'name': '4-Way VFS'},
-            {'id': '2way_fs', 'name': '2-Way FS'},
-            {'id': '2way_vfs', 'name': '2-Way VFS'},
-            {'id': '8way', 'name': '8-Way'}
+            {'id': '10way', 'name': '10-Way'},
+            {'id': 'indoor_4way_fs', 'name': 'Indoor 4-Way FS'},
+            {'id': 'indoor_4way_vfs', 'name': 'Indoor 4-Way VFS'},
+            {'id': 'indoor_2way_fs', 'name': 'Indoor 2-Way FS'},
+            {'id': 'indoor_2way_vfs', 'name': 'Indoor 2-Way VFS'},
+            {'id': 'indoor_8way', 'name': 'Indoor 8-Way'}
         ]
     }
 }
@@ -1659,22 +1652,22 @@ def parse_filename_metadata(filename, folder_path=''):
         team_part = parts[2]
         round_part = parts[3] if len(parts) > 3 else ''
 
-        # Map event types to category and subcategory
+        # Map event types to category and subcategory (indoor events now under fs)
         event_type_mapping = {
-            'fs4-way-open': ('indoor', '4way_fs', 'open'),
-            'fs4-way-female': ('indoor', '4way_fs', 'female'),
-            'fs4-way-junior': ('indoor', '4way_fs', 'junior'),
-            'fs8-way-open': ('indoor', '8way', 'open'),
-            'fs8-way-female': ('indoor', '8way', 'female'),
-            'vfs-open': ('indoor', '4way_vfs', 'open'),
-            'vfs-female': ('indoor', '4way_vfs', 'female'),
-            '2way-mfs': ('indoor', '2way_fs', 'open'),
-            '2way-fs': ('indoor', '2way_fs', 'open'),
-            '2way-vfs': ('indoor', '2way_vfs', 'open'),
-            'fs-4way-open': ('indoor', '4way_fs', 'open'),
-            'fs-4way-female': ('indoor', '4way_fs', 'female'),
-            'fs-8way-open': ('indoor', '8way', 'open'),
-            'fs-8way-female': ('indoor', '8way', 'female'),
+            'fs4-way-open': ('fs', 'indoor_4way_fs', 'open'),
+            'fs4-way-female': ('fs', 'indoor_4way_fs', 'female'),
+            'fs4-way-junior': ('fs', 'indoor_4way_fs', 'junior'),
+            'fs8-way-open': ('fs', 'indoor_8way', 'open'),
+            'fs8-way-female': ('fs', 'indoor_8way', 'female'),
+            'vfs-open': ('fs', 'indoor_4way_vfs', 'open'),
+            'vfs-female': ('fs', 'indoor_4way_vfs', 'female'),
+            '2way-mfs': ('fs', 'indoor_2way_fs', 'open'),
+            '2way-fs': ('fs', 'indoor_2way_fs', 'open'),
+            '2way-vfs': ('fs', 'indoor_2way_vfs', 'open'),
+            'fs-4way-open': ('fs', 'indoor_4way_fs', 'open'),
+            'fs-4way-female': ('fs', 'indoor_4way_fs', 'female'),
+            'fs-8way-open': ('fs', 'indoor_8way', 'open'),
+            'fs-8way-female': ('fs', 'indoor_8way', 'female'),
         }
 
         event_type_lower = event_type_part.lower()
@@ -1683,10 +1676,6 @@ def parse_filename_metadata(filename, folder_path=''):
             metadata['category'] = cat
             metadata['subcategory'] = subcat
             metadata['class'] = class_name
-
-            # Check if it's an indoor event from event name
-            if 'indoor' in event_part.lower() or 'wind tunnel' in event_part.lower():
-                metadata['category'] = 'indoor'
 
         # Parse event name (clean up the event part)
         event_name = event_part.replace('-', ' ').strip()
@@ -1726,9 +1715,11 @@ def parse_filename_metadata(filename, folder_path=''):
         'fs': [r'\bfs\b', r'formation.?skydiving'],
         'cf': [r'\bcf\b', r'canopy.?formation', r'\bcrw\b'],
         'ae': [r'\bae\b', r'artistic', r'\bfreestyle\b', r'\bfreefly\b'],
-        'ws': [r'\bws\b', r'wingsuit'],
-        'indoor': [r'\bindoor\b', r'wind.?tunnel', r'\bifly\b']
+        'ws': [r'\bws\b', r'wingsuit']
     }
+
+    # Check if indoor content
+    is_indoor_content = bool(re.search(r'\bindoor\b|wind.?tunnel|\bifly\b', combined))
 
     for cat_id, patterns in category_patterns.items():
         for pattern in patterns:
@@ -1737,6 +1728,10 @@ def parse_filename_metadata(filename, folder_path=''):
                 break
         if metadata['category']:
             break
+
+    # If indoor detected, set category to fs
+    if is_indoor_content and not metadata['category']:
+        metadata['category'] = 'fs'
 
     # Subcategory detection
     subcategory_patterns = {
@@ -1747,19 +1742,17 @@ def parse_filename_metadata(filename, folder_path=''):
             'zone_accuracy': [r'zone', r'zone.?accuracy']
         },
         'fs': {
+            'indoor_4way_fs': [r'indoor.*4.?way(?!.*vfs)', r'indoor.*fs.?4'],
+            'indoor_4way_vfs': [r'indoor.*vfs', r'indoor.*vertical'],
+            'indoor_2way_fs': [r'indoor.*2.?way(?!.*vfs)', r'indoor.*mfs'],
+            'indoor_2way_vfs': [r'indoor.*2.?way.*vfs'],
+            'indoor_8way': [r'indoor.*8.?way'],
             '4way_fs': [r'\b4.?way\b(?!.*vfs)', r'4way.?fs'],
             '4way_vfs': [r'vfs', r'vertical', r'4.?way.?vfs'],
             '2way_mfs': [r'2.?way', r'mfs'],
             '8way': [r'\b8.?way\b'],
             '10way': [r'\b10.?way\b'],
             '16way': [r'\b16.?way\b']
-        },
-        'indoor': {
-            '4way_fs': [r'\b4.?way\b(?!.*vfs)', r'4way.?fs', r'fs.?4'],
-            '4way_vfs': [r'vfs', r'vertical', r'4.?way.?vfs'],
-            '2way_fs': [r'2.?way.*fs', r'mfs', r'fs.?2'],
-            '2way_vfs': [r'2.?way.*vfs'],
-            '8way': [r'\b8.?way\b', r'fs.?8']
         },
         'cf': {
             '4way': [r'\b4.?way\b'],
@@ -1779,6 +1772,13 @@ def parse_filename_metadata(filename, folder_path=''):
                     break
             if metadata['subcategory']:
                 break
+
+    # If indoor content and fs category, prefix subcategory with indoor_
+    if is_indoor_content and metadata['category'] == 'fs' and metadata['subcategory']:
+        if not metadata['subcategory'].startswith('indoor_'):
+            indoor_sub = f"indoor_{metadata['subcategory']}"
+            if indoor_sub in ['indoor_4way_fs', 'indoor_4way_vfs', 'indoor_2way_fs', 'indoor_2way_vfs', 'indoor_8way']:
+                metadata['subcategory'] = indoor_sub
 
     # Event detection from folder path and filename
     folder_parts = folder_path.split(os.sep)
@@ -1884,31 +1884,23 @@ def detect_category_from_filename(filename):
 
     # Check for "indoor" first - it takes priority as main category
     # VFS (Vertical Formation Skydiving) is typically indoor/tunnel
-    indoor_patterns = ['indoor', 'wind tunnel', 'windtunnel', 'ifly', 'tunnel', 'vfs']
+    indoor_patterns = ['indoor', 'wind tunnel', 'windtunnel', 'ifly', 'tunnel']
     is_indoor = any(pattern in name_lower for pattern in indoor_patterns)
 
     if is_indoor:
-        detected_category = 'indoor'
+        detected_category = 'fs'  # Indoor is now under FS
 
     # Category detection patterns (order matters - more specific first)
-    # Only used if not already detected as indoor
     category_patterns = {
         'cp': ['canopy piloting', '_cp_', '-cp-', ' cp ', 'cp_', '_cp', 'canopypiloting', 'swooping'],
         'cf': ['canopy formation', '_cf_', '-cf-', ' cf ', 'cf_', '_cf', 'canopyformation', 'crw'],
-        'fs': ['formation skydiving', '_fs_', '-fs-', ' fs ', 'fs_', '_fs', 'formationskydiving', 'rw'],
+        'fs': ['formation skydiving', '_fs_', '-fs-', ' fs ', 'fs_', '_fs', 'formationskydiving', 'rw', 'vfs'],
         'ae': ['artistic', '_ae_', '-ae-', ' ae ', 'ae_', '_ae', 'freestyle', 'freefly'],
         'ws': ['wingsuit', '_ws_', '-ws-', ' ws ', 'ws_', '_ws'],
     }
 
     # Subcategory detection patterns (order matters - more specific first)
     subcategory_patterns = {
-        'indoor': {
-            '2way_vfs': ['2way vfs', '2-way vfs', '2wayvfs', '2 way vfs', 'vfs - 2', 'vfs 2'],
-            '4way_vfs': ['4way vfs', '4-way vfs', '4wayvfs', '4 way vfs', 'vfs - 4', 'vfs 4', 'vfs', 'vertical'],
-            '2way_fs': ['2way', '2-way', '2 way', 'mfs', 'fs2', 'fs 2', 'fs-2'],
-            '4way_fs': ['4way', '4-way', '4 way', 'fs4', 'fs 4', 'fs-4'],
-            '8way': ['8way', '8-way', '8 way', 'fs8', 'fs 8', 'fs-8'],
-        },
         'cp': {
             'freestyle': ['cp freestyle', 'cp_freestyle', 'cpfreestyle'],
             'speed': ['speed run', 'speedrun'],
@@ -1916,7 +1908,14 @@ def detect_category_from_filename(filename):
             'zone_accuracy': ['zone', 'pond swoop']
         },
         'fs': {
-            '4way_vfs': ['4way vfs', '4-way vfs', '4wayvfs', 'vfs', 'vertical'],
+            # Indoor subcategories (check first when is_indoor)
+            'indoor_2way_vfs': ['indoor 2way vfs', 'indoor 2-way vfs', '2way vfs', '2-way vfs', '2wayvfs'],
+            'indoor_4way_vfs': ['indoor 4way vfs', 'indoor 4-way vfs', '4way vfs', '4-way vfs', '4wayvfs', 'indoor vfs'],
+            'indoor_2way_fs': ['indoor 2way', 'indoor 2-way', 'indoor 2 way'],
+            'indoor_4way_fs': ['indoor 4way', 'indoor 4-way', 'indoor 4 way'],
+            'indoor_8way': ['indoor 8way', 'indoor 8-way', 'indoor 8 way'],
+            # Regular FS subcategories
+            '4way_vfs': ['vfs', 'vertical'],
             '4way_fs': ['4way', '4-way', '4 way'],
             '2way_mfs': ['2way', '2-way', '2 way', 'mfs'],
             '8way': ['8way', '8-way', '8 way'],
@@ -1960,7 +1959,7 @@ def detect_category_from_filename(filename):
         (r'([a-z\s]+)\s*(\d{4})', None),  # Will be handled specially
     ]
 
-    # Detect category (only if not already detected as indoor)
+    # Detect category (only if not already detected)
     if not detected_category:
         for cat_id, patterns in category_patterns.items():
             for pattern in patterns:
@@ -1979,6 +1978,13 @@ def detect_category_from_filename(filename):
                     break
             if detected_subcategory:
                 break
+
+        # If indoor was detected but no indoor-specific subcategory found, prefix with indoor_
+        if is_indoor and detected_category == 'fs' and detected_subcategory and not detected_subcategory.startswith('indoor_'):
+            indoor_sub = f'indoor_{detected_subcategory}'
+            # Check if this indoor subcategory exists
+            if indoor_sub in ['indoor_4way_fs', 'indoor_4way_vfs', 'indoor_2way_fs', 'indoor_2way_vfs', 'indoor_8way']:
+                detected_subcategory = indoor_sub
 
     # Detect event name
     for pattern, replacement in event_patterns:
