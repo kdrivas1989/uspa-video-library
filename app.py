@@ -3677,13 +3677,42 @@ def upload_to_s3_endpoint():
         if not video_url:
             return jsonify({'error': 'Failed to upload to S3'}), 500
 
+        # Generate thumbnail from the uploaded video
+        thumbnail_url = ''
+        try:
+            import tempfile
+
+            # Save video to temp file for thumbnail generation
+            temp_video = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+            temp_thumb = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+            temp_video.write(file_data)
+            temp_video.close()
+            temp_thumb.close()
+
+            # Generate thumbnail with ffmpeg
+            if generate_thumbnail(temp_video.name, temp_thumb.name):
+                # Upload thumbnail to S3
+                with open(temp_thumb.name, 'rb') as f:
+                    thumb_data = f.read()
+                thumb_filename = f"{video_id}_thumb.jpg"
+                thumbnail_url = upload_to_s3(thumb_data, thumb_filename, 'image/jpeg', 'thumbnails')
+
+            # Clean up temp files
+            try:
+                os.unlink(temp_video.name)
+                os.unlink(temp_thumb.name)
+            except:
+                pass
+        except Exception as thumb_err:
+            print(f"Thumbnail generation error: {thumb_err}")
+
         # Save video record to database
         save_video({
             'id': video_id,
             'title': title,
             'description': '',
             'url': video_url,
-            'thumbnail': '',  # Could generate thumbnail with ffmpeg if needed
+            'thumbnail': thumbnail_url,
             'category': category,
             'subcategory': subcategory,
             'tags': '',
@@ -3700,7 +3729,8 @@ def upload_to_s3_endpoint():
             'success': True,
             'message': 'Video uploaded to S3 successfully',
             'id': video_id,
-            'url': video_url
+            'url': video_url,
+            'thumbnail': thumbnail_url
         })
 
     except Exception as e:
@@ -4476,12 +4506,89 @@ def bulk_set_event():
     })
 
 
+def generate_thumbnail_from_s3_video(video_url, video_id):
+    """Download S3 video, generate thumbnail, upload to S3, return thumbnail URL."""
+    import tempfile
+    import urllib.request
+
+    if not USE_S3:
+        return None
+
+    temp_video = None
+    temp_thumb = None
+
+    try:
+        # Create temp files
+        temp_video = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+        temp_thumb = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+        temp_video.close()
+        temp_thumb.close()
+
+        # Download video from S3/CloudFront
+        print(f"[THUMB] Downloading video: {video_url[:80]}...")
+        req = urllib.request.Request(video_url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=30) as response:
+            with open(temp_video.name, 'wb') as f:
+                # Read in chunks to handle large files
+                while True:
+                    chunk = response.read(1024 * 1024)  # 1MB chunks
+                    if not chunk:
+                        break
+                    f.write(chunk)
+
+        # Generate thumbnail with ffmpeg
+        print(f"[THUMB] Generating thumbnail for {video_id}...")
+        result = subprocess.run([
+            'ffmpeg', '-y', '-i', temp_video.name,
+            '-ss', '00:00:02', '-vframes', '1',
+            '-vf', 'scale=320:-1',
+            temp_thumb.name
+        ], capture_output=True, timeout=30)
+
+        if result.returncode != 0:
+            print(f"[THUMB] FFmpeg error: {result.stderr.decode()[:200]}")
+            return None
+
+        # Check if thumbnail was created
+        if not os.path.exists(temp_thumb.name) or os.path.getsize(temp_thumb.name) == 0:
+            print(f"[THUMB] Thumbnail file not created or empty")
+            return None
+
+        # Upload thumbnail to S3
+        with open(temp_thumb.name, 'rb') as f:
+            thumb_data = f.read()
+
+        thumb_filename = f"{video_id}_thumb.jpg"
+        thumb_url = upload_to_s3(thumb_data, thumb_filename, 'image/jpeg', 'thumbnails')
+
+        if thumb_url:
+            print(f"[THUMB] Uploaded thumbnail: {thumb_url}")
+
+        return thumb_url
+
+    except Exception as e:
+        print(f"[THUMB] Error generating thumbnail for {video_id}: {e}")
+        return None
+    finally:
+        # Clean up temp files
+        try:
+            if temp_video and os.path.exists(temp_video.name):
+                os.unlink(temp_video.name)
+            if temp_thumb and os.path.exists(temp_thumb.name):
+                os.unlink(temp_thumb.name)
+        except:
+            pass
+
+
 @app.route('/admin/refresh-thumbnails', methods=['POST'])
 @admin_required
 def refresh_thumbnails():
-    """Re-fetch thumbnails for videos that are missing them."""
+    """Generate thumbnails for S3 videos that are missing them."""
     if not USE_SUPABASE:
         return jsonify({'error': 'This feature requires Supabase'}), 400
+
+    if not USE_S3:
+        return jsonify({'error': 'This feature requires S3 to be configured'}), 400
 
     try:
         # Get all videos with missing thumbnails
@@ -4493,10 +4600,12 @@ def refresh_thumbnails():
         if not missing_thumbs:
             return jsonify({'success': True, 'message': 'All videos already have thumbnails', 'updated': 0})
 
+        # Process only 5 videos per request (thumbnail generation is slow)
+        batch = missing_thumbs[:5]
         updated = 0
         errors = []
 
-        for video in missing_thumbs:
+        for video in batch:
             url = video.get('url', '')
             video_id = video.get('id')
 
@@ -4505,31 +4614,47 @@ def refresh_thumbnails():
 
             thumbnail = None
 
+            # S3/CloudFront videos - generate thumbnail
+            if 's3.' in url or 'cloudfront' in url or AWS_S3_BUCKET in url:
+                thumbnail = generate_thumbnail_from_s3_video(url, video_id)
+                if not thumbnail:
+                    errors.append(f"{video_id}: Failed to generate thumbnail")
             # Vimeo
-            if 'vimeo.com' in url:
+            elif 'vimeo.com' in url:
                 meta = fetch_vimeo_metadata(url)
                 thumbnail = meta.get('thumbnail', '')
             # YouTube
             elif 'youtube.com' in url or 'youtu.be' in url:
                 meta = fetch_youtube_metadata(url)
                 thumbnail = meta.get('thumbnail', '')
+            else:
+                errors.append(f"{video_id}: Unknown video source")
+                continue
 
             if thumbnail:
                 try:
                     supabase.table('videos').update({'thumbnail': thumbnail}).eq('id', video_id).execute()
                     updated += 1
                 except Exception as e:
-                    errors.append(f"{video_id}: {str(e)}")
+                    errors.append(f"{video_id}: DB error - {str(e)}")
+
+        remaining = len(missing_thumbs) - len(batch)
+        msg = f'Generated {updated} thumbnails.'
+        if remaining > 0:
+            msg += f' {remaining} videos remaining - click again to continue.'
 
         return jsonify({
             'success': True,
-            'message': f'Updated {updated} of {len(missing_thumbs)} videos missing thumbnails',
+            'message': msg,
             'updated': updated,
+            'processed': len(batch),
             'total_missing': len(missing_thumbs),
+            'remaining': remaining,
             'errors': errors[:10] if errors else []
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 
 @app.route('/admin/rename-event-folder', methods=['POST'])
