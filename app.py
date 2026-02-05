@@ -4601,6 +4601,63 @@ def generate_thumbnail_from_s3_video(video_url, video_id):
             pass
 
 
+@app.route('/admin/test-thumbnail', methods=['POST'])
+@admin_required
+def test_thumbnail():
+    """Test thumbnail generation with a single video - returns full debug info."""
+    ffmpeg = get_ffmpeg_path()
+
+    # Get one video without thumbnail
+    result = supabase.table('videos').select('id, url, thumbnail').execute()
+    videos = [v for v in (result.data or []) if not v.get('thumbnail')]
+
+    if not videos:
+        return jsonify({'error': 'No videos without thumbnails'})
+
+    video = videos[0]
+    video_url = video.get('url', '')
+    video_id = video.get('id')
+
+    import tempfile
+    temp_thumb = tempfile.NamedTemporaryFile(suffix='.jpg', delete=False)
+    temp_thumb.close()
+
+    # Check ffmpeg protocols
+    proto_result = subprocess.run([ffmpeg, '-protocols'], capture_output=True, timeout=10)
+    protocols = proto_result.stdout.decode() if proto_result.returncode == 0 else "Failed to get protocols"
+
+    # Try to generate thumbnail
+    cmd = [ffmpeg, '-y', '-ss', '2', '-i', video_url, '-vframes', '1', '-vf', 'scale=320:-1', temp_thumb.name]
+    result = subprocess.run(cmd, capture_output=True, timeout=60)
+
+    stdout = result.stdout.decode()
+    stderr = result.stderr.decode()
+
+    # Check file
+    file_exists = os.path.exists(temp_thumb.name)
+    file_size = os.path.getsize(temp_thumb.name) if file_exists else 0
+
+    # Cleanup
+    try:
+        os.unlink(temp_thumb.name)
+    except:
+        pass
+
+    return jsonify({
+        'video_id': video_id,
+        'video_url': video_url,
+        'ffmpeg_path': ffmpeg,
+        'has_https': 'https' in protocols.lower(),
+        'command': ' '.join(cmd[:6]) + '... ' + cmd[-1],
+        'return_code': result.returncode,
+        'file_created': file_exists,
+        'file_size': file_size,
+        'stderr_length': len(stderr),
+        'stderr_last_500': stderr[-500:] if stderr else '',
+        'stdout': stdout[:200] if stdout else ''
+    })
+
+
 @app.route('/admin/refresh-thumbnails', methods=['POST'])
 @admin_required
 def refresh_thumbnails():
