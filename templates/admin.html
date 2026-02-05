@@ -528,61 +528,102 @@ https://www.youtube.com/watch?v=xxxxx"
         }
 
         async function bulkImportUrls() {
-            const urls = document.getElementById('bulkUrlsInput').value.trim();
+            const urlsText = document.getElementById('bulkUrlsInput').value.trim();
             const category = document.getElementById('bulkUrlCategory').value;
             const subcategory = document.getElementById('bulkUrlSubcategory').value;
             const event = document.getElementById('bulkUrlEvent').value.trim();
             const statusEl = document.getElementById('bulkUrlStatus');
 
-            if (!urls) {
+            if (!urlsText) {
                 alert('Please paste some URLs');
                 return;
             }
 
-            const lineCount = urls.split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).length;
-            statusEl.textContent = `Importing ${lineCount} videos...`;
+            // Parse URLs into array (skip empty lines and comments)
+            const allUrls = urlsText.split('\n')
+                .map(l => l.trim())
+                .filter(l => l && !l.startsWith('#'));
+
+            if (allUrls.length === 0) {
+                alert('No valid URLs found');
+                return;
+            }
+
+            // Batch size
+            const BATCH_SIZE = 10;
+            const totalBatches = Math.ceil(allUrls.length / BATCH_SIZE);
+
+            // Aggregate results
+            let totalAdded = 0;
+            let totalSkipped = 0;
+            let allErrors = [];
+
+            statusEl.textContent = `Importing ${allUrls.length} videos in ${totalBatches} batch(es)...`;
+            statusEl.classList.remove('text-red-400', 'text-green-400');
+            statusEl.classList.add('text-yellow-400');
 
             try {
-                const response = await fetch('/admin/bulk-import-urls', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        urls: urls,
-                        category: category,
-                        subcategory: subcategory,
-                        event: event
-                    })
-                });
+                for (let i = 0; i < allUrls.length; i += BATCH_SIZE) {
+                    const batch = allUrls.slice(i, i + BATCH_SIZE);
+                    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
-                const result = await response.json();
+                    statusEl.textContent = `Importing batch ${batchNum}/${totalBatches} (${i + 1}-${Math.min(i + BATCH_SIZE, allUrls.length)} of ${allUrls.length})...`;
 
-                if (result.success) {
-                    statusEl.textContent = result.message;
-                    statusEl.classList.remove('text-red-400');
-                    statusEl.classList.add('text-green-400');
+                    const response = await fetch('/admin/bulk-import-urls', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            urls: batch.join('\n'),
+                            category: category,
+                            subcategory: subcategory,
+                            event: event
+                        })
+                    });
 
-                    if (result.errors && result.errors.length > 0) {
-                        console.log('Import errors:', result.errors);
-                        // Show errors to user
-                        const errorMsg = result.errors.join('\n');
-                        alert('Import errors:\n' + errorMsg);
-                        statusEl.textContent += ` (${result.errors.length} failed)`;
+                    const result = await response.json();
+
+                    if (result.success) {
+                        totalAdded += result.added || 0;
+                        totalSkipped += result.skipped || 0;
+                        if (result.errors) {
+                            allErrors = allErrors.concat(result.errors);
+                        }
+                    } else {
+                        // Batch failed - add error for each URL in batch
+                        allErrors.push(`Batch ${batchNum} failed: ${result.error || 'Unknown error'}`);
                     }
 
-                    // Only clear if some imports succeeded
-                    if (result.added > 0) {
-                        document.getElementById('bulkUrlsInput').value = '';
-                        // Reload page after short delay to show new videos
-                        setTimeout(() => location.reload(), 1500);
+                    // Small delay between batches to avoid overwhelming server
+                    if (i + BATCH_SIZE < allUrls.length) {
+                        await new Promise(resolve => setTimeout(resolve, 500));
                     }
-                } else {
-                    statusEl.textContent = result.error || 'Import failed';
-                    statusEl.classList.remove('text-green-400');
-                    statusEl.classList.add('text-red-400');
+                }
+
+                // Show final results
+                const message = `Imported ${totalAdded} videos, skipped ${totalSkipped} duplicates (of ${allUrls.length} total)`;
+                statusEl.textContent = message;
+                statusEl.classList.remove('text-yellow-400', 'text-red-400');
+                statusEl.classList.add('text-green-400');
+
+                if (allErrors.length > 0) {
+                    console.log('Import errors:', allErrors);
+                    statusEl.textContent += ` (${allErrors.length} failed)`;
+                    // Only show alert if there are a manageable number of errors
+                    if (allErrors.length <= 10) {
+                        alert('Import errors:\n' + allErrors.join('\n'));
+                    } else {
+                        alert(`${allErrors.length} errors occurred. Check console for details.`);
+                    }
+                }
+
+                // Only clear and reload if some imports succeeded
+                if (totalAdded > 0) {
+                    document.getElementById('bulkUrlsInput').value = '';
+                    setTimeout(() => location.reload(), 1500);
                 }
             } catch (err) {
                 statusEl.textContent = 'Error: ' + err.message;
-                statusEl.classList.remove('text-green-400');
+                statusEl.classList.remove('text-green-400', 'text-yellow-400');
                 statusEl.classList.add('text-red-400');
             }
         }
