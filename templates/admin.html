@@ -790,11 +790,20 @@ https://www.youtube.com/watch?v=xxxxx"
                     vimeoDetectedCategory = result.detected_category;
                     vimeoDetectedSubcategory = result.detected_subcategory;
                     vimeoFolderName = result.folder_name || '';
+                    const skippedExisting = result.skipped_existing || 0;
                     displayVimeoVideos();
 
-                    // Show detected category info
+                    // Build status message
+                    let statusParts = [];
+                    if (skippedExisting > 0) {
+                        statusParts.push(`Skipped ${skippedExisting} already imported`);
+                    }
                     if (vimeoDetectedCategory) {
-                        statusEl.textContent = `Detected category: ${vimeoDetectedCategory}${vimeoDetectedSubcategory ? ' / ' + vimeoDetectedSubcategory : ''} (from folder: ${vimeoFolderName})`;
+                        statusParts.push(`Category: ${vimeoDetectedCategory}${vimeoDetectedSubcategory ? ' / ' + vimeoDetectedSubcategory : ''}`);
+                    }
+
+                    if (statusParts.length > 0) {
+                        statusEl.textContent = statusParts.join(' | ');
                         statusEl.classList.add('text-green-400');
                         statusEl.classList.remove('text-red-400');
                     } else {

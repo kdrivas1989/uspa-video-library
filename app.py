@@ -3195,7 +3195,26 @@ def fetch_vimeo_account():
 
         if not token:
             return jsonify({'success': False, 'error': 'Access token is required'}), 400
+
+        # Get existing video URLs to filter out already imported videos
+        existing_videos = get_all_videos()
+        existing_urls = set()
+        existing_vimeo_ids = set()
+        for v in existing_videos:
+            url = v.get('url', '')
+            if url:
+                existing_urls.add(url.lower())
+                # Also extract Vimeo ID from URL
+                if 'vimeo.com' in url.lower():
+                    # Handle formats: vimeo.com/123456 or vimeo.com/123456/hash
+                    parts = url.rstrip('/').split('/')
+                    for part in parts:
+                        if part.isdigit():
+                            existing_vimeo_ids.add(part)
+                            break
+
         videos = []
+        skipped_existing = 0
         page = 1
         per_page = 50  # Reduced from 100 for faster responses
         folder_name = ''
@@ -3253,6 +3272,11 @@ def fetch_vimeo_account():
                 video_uri = video.get('uri', '')
                 video_id = video_uri.split('/')[-1] if video_uri else ''
 
+                # Skip if this Vimeo video ID is already in the database
+                if video_id and video_id in existing_vimeo_ids:
+                    skipped_existing += 1
+                    continue
+
                 # Get the link - prefer the direct link
                 link = video.get('link', '')
 
@@ -3269,6 +3293,11 @@ def fetch_vimeo_account():
                         hash_match = re.search(r'\?h=([a-f0-9]+)', embed_html)
                         if hash_match:
                             link = f"https://vimeo.com/{video_id}/{hash_match.group(1)}"
+
+                # Also check if this exact URL is already imported
+                if link.lower() in existing_urls:
+                    skipped_existing += 1
+                    continue
 
                 videos.append({
                     'id': video_id,
@@ -3295,6 +3324,7 @@ def fetch_vimeo_account():
             'success': True,
             'videos': videos,
             'total': len(videos),
+            'skipped_existing': skipped_existing,
             'folder_name': folder_name,
             'detected_category': detected_category,
             'detected_subcategory': detected_subcategory
