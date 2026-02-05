@@ -2557,9 +2557,9 @@ Emma Chen,open,Canopy Piloting,10,CHN
 
 
 @app.route('/admin')
-@admin_required
+@chief_judge_required
 def admin_dashboard():
-    """Admin dashboard."""
+    """Video upload dashboard (chief judge and admin)."""
     try:
         videos = get_all_videos()
         total_videos = len(videos)
@@ -2584,6 +2584,9 @@ def admin_dashboard():
         events = []
         category_counts = {}
 
+    user = get_current_user()
+    is_admin = user and user.get('role') == 'admin'
+
     return render_template('admin.html',
                          videos=videos,
                          categories=CATEGORIES,
@@ -2591,7 +2594,8 @@ def admin_dashboard():
                          total_views=total_views,
                          category_counts=category_counts,
                          events=events,
-                         dropbox_app_key=DROPBOX_APP_KEY)
+                         dropbox_app_key=DROPBOX_APP_KEY,
+                         is_admin=is_admin)
 
 
 @app.route('/admin/users')

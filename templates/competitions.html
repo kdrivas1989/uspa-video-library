@@ -13,8 +13,8 @@
             <div class="flex items-center gap-4">
                 <a href="/competitions" class="text-blue-400">Competitions</a>
                 <a href="/videographer" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg">Videographer Upload</a>
-                {% if is_admin %}
-                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                {% if is_admin or is_chief_judge %}
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Video Upload</a>
                 {% endif %}
             </div>
         </div>
@@ -23,7 +23,7 @@
     <div class="container mx-auto px-4 py-8">
         <div class="flex justify-between items-center mb-8">
             <h1 class="text-3xl font-bold">Competitions</h1>
-            {% if is_admin %}
+            {% if is_admin or is_chief_judge %}
             <button onclick="showCreateModal()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">
                 + New Competition
             </button>
@@ -56,7 +56,7 @@
         {% else %}
         <div class="text-center py-16 text-gray-500">
             <p class="text-xl mb-4">No competitions yet</p>
-            {% if is_admin %}
+            {% if is_admin or is_chief_judge %}
             <button onclick="showCreateModal()" class="bg-blue-600 hover:bg-blue-700 px-6 py-3 rounded-lg text-white">
                 Create First Competition
             </button>

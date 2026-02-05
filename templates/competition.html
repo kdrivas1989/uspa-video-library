@@ -20,8 +20,8 @@
                 {% else %}
                 <a href="/competitions" class="text-gray-600 hover:text-gray-900">Competitions</a>
                 <a href="/videographer" class="bg-yellow-500 hover:bg-gray-400 text-white px-4 py-2 rounded-lg">Videographer Upload</a>
-                {% if is_admin %}
-                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">Admin</a>
+                {% if is_admin or is_chief_judge %}
+                <a href="/admin" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg">Video Upload</a>
                 {% endif %}
                 {% endif %}
             </div>
@@ -191,7 +191,7 @@
                     <option value="intermediate">Intermediate</option>
                 </select>
             </div>
-            {% if is_admin %}
+            {% if is_admin or is_chief_judge %}
             <div class="ml-auto flex gap-2">
                 {% for et in event_types %}
                 {% set event_has_teams = teams_by_event.get(et, {}).values()|sum(start=[]) %}
@@ -1514,7 +1514,7 @@
             <h3 id="photoModalName" class="text-2xl font-bold mt-4"></h3>
             <p id="photoModalMembers" class="text-gray-600 mt-2"></p>
             <div class="mt-4 flex justify-center gap-3">
-                {% if is_admin %}
+                {% if is_admin or is_chief_judge %}
                 <button onclick="changePhotoFromModal()" class="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500">Change Photo</button>
                 {% endif %}
                 <button onclick="hidePhotoModal()" class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Close</button>
@@ -1689,13 +1689,13 @@
                             <span class="text-green-400">📹 Video ready for judging</span>
                             <div class="flex items-center gap-3">
                                 <a href="#" id="viewVideoFullLink" target="_blank" class="text-blue-400 hover:underline">Open full player →</a>
-                                {% if is_admin %}
+                                {% if is_admin or is_chief_judge %}
                                 <button type="button" onclick="showRemoveVideoConfirm()" class="text-red-400 hover:text-red-300 text-sm">Remove Video</button>
                                 {% endif %}
                             </div>
                         </div>
                         <!-- Remove Video Confirmation (hidden by default) -->
-                        {% if is_admin %}
+                        {% if is_admin or is_chief_judge %}
                         <div id="removeVideoConfirm" class="hidden mt-3 p-3 bg-red-900/30 border border-red-700 rounded-lg">
                             <p class="text-sm text-gray-300 mb-3">Remove this video from the round? This will allow a new video to be uploaded.</p>
                             <label class="flex items-center gap-2 text-sm text-gray-600 mb-3 cursor-pointer">
@@ -1715,7 +1715,7 @@
                     </div>
 
                     <!-- Score Entry (for judges only) -->
-                    {% if is_admin %}
+                    {% if is_admin or is_chief_judge %}
                     <!-- Standard Score Entry (non-CP events) -->
                     <div id="standardScoreSection" class="bg-gray-50 rounded-lg p-4">
                         <label class="block text-gray-600 text-sm mb-2">Score</label>
@@ -2355,7 +2355,7 @@
 
                 <div class="flex justify-between items-center mt-3 pt-2 border-t border-gray-200">
                     <div class="flex items-center gap-3">
-                        {% if is_admin %}
+                        {% if is_admin or is_chief_judge %}
                         <button type="button" onclick="awardRejump()" id="rejumpBtn" class="px-3 py-2 rounded bg-orange-600 hover:bg-orange-700 text-sm">
                             Award Rejump
                         </button>
@@ -2371,12 +2371,12 @@
                         <span id="modalStatusText" class="text-sm text-gray-500"></span>
                     </div>
                     <div class="flex gap-3">
-                        {% if is_admin %}
+                        {% if is_admin or is_chief_judge %}
                         <button type="button" onclick="deleteScore()" id="deleteScoreBtn" class="hidden px-4 py-2 rounded bg-red-600 hover:bg-red-700 text-white">Delete Score</button>
                         {% endif %}
                         <button type="button" onclick="hideRoundModal()" class="px-4 py-2 rounded bg-gray-300 hover:bg-gray-400">Cancel</button>
                         <button type="button" onclick="uploadVideoOnly()" id="uploadOnlyBtn" class="hidden px-4 py-2 rounded bg-blue-600 hover:bg-gray-300">Upload Video Only</button>
-                        {% if is_admin %}
+                        {% if is_admin or is_chief_judge %}
                         <button type="submit" id="saveRoundBtn" class="px-4 py-2 rounded bg-green-600 hover:bg-gray-300">Save Score</button>
                         {% endif %}
                     </div>

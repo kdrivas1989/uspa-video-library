@@ -23,8 +23,8 @@
                     {% if is_chief_judge or is_admin %}
                     <a href="/practice-competitions" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg">Practice Comp</a>
                     {% endif %}
-                    {% if is_admin %}
-                    <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Admin</a>
+                    {% if is_admin or is_chief_judge %}
+                    <a href="/admin" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg">Video Upload</a>
                     {% endif %}
                     <span class="text-gray-400">{{ user_name }}</span>
                     <a href="/logout" class="text-gray-400 hover:text-white">Logout</a>

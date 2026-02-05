@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Video Library</title>
+    <title>Video Upload - Video Library</title>
     <script src="https://cdn.tailwindcss.com"></script>
     {% if dropbox_app_key %}
     <script src="https://www.dropbox.com/static/api/2/dropins.js" id="dropboxjs" data-app-key="{{ dropbox_app_key }}"></script>
@@ -12,12 +12,14 @@
 <body class="bg-gray-900 text-white min-h-screen">
     <nav class="bg-purple-800 p-4 sticky top-0 z-10">
         <div class="container mx-auto flex justify-between items-center">
-            <a href="/admin" class="text-2xl font-bold text-white">Admin</a>
+            <a href="/admin" class="text-2xl font-bold text-white">Video Upload</a>
             <div class="flex items-center gap-4">
                 <a href="/" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg font-semibold">Videos</a>
                 <a href="/competitions" class="bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2 rounded-lg font-semibold">Competitions</a>
                 <a href="/draw-generator" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg font-semibold">Draw Generator</a>
+                {% if is_admin %}
                 <a href="/admin/users" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg">Users</a>
+                {% endif %}
                 <a href="/logout" class="text-purple-200 hover:text-white">Logout</a>
             </div>
         </div>
