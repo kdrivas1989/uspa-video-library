@@ -2082,23 +2082,77 @@ def convert_video_to_mp4(input_path, output_path):
         return False
 
 
+def get_video_duration_seconds(file_path):
+    """Get video duration in seconds using ffprobe."""
+    try:
+        result = subprocess.run(
+            ['ffprobe', '-v', 'quiet', '-show_entries', 'format=duration',
+             '-of', 'default=noprint_wrappers=1:nokey=1', file_path],
+            capture_output=True, text=True
+        )
+        return float(result.stdout.strip())
+    except:
+        return None
+
+
 def background_convert_video(job_id, input_path, output_path, video_data, temp_file=None):
-    """Run video conversion in background thread."""
+    """Run video conversion in background thread with real-time progress."""
     try:
         with conversion_lock:
             conversion_jobs[job_id]['status'] = 'converting'
-            conversion_jobs[job_id]['progress'] = 10
+            conversion_jobs[job_id]['progress'] = 0
 
-        # Run ffmpeg conversion
-        result = subprocess.run([
+        # Get input video duration for progress calculation
+        total_duration = get_video_duration_seconds(input_path)
+
+        # Run ffmpeg with progress output (stderr to DEVNULL to prevent blocking)
+        process = subprocess.Popen([
             'ffmpeg', '-y', '-i', input_path,
             '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
+            '-progress', 'pipe:1',
+            '-nostats',
             output_path
-        ], capture_output=True)
+        ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
 
-        if result.returncode != 0:
+        # Parse progress output in real-time
+        for line in process.stdout:
+            line = line.strip()
+            # FFmpeg outputs out_time_us (microseconds) or out_time (HH:MM:SS.us format)
+            if line.startswith('out_time_us='):
+                try:
+                    time_us = int(line.split('=')[1])
+                    current_time = time_us / 1000000.0  # Convert microseconds to seconds
+                    if total_duration and total_duration > 0:
+                        # Progress 0-65% for conversion (leave room for thumbnail/upload)
+                        progress = min(65, int((current_time / total_duration) * 65))
+                        with conversion_lock:
+                            conversion_jobs[job_id]['progress'] = progress
+                except:
+                    pass
+            elif line.startswith('out_time=') and not line.startswith('out_time_us'):
+                # Fallback: parse HH:MM:SS.microseconds format
+                try:
+                    time_str = line.split('=')[1]
+                    parts = time_str.split(':')
+                    if len(parts) == 3:
+                        hours = int(parts[0])
+                        minutes = int(parts[1])
+                        seconds = float(parts[2])
+                        current_time = hours * 3600 + minutes * 60 + seconds
+                        if total_duration and total_duration > 0:
+                            progress = min(65, int((current_time / total_duration) * 65))
+                            with conversion_lock:
+                                conversion_jobs[job_id]['progress'] = progress
+                except:
+                    pass
+            elif line.startswith('progress=end'):
+                break
+
+        process.wait()
+
+        if process.returncode != 0:
             with conversion_lock:
                 conversion_jobs[job_id]['status'] = 'failed'
                 conversion_jobs[job_id]['error'] = 'FFmpeg conversion failed'

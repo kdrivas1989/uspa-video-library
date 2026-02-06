@@ -405,6 +405,14 @@
         let uploadQueue = [];
         let isUploading = false;
 
+        function showQueuedNotification(count) {
+            const toast = document.createElement('div');
+            toast.className = 'fixed top-20 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 animate-pulse';
+            toast.innerHTML = `✓ ${count} file${count > 1 ? 's' : ''} queued - will upload after current batch`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
         // FFmpeg for browser-based conversion
         let ffmpeg = null;
         let ffmpegLoaded = false;
@@ -595,8 +603,15 @@
 
                 if (videoFiles.length > 0) {
                     // Add to queue instead of uploading directly
+                    const wasUploading = isUploading;
                     uploadQueue.push(...videoFiles);
                     updateQueueStatus();
+
+                    // Show brief notification if added during active upload
+                    if (wasUploading) {
+                        showQueuedNotification(videoFiles.length);
+                    }
+
                     processUploadQueue();
                 } else if (allFiles.length > 0) {
                     alert('No video files found in the dropped items');
@@ -611,13 +626,36 @@
 
         function updateQueueStatus() {
             const progressDiv = document.getElementById('uploadProgress');
-            if (uploadQueue.length > 0 && !isUploading) {
-                progressDiv.classList.remove('hidden');
-                progressDiv.innerHTML = `
-                    <div class="bg-blue-900/30 border border-blue-600 rounded p-3 mb-2">
-                        <span class="text-blue-400">${uploadQueue.length} files queued for upload</span>
+            let queueIndicator = document.getElementById('queueIndicator');
+
+            if (uploadQueue.length > 0) {
+                // Show queue indicator (works both during and outside of active upload)
+                if (!queueIndicator) {
+                    queueIndicator = document.createElement('div');
+                    queueIndicator.id = 'queueIndicator';
+                    progressDiv.parentNode.insertBefore(queueIndicator, progressDiv);
+                }
+                queueIndicator.innerHTML = `
+                    <div class="bg-green-900/30 border border-green-600 rounded p-3 mb-2 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-green-400 font-semibold">📁 ${uploadQueue.length} files queued</span>
+                            ${isUploading ? '<span class="text-gray-400 text-sm">- will process after current upload</span>' : ''}
+                        </div>
+                        <span class="text-green-500 text-xs">Drop more folders anytime!</span>
                     </div>
                 `;
+                queueIndicator.classList.remove('hidden');
+
+                if (!isUploading) {
+                    progressDiv.classList.remove('hidden');
+                    progressDiv.innerHTML = `
+                        <div class="bg-blue-900/30 border border-blue-600 rounded p-3 mb-2">
+                            <span class="text-blue-400">${uploadQueue.length} files ready to upload</span>
+                        </div>
+                    `;
+                }
+            } else if (queueIndicator) {
+                queueIndicator.classList.add('hidden');
             }
         }
 
@@ -693,10 +731,16 @@
                     f.name.toLowerCase().match(/\.(mp4|webm|mov|m4v|ogg|ogv|mts|m2ts|avi|mkv)$/));
 
                 if (videoFiles.length > 0) {
+                    const wasUploading = isUploading;
                     // Convert to new format with empty metadata
                     const filesWithMeta = videoFiles.map(f => ({ file: f, event: '', category: '' }));
                     uploadQueue.push(...filesWithMeta);
                     updateQueueStatus();
+
+                    if (wasUploading) {
+                        showQueuedNotification(videoFiles.length);
+                    }
+
                     processUploadQueue();
                 }
             }
