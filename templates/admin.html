@@ -2313,54 +2313,30 @@
             converterFiles = [];
         }
 
-        // Local conversion drop handler
-        function handleLocalDrop(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            document.getElementById('localDropZone').classList.remove('border-green-500', 'bg-green-900/20');
+        // Local conversion path input
+        function updateLocalCommand() {
+            const path = document.getElementById('localPathInput').value.trim();
+            const cmd = `cd ~/Desktop/projects/video-library && ./convert-videos.sh "${path || '/path/to/videos'}"`;
+            document.getElementById('localFullCommand').textContent = cmd;
+        }
 
-            const items = e.dataTransfer.items;
-            const validExts = ['mkv', 'avi', 'mts', 'm2ts'];
-            let folderName = '';
-            let fileCount = 0;
-
-            for (let i = 0; i < items.length; i++) {
-                const item = items[i];
-                if (item.kind === 'file') {
-                    const entry = item.webkitGetAsEntry ? item.webkitGetAsEntry() : null;
-                    if (entry && entry.isDirectory) {
-                        folderName = entry.name;
-                        // Count files in directory
-                        const reader = entry.createReader();
-                        reader.readEntries(function(entries) {
-                            entries.forEach(function(ent) {
-                                if (ent.isFile) {
-                                    const ext = ent.name.split('.').pop().toLowerCase();
-                                    if (validExts.includes(ext)) {
-                                        fileCount++;
-                                    }
-                                }
-                            });
-                            updateLocalConversionInfo(folderName, fileCount);
-                        });
-                        return;
-                    }
-                }
+        function copyLocalFullCommand() {
+            const path = document.getElementById('localPathInput').value.trim();
+            if (!path) {
+                alert('Please paste a folder path first!');
+                return;
             }
-        }
-
-        function updateLocalConversionInfo(folderName, fileCount) {
-            document.getElementById('localFolderName').textContent = 'Folder: ' + folderName;
-            document.getElementById('localFileCount').textContent = fileCount;
-            document.getElementById('localFolderPath').textContent = 'DRAG_FOLDER_HERE';
-            document.getElementById('localConversionInfo').classList.remove('hidden');
-            document.getElementById('defaultCommand').classList.add('hidden');
-        }
-
-        function copyLocalCommand() {
-            const cmd = 'cd ~/Desktop/projects/video-library && ./convert-videos.sh "';
+            const cmd = `cd ~/Desktop/projects/video-library && ./convert-videos.sh "${path}"`;
             navigator.clipboard.writeText(cmd).then(() => {
-                alert('Command copied! Now paste in Terminal and drag your folder to complete the path, then add closing quote and press Enter.');
+                const btn = event.target;
+                btn.textContent = 'Copied!';
+                btn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                btn.classList.add('bg-gray-600');
+                setTimeout(() => {
+                    btn.textContent = 'Copy Command';
+                    btn.classList.add('bg-green-600', 'hover:bg-green-700');
+                    btn.classList.remove('bg-gray-600');
+                }, 2000);
             });
         }
     </script>
@@ -2408,39 +2384,30 @@
             <div class="border-t border-gray-700 pt-4">
                 <p class="text-gray-400 text-sm mb-3"><strong>Or convert locally (faster for large files):</strong></p>
 
-                <div id="localDropZone"
-                    class="border-2 border-dashed border-gray-600 rounded-lg p-4 text-center hover:border-green-500 hover:bg-green-900/10 transition cursor-pointer mb-3"
-                    ondrop="handleLocalDrop(event)"
-                    ondragover="event.preventDefault(); this.classList.add('border-green-500', 'bg-green-900/20')"
-                    ondragleave="this.classList.remove('border-green-500', 'bg-green-900/20')">
-                    <svg class="w-8 h-8 mx-auto text-green-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"></path>
-                    </svg>
-                    <p class="text-gray-300 text-sm">Drop folder here for local conversion</p>
-                    <p class="text-gray-500 text-xs mt-1">Converts on your Mac (no upload needed)</p>
+                <div class="mb-3">
+                    <label class="block text-gray-400 text-xs mb-1">Paste folder path (right-click folder in Finder → "Copy as Pathname"):</label>
+                    <input type="text" id="localPathInput"
+                        class="w-full px-3 py-2 bg-gray-900 border border-gray-600 rounded text-green-400 text-sm focus:border-green-500 focus:outline-none"
+                        placeholder="/Users/you/path/to/videos"
+                        oninput="updateLocalCommand()">
                 </div>
 
-                <div id="localConversionInfo" class="hidden bg-green-900/20 border border-green-700 rounded p-3 mb-3">
-                    <p class="text-green-400 text-sm mb-2"><strong id="localFolderName"></strong></p>
-                    <p class="text-gray-300 text-xs mb-2">Found <span id="localFileCount">0</span> files to convert. Run this in Terminal:</p>
-                    <div class="bg-gray-900 rounded p-2 mb-2">
-                        <code class="text-green-400 text-xs">cd ~/Desktop/projects/video-library && ./convert-videos.sh "</code><code id="localFolderPath" class="text-cyan-400 text-xs">DRAG_FOLDER_HERE</code><code class="text-green-400 text-xs">"</code>
-                    </div>
-                    <p class="text-yellow-400 text-xs mb-2">Drag the same folder into Terminal to get the full path!</p>
-                    <button onclick="copyLocalCommand()" class="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-xs">Copy Command Start</button>
-                </div>
-
-                <div id="defaultCommand" class="bg-gray-900 rounded p-3 mb-3">
-                    <code id="converterCommand" class="text-green-400 text-xs break-all">cd ~/Desktop/projects/video-library && ./convert-videos.sh /path/to/your/videos</code>
+                <div id="localCommandBox" class="bg-gray-900 rounded p-3 mb-3">
+                    <p class="text-gray-500 text-xs mb-1">Terminal command:</p>
+                    <code id="localFullCommand" class="text-green-400 text-xs break-all">cd ~/Desktop/projects/video-library && ./convert-videos.sh "/path/to/videos"</code>
                 </div>
 
                 <div class="flex gap-2">
-                    <button id="copyBtn" onclick="copyConverterCommand()" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 rounded text-sm">
-                        Copy
+                    <button onclick="copyLocalFullCommand()" class="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm">
+                        Copy Command
                     </button>
                     <a href="/static/convert-videos.sh" download class="px-3 py-1 bg-gray-600 hover:bg-gray-700 rounded text-sm">
                         Download Script
                     </a>
+                </div>
+
+                <div class="mt-3 p-2 bg-blue-900/30 border border-blue-700 rounded text-xs text-gray-300">
+                    <strong class="text-blue-400">How to get path:</strong> In Finder, right-click your folder → Hold <kbd class="bg-gray-700 px-1 rounded">Option</kbd> → Click "Copy as Pathname"
                 </div>
             </div>
         </div>
