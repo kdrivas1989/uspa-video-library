@@ -795,6 +795,122 @@ If you have any questions, please contact your administrator.
         return False
 
 
+def send_username_reminder_email(email, username, name):
+    """Send username reminder email."""
+    if not SMTP_USERNAME or not SMTP_PASSWORD:
+        print(f"Email not configured. Username reminder for {email}: {username}")
+        return False
+
+    if not email:
+        print(f"No email provided for username reminder")
+        return False
+
+    msg = MIMEMultipart('alternative')
+    msg['From'] = SMTP_FROM_EMAIL or SMTP_USERNAME
+    msg['To'] = email
+    msg['Subject'] = 'Judging Suite - Your Username Reminder'
+
+    # Plain text fallback
+    plain_body = f"""Hello {name},
+
+You requested a reminder of your username for the Judging Suite.
+
+Your username is: {username}
+
+Login at: {APP_URL}
+
+If you did not request this reminder, please ignore this email.
+"""
+
+    # HTML email
+    html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #1a1a2e;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a2e; padding: 20px 0;">
+        <tr>
+            <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #16213e; border-radius: 10px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);">
+                    <!-- Header -->
+                    <tr>
+                        <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; text-align: center;">
+                            <h1 style="color: #ffffff; margin: 0; font-size: 28px;">📹 Judging Suite</h1>
+                            <p style="color: #e0e0e0; margin: 10px 0 0 0; font-size: 14px;">Username Reminder</p>
+                        </td>
+                    </tr>
+
+                    <!-- Body -->
+                    <tr>
+                        <td style="padding: 40px 30px;">
+                            <h2 style="color: #ffffff; margin: 0 0 20px 0; font-size: 22px;">Hello {name}!</h2>
+
+                            <p style="color: #b0b0b0; font-size: 16px; line-height: 1.6; margin: 0 0 25px 0;">
+                                You requested a reminder of your username. Here it is:
+                            </p>
+
+                            <!-- Username Box -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 25px;">
+                                <tr>
+                                    <td style="background-color: #1a1a2e; border-radius: 8px; padding: 25px; text-align: center; border: 1px solid #333;">
+                                        <p style="color: #b0b0b0; font-size: 12px; margin: 0 0 5px 0; text-transform: uppercase; letter-spacing: 1px;">Your Username</p>
+                                        <p style="color: #667eea; font-size: 32px; font-weight: bold; margin: 0; font-family: monospace;">{username}</p>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <!-- CTA Button -->
+                            <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom: 25px;">
+                                <tr>
+                                    <td align="center">
+                                        <a href="{APP_URL}" style="display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 8px; font-weight: bold; font-size: 16px;">
+                                            Login Now
+                                        </a>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <p style="color: #666666; font-size: 12px; line-height: 1.6; margin: 0; text-align: center;">
+                                If you did not request this reminder, please ignore this email.
+                            </p>
+                        </td>
+                    </tr>
+
+                    <!-- Footer -->
+                    <tr>
+                        <td style="background-color: #0f0f1a; padding: 20px 30px; text-align: center;">
+                            <p style="color: #666666; font-size: 12px; margin: 0;">
+                                USPA Judging Suite
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+"""
+
+    msg.attach(MIMEText(plain_body, 'plain'))
+    msg.attach(MIMEText(html_body, 'html'))
+
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.sendmail(SMTP_FROM_EMAIL or SMTP_USERNAME, email, msg.as_string())
+        server.quit()
+        print(f"Username reminder email sent to {email}")
+        return True
+    except Exception as e:
+        print(f"Failed to send username reminder email: {e}")
+        return False
+
+
 def send_assignment_email(email, judge_name, judge_username, video_count, assigner_name, video_titles=None):
     """Send email notification when videos are assigned to a judge."""
     if not SMTP_USERNAME or not SMTP_PASSWORD:
@@ -3195,6 +3311,36 @@ def forgot_password():
                 message = 'If an account with that email exists, a reset link has been sent'
 
     return render_template('forgot_password.html', message=message, error=error)
+
+
+@app.route('/forgot-username', methods=['GET', 'POST'])
+def forgot_username():
+    """Forgot username page - sends username reminder email."""
+    message = None
+    error = None
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+
+        if not email:
+            error = 'Please enter your email address'
+        else:
+            user = get_user_by_email(email)
+            if user:
+                # Try to send email
+                if send_username_reminder_email(email, user['username'], user.get('name', user['username'])):
+                    message = 'Your username has been sent to your email'
+                else:
+                    # If email not configured, show the username (for development)
+                    if not SMTP_USERNAME:
+                        message = f'Email not configured. Your username is: {user["username"]}'
+                    else:
+                        error = 'Failed to send email. Please try again or contact admin.'
+            else:
+                # Don't reveal if email exists or not
+                message = 'If an account with that email exists, your username has been sent'
+
+    return render_template('forgot_username.html', message=message, error=error)
 
 
 @app.route('/reset-password/<token>', methods=['GET', 'POST'])
