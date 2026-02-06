@@ -424,6 +424,13 @@
                         <div class="flex items-center gap-3 flex-wrap mt-2">
                             <span class="text-gray-400 text-sm">Max: <span id="maxPoints" class="text-cyan-400 font-bold">0</span> pts</span>
                             <span class="text-gray-500">|</span>
+                            <span class="text-gray-400 text-sm">Score: <span id="currentScore" class="text-green-400 font-bold">0</span> pts</span>
+                            <span class="text-gray-500">|</span>
+                            <span class="text-gray-400 text-sm">Time: <span id="workingTimeDisplay" class="text-yellow-400 font-bold">0:00</span></span>
+                            <span class="text-gray-500">|</span>
+                            <button onclick="submitAssignmentScore()" class="px-4 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-sm font-medium">
+                                Submit Score
+                            </button>
                             <span id="drawInfo" class="text-xs text-gray-500"></span>
                             <span id="drawValidation" class="text-xs"></span>
                         </div>
@@ -1155,7 +1162,9 @@
         // Video start time (set by videographer)
         let videoStartTime = {{ video.start_time|default(0, true) }};
         let workingTimeVideoStart = null; // Captured when judge first starts timer
+        let freezeFrameVideoTime = null; // Captured when timer ends (T or natural)
         const videoId = '{{ video.id }}';
+        const currentAssignmentId = {% if current_assignment %}'{{ current_assignment.id }}'{% else %}null{% endif %};
 
         // Related videos for auto-navigation after saving score
         const relatedVideos = [
@@ -3343,16 +3352,27 @@
                 updateRunningTimeDisplay();
 
                 if (timeRemaining <= 0) {
-                    if (video) video.pause();
-                    if (vimeoPlayer) vimeoPlayer.pause();
+                    // Capture freeze frame time before pausing
+                    if (video) {
+                        freezeFrameVideoTime = video.currentTime;
+                        video.pause();
+                    }
+                    if (vimeoPlayer) {
+                        vimeoPlayer.getCurrentTime().then(t => { freezeFrameVideoTime = t; });
+                        vimeoPlayer.pause();
+                    }
                     stopTimer();
                     document.getElementById('timerStatus').textContent = 'Time!';
                     document.getElementById('timerStatus').classList.remove('text-green-400');
                     document.getElementById('timerStatus').classList.add('text-yellow-400');
                     document.getElementById('timerDisplay').classList.add('text-yellow-400');
                     const overlayEl = document.getElementById('freezeOverlay'); if (overlayEl) overlayEl.classList.remove('hidden');
-                    // Show save score section
-                    showSaveScoreSection();
+                    // Show confirm score modal if assigned, else save section
+                    if (currentAssignmentId) {
+                        showConfirmScoreModal();
+                    } else {
+                        showSaveScoreSection();
+                    }
                 }
             }, 100);
         }
@@ -3483,9 +3503,15 @@
             // Only works if timer is running
             if (!timerRunning) return;
 
-            // Pause video
-            if (video) video.pause();
-            if (vimeoPlayer) vimeoPlayer.pause();
+            // Capture freeze frame time before pausing
+            if (video) {
+                freezeFrameVideoTime = video.currentTime;
+                video.pause();
+            }
+            if (vimeoPlayer) {
+                vimeoPlayer.getCurrentTime().then(t => { freezeFrameVideoTime = t; });
+                vimeoPlayer.pause();
+            }
 
             // Stop the timer
             stopTimer();
@@ -3500,8 +3526,12 @@
             const overlayEl = document.getElementById('freezeOverlay');
             if (overlayEl) overlayEl.classList.remove('hidden');
 
-            // Show save score section
-            showSaveScoreSection();
+            // Show confirm score modal if there's an assignment, otherwise show save section
+            if (currentAssignmentId) {
+                showConfirmScoreModal();
+            } else {
+                showSaveScoreSection();
+            }
         }
 
         function confirmReset() {
@@ -3547,6 +3577,7 @@
         }
 
         let replayAutoStartPending = false; // Flag to auto-start timer on replay
+        let replayStopAtFreezeFrame = false; // Flag to stop at freeze frame during replay
 
         function replayVideo() {
             // Stop timer but keep scores
@@ -3558,13 +3589,17 @@
             document.getElementById('timerDisplay').style.color = '';
             document.getElementById('timerDisplay').classList.remove('text-yellow-400', 'text-white');
             document.getElementById('timerDisplay').classList.add('text-gray-400');
-            document.getElementById('timerStatus').textContent = 'Auto-starting at working time...';
+            document.getElementById('timerStatus').textContent = 'Replaying... will stop at freeze frame';
             document.getElementById('timerStatus').classList.remove('text-green-400', 'text-yellow-400', 'text-red-400');
             document.getElementById('timerStatus').classList.add('text-gray-500');
 
             // Hide freeze overlay
             const overlay = document.getElementById('freezeOverlay');
             if (overlay) overlay.classList.add('hidden');
+
+            // Hide confirm modal if open
+            const confirmModal = document.getElementById('confirmScoreModal');
+            if (confirmModal) confirmModal.classList.add('hidden');
 
             // Reset button state
             document.getElementById('timerBtn').textContent = 'Start (X)';
@@ -3577,13 +3612,14 @@
             speedCompleted = false;
             timerStartTime = 0;
 
-            // Set flag to auto-start timer when video reaches working time
+            // Set flags for replay behavior
             replayAutoStartPending = true;
+            replayStopAtFreezeFrame = freezeFrameVideoTime !== null;
 
-            // Reset video to a few seconds BEFORE working time starts (gives judges time to prepare)
+            // Reset video to 2 seconds BEFORE working time starts (gives judges time to prepare)
             // Use captured working time start from first view, or fall back to preset videoStartTime
             const workingStart = workingTimeVideoStart !== null ? workingTimeVideoStart : (videoStartTime || 0);
-            const replayStartTime = Math.max(0, workingStart - 3);
+            const replayStartTime = Math.max(0, workingStart - 2);
             if (video) {
                 video.currentTime = replayStartTime;
                 video.play(); // Auto-start video playback
@@ -3595,13 +3631,36 @@
             }
         }
 
-        // Check if video reached working time during replay (for auto-start)
+        // Check if video reached working time during replay (for auto-start) or freeze frame (for stop)
         function checkReplayAutoStart(currentTime) {
             const workingStart = workingTimeVideoStart !== null ? workingTimeVideoStart : videoStartTime;
+
+            // Auto-start timer at working time
             if (replayAutoStartPending && workingStart > 0 && currentTime >= workingStart) {
                 replayAutoStartPending = false;
                 // Auto-start the timer (same as pressing X)
                 startTimer();
+            }
+
+            // Stop at freeze frame if in replay mode
+            if (replayStopAtFreezeFrame && freezeFrameVideoTime !== null && currentTime >= freezeFrameVideoTime) {
+                replayStopAtFreezeFrame = false;
+                // Stop like when T was pressed
+                if (video) video.pause();
+                if (vimeoPlayer) vimeoPlayer.pause();
+                stopTimer();
+                document.getElementById('timerStatus').textContent = 'Freeze Frame!';
+                document.getElementById('timerStatus').classList.remove('text-green-400', 'text-gray-500');
+                document.getElementById('timerStatus').classList.add('text-yellow-400');
+                document.getElementById('timerDisplay').classList.add('text-yellow-400');
+                const overlayEl = document.getElementById('freezeOverlay');
+                if (overlayEl) overlayEl.classList.remove('hidden');
+                // Show confirm score modal if assigned
+                if (currentAssignmentId) {
+                    showConfirmScoreModal();
+                } else {
+                    showSaveScoreSection();
+                }
             }
         }
 
@@ -4758,7 +4817,142 @@
             originalUpdateEventType();
             updateMultiJudgePanelVisibility();
         };
+
+        // Submit assignment score function
+        function submitAssignmentScore() {
+            if (!currentAssignmentId) {
+                alert('No assignment found for this video. Please contact the Chief Judge.');
+                return;
+            }
+
+            // Calculate score based on event type
+            let score = 0;
+            let scoreData = {};
+
+            // Get current score from FS scoring (xCount - qCount)
+            score = xCount - qCount;
+
+            // Get working time
+            const workingTimeEl = document.getElementById('timerDisplay');
+            const workingTime = workingTimeEl ? workingTimeEl.textContent : '0:00';
+
+            // Get draw/formations input
+            const drawInput = document.getElementById('formationsInput');
+            const draw = drawInput ? drawInput.value : '';
+
+            // Build score data
+            scoreData = {
+                xCount: xCount,
+                cCount: cCount,
+                qCount: qCount,
+                nvPenalty: nvPenalty,
+                draw: draw,
+                workingTime: workingTime,
+                scoringTypes: scoringTypes,
+                bustReasons: bustReasons,
+                timestamp: new Date().toISOString()
+            };
+
+            // Update UI displays
+            document.getElementById('currentScore').textContent = score;
+            document.getElementById('workingTimeDisplay').textContent = workingTime;
+
+            // Submit to server
+            fetch('/assignment/' + currentAssignmentId + '/score', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    score: score,
+                    score_data: JSON.stringify(scoreData)
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Show success notification
+                    const notification = document.createElement('div');
+                    notification.className = 'fixed top-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                    notification.textContent = 'Score submitted: ' + score + ' points (' + workingTime + ')';
+                    document.body.appendChild(notification);
+
+                    // Navigate to next video if available
+                    if (relatedVideos.length > 0) {
+                        setTimeout(() => {
+                            const nextVideo = relatedVideos[0];
+                            window.location.href = '/video/' + nextVideo.id;
+                        }, 1500);
+                    } else {
+                        setTimeout(() => notification.remove(), 3000);
+                    }
+                } else {
+                    alert('Error submitting score: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Failed to submit score. Please try again.');
+            });
+        }
+
+        // Show confirm score modal when timer ends
+        function showConfirmScoreModal() {
+            const score = xCount - qCount;
+            const workingTime = document.getElementById('timerDisplay').textContent;
+
+            document.getElementById('confirmScoreValue').textContent = score + ' pts';
+            document.getElementById('confirmWorkingTimeValue').textContent = workingTime;
+            document.getElementById('confirmScoreModal').classList.remove('hidden');
+        }
+
+        function hideConfirmScoreModal() {
+            document.getElementById('confirmScoreModal').classList.add('hidden');
+        }
+
+        function confirmAndSubmitScore() {
+            hideConfirmScoreModal();
+            submitAssignmentScore();
+        }
+
+        function replayFromConfirmModal() {
+            hideConfirmScoreModal();
+            replayVideo();
+        }
     </script>
+
+    <!-- Confirm Score Modal -->
+    <div id="confirmScoreModal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div class="bg-gray-800 rounded-lg p-6 w-full max-w-md mx-4 text-center">
+            <h2 class="text-2xl font-bold mb-4 text-yellow-400">⏱️ Working Time Ended</h2>
+
+            <div class="bg-gray-900 rounded-lg p-4 mb-6">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-gray-500 text-sm mb-1">Score</div>
+                        <div id="confirmScoreValue" class="text-3xl font-bold text-green-400">0 pts</div>
+                    </div>
+                    <div>
+                        <div class="text-gray-500 text-sm mb-1">Working Time</div>
+                        <div id="confirmWorkingTimeValue" class="text-3xl font-bold text-yellow-400">0:00</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-gray-400 text-sm mb-6">
+                Submit this score or replay the video to re-evaluate?
+            </div>
+
+            <div class="flex gap-3 justify-center">
+                <button onclick="replayFromConfirmModal()" class="px-6 py-3 rounded bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                    🔄 Replay
+                </button>
+                <button onclick="confirmAndSubmitScore()" class="px-6 py-3 rounded bg-green-600 hover:bg-green-700 text-white font-medium">
+                    ✓ Submit Score
+                </button>
+            </div>
+        </div>
+    </div>
 
     <!-- FlySight Modal -->
     <div id="flysightModal" class="fixed inset-0 bg-black/80 z-50 hidden flex items-center justify-center p-4">

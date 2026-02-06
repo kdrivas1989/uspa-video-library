@@ -70,6 +70,8 @@
                     <button onclick="selectAll()" class="text-blue-400 hover:text-blue-300 text-sm">Select All</button>
                     <button onclick="selectNone()" class="text-gray-400 hover:text-gray-300 text-sm">Clear Selection</button>
                     <span id="selectedCount" class="text-gray-500 text-sm">0 selected</span>
+                    <span class="text-gray-600">|</span>
+                    <button onclick="sortByTeamRound()" class="text-purple-400 hover:text-purple-300 text-sm">Sort by Team/Round</button>
                 </div>
                 <button onclick="assignSelected()" class="bg-green-600 hover:bg-green-700 px-6 py-2 rounded-lg font-medium">
                     Assign Selected Videos
@@ -318,6 +320,37 @@
                 alert('Error: ' + err.message);
             }
         }
+
+        function sortByTeamRound() {
+            const grid = document.getElementById('videoGrid');
+            const items = Array.from(grid.children);
+
+            items.sort((a, b) => {
+                // Get video title from the text content
+                const titleA = a.querySelector('.text-white.truncate')?.textContent || '';
+                const titleB = b.querySelector('.text-white.truncate')?.textContent || '';
+
+                // Extract numbers (team number, round number)
+                const numsA = titleA.match(/\d+/g) || [];
+                const numsB = titleB.match(/\d+/g) || [];
+
+                // First number is team, second is round
+                const teamA = numsA.length > 0 ? parseInt(numsA[0]) : 9999;
+                const teamB = numsB.length > 0 ? parseInt(numsB[0]) : 9999;
+                const roundA = numsA.length > 1 ? parseInt(numsA[1]) : 0;
+                const roundB = numsB.length > 1 ? parseInt(numsB[1]) : 0;
+
+                // Sort by team first, then by round
+                if (teamA !== teamB) return teamA - teamB;
+                return roundA - roundB;
+            });
+
+            // Reorder items in DOM
+            items.forEach(item => grid.appendChild(item));
+        }
+
+        // Auto-sort on page load
+        document.addEventListener('DOMContentLoaded', sortByTeamRound);
     </script>
 </body>
 </html>

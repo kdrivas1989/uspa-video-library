@@ -2492,13 +2492,24 @@ def video(video_id):
     # Get all users for judge selection dropdowns
     all_users = get_all_users()
 
+    # Check if current user has an assignment for this video
+    current_assignment = None
+    if session.get('username'):
+        user_assignments = get_assignments_for_user(session.get('username'))
+        for a in user_assignments:
+            if a['video_id'] == video_id:
+                current_assignment = a
+                break
+
     return render_template('video.html',
                          video=video,
                          category=cat,
                          categories=CATEGORIES,
                          related_videos=related_videos,
                          competition_context=competition_context,
+                         current_assignment=current_assignment,
                          is_admin=session.get('role') == 'admin',
+                         is_chief_judge=session.get('role') in ['admin', 'chief_judge'],
                          is_event_judge=session.get('role') in ['admin', 'chief_judge', 'event_judge'],
                          users=all_users)
 
@@ -3089,6 +3100,59 @@ def my_assignments():
 
     return render_template('my_assignments.html',
                          assignments=assignments,
+                         categories=CATEGORIES,
+                         is_admin=session.get('role') == 'admin',
+                         is_chief_judge=session.get('role') in ['admin', 'chief_judge'])
+
+
+@app.route('/my-assignments/competition')
+@judge_required
+def competition_scoresheet():
+    """View assigned videos organized as a competition scoresheet by team and round."""
+    import re
+    username = session.get('username')
+    assignments = get_assignments_for_user(username)
+
+    # Get video details and parse team/round numbers
+    teams = {}  # { team_number: { round_number: assignment } }
+    all_rounds = set()
+
+    for a in assignments:
+        video = get_video(a['video_id'])
+        a['video'] = video if video else {}
+
+        # Parse team and round from video title (e.g., "226 5" = team 226, round 5)
+        title = video.get('title', '') if video else ''
+        numbers = re.findall(r'\d+', title)
+
+        if len(numbers) >= 2:
+            team_num = int(numbers[0])
+            round_num = int(numbers[1])
+        elif len(numbers) == 1:
+            team_num = int(numbers[0])
+            round_num = 1
+        else:
+            team_num = 0
+            round_num = 1
+
+        a['team_number'] = team_num
+        a['round_number'] = round_num
+        all_rounds.add(round_num)
+
+        if team_num not in teams:
+            teams[team_num] = {}
+        teams[team_num][round_num] = a
+
+    # Sort teams and rounds
+    sorted_teams = sorted(teams.keys())
+    sorted_rounds = sorted(all_rounds)
+
+    return render_template('competition_scoresheet.html',
+                         teams=teams,
+                         sorted_teams=sorted_teams,
+                         sorted_rounds=sorted_rounds,
+                         total_assignments=len(assignments),
+                         scored_count=len([a for a in assignments if a.get('status') == 'completed']),
                          categories=CATEGORIES,
                          is_admin=session.get('role') == 'admin',
                          is_chief_judge=session.get('role') in ['admin', 'chief_judge'])
