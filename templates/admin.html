@@ -436,7 +436,13 @@
             if (ffmpegLoaded) return true;
 
             try {
-                const { FFmpeg } = FFmpegWASM;
+                // Check if FFmpeg is available
+                if (typeof FFmpeg === 'undefined') {
+                    console.error('FFmpeg library not loaded');
+                    alert('Video converter not available. Please refresh the page and try again.');
+                    return false;
+                }
+
                 ffmpeg = new FFmpeg();
 
                 ffmpeg.on('progress', ({ progress }) => {
@@ -444,6 +450,13 @@
                     const statusEl = document.getElementById('conversionStatus');
                     if (statusEl) statusEl.textContent = `Converting: ${pct}%`;
                 });
+
+                ffmpeg.on('log', ({ message }) => {
+                    console.log('FFmpeg:', message);
+                });
+
+                const statusEl = document.getElementById('conversionStatus');
+                if (statusEl) statusEl.textContent = 'Loading converter (this may take a moment)...';
 
                 await ffmpeg.load({
                     coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
@@ -455,6 +468,7 @@
                 return true;
             } catch (err) {
                 console.error('FFmpeg failed to load:', err);
+                alert('Failed to load video converter: ' + err.message);
                 return false;
             }
         }
@@ -470,8 +484,13 @@
             const outputName = file.name.replace(/\.[^/.]+$/, '') + '.mp4';
 
             try {
-                await ffmpeg.writeFile(inputName, await fetchFile(file));
-                await ffmpeg.exec(['-i', inputName, '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac', outputName]);
+                console.log('Converting:', file.name);
+                const fileData = await fetchFile(file);
+                console.log('File loaded, size:', fileData.length);
+                await ffmpeg.writeFile(inputName, fileData);
+                console.log('Starting conversion...');
+                await ffmpeg.exec(['-i', inputName, '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-c:a', 'aac', '-b:a', '128k', outputName]);
+                console.log('Conversion done, reading output...');
                 const data = await ffmpeg.readFile(outputName);
 
                 // Clean up
