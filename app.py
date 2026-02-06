@@ -716,7 +716,7 @@ Thank you for your service as a judge!
                             </table>
 
                             <!-- Login Info -->
-                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a2e; border-radius: 8px; border: 1px solid #333;">
+                            <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #1a1a2e; border-radius: 8px; border: 1px solid #333; margin-bottom: 30px;">
                                 <tr>
                                     <td style="padding: 20px;">
                                         <p style="color: #b0b0b0; font-size: 14px; margin: 0 0 10px 0;">Your login credentials:</p>
@@ -726,15 +726,17 @@ Thank you for your service as a judge!
                                     </td>
                                 </tr>
                             </table>
+
+                            <!-- Thank You Message -->
+                            <p style="color: #ffffff; font-size: 28px; font-weight: bold; margin: 0; text-align: center;">
+                                Thank you for your service as a judge!
+                            </p>
                         </td>
                     </tr>
 
                     <!-- Footer -->
                     <tr>
-                        <td style="background-color: #0f0f23; padding: 20px 30px; text-align: center; border-top: 1px solid #333;">
-                            <p style="color: #666; font-size: 12px; margin: 0;">
-                                Thank you for your service as a judge!
-                            </p>
+                        <td style="background-color: #0f0f23; padding: 15px 30px; text-align: center; border-top: 1px solid #333;">
                         </td>
                     </tr>
                 </table>
