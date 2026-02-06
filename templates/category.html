@@ -140,12 +140,6 @@
                     </button>
                 </div>
                 {% endif %}
-                <!-- Sort by Team/Round -->
-                <div class="flex items-center gap-2 border-l border-gray-600 pl-4">
-                    <button onclick="sortByTeamRound()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded font-medium">
-                        Sort by Team/Round
-                    </button>
-                </div>
             </div>
         </div>
         {% endif %}
@@ -243,19 +237,7 @@
                 {% set folder_index = loop.index %}
                 <div id="folder-content-{{ folder_index }}" class="hidden pl-4 border-l-2 border-gray-700">
                     {% if is_chief_judge or is_admin %}
-                    {% set num_videos = videos_by_event[event_name]|length %}
-                    {% set num_rows = (num_videos + 3) // 4 %}
                     <div class="flex items-center gap-4 mb-3 flex-wrap">
-                        <!-- Select by Row -->
-                        <div class="flex items-center gap-2">
-                            <span class="text-gray-400 text-xs">Row:</span>
-                            {% for i in range(num_rows) %}
-                            <button onclick="selectVideoRow('{{ folder_index }}', {{ i }})"
-                                class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300">
-                                {{ i * 4 + 1 }}-{{ [i * 4 + 4, num_videos]|min }}
-                            </button>
-                            {% endfor %}
-                        </div>
                         <!-- Select by Team -->
                         <div class="flex items-center gap-2">
                             <span class="text-gray-400 text-xs">Team:</span>
@@ -341,9 +323,22 @@
                     </svg>
                 </div>
                 <div id="folder-content-uncategorized" class="hidden pl-4 border-l-2 border-gray-700">
+                    {% if is_chief_judge or is_admin %}
+                    {% set num_videos = videos_no_event|length %}
+                    {% set num_rows = (num_videos + 3) // 4 %}
+                    <div class="flex items-center gap-2 mb-3 flex-wrap">
+                        <span class="text-gray-400 text-xs">Select row:</span>
+                        {% for i in range(num_rows) %}
+                        <button onclick="selectVideoRow('uncategorized', {{ i }})"
+                            class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 rounded text-gray-300">
+                            {{ i * 4 + 1 }}-{{ [i * 4 + 4, num_videos]|min }}
+                        </button>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                     <div class="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {% for video in videos_no_event %}
-                        <div class="video-card bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition relative" data-id="{{ video.id }}">
+                        <div class="video-card bg-gray-800 rounded-lg overflow-hidden hover:bg-gray-700 transition relative" data-id="{{ video.id }}" data-row-index="{{ loop.index0 // 4 }}">
                             {% if is_chief_judge or is_admin %}
                             <div class="absolute top-2 left-2 z-10">
                                 <input type="checkbox" class="video-checkbox w-5 h-5 rounded bg-gray-700 border-gray-500 text-blue-600 focus:ring-blue-500 cursor-pointer"
