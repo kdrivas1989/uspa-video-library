@@ -630,7 +630,7 @@ Video Library Team
         return False
 
 
-def send_assignment_email(email, judge_name, video_count, assigner_name, video_titles=None):
+def send_assignment_email(email, judge_name, judge_username, video_count, assigner_name, video_titles=None):
     """Send email notification when videos are assigned to a judge."""
     if not SMTP_USERNAME or not SMTP_PASSWORD:
         print(f"Email not configured. Assignment notification for {judge_name}: {video_count} videos")
@@ -663,9 +663,9 @@ Please complete your judging assignments as soon as possible.
 To view and score your assignments, log in at:
 {APP_URL}/my-assignments
 
-Thank you for your service as a judge!
+Your username: {judge_username}
 
-- USPA Video Library
+Thank you for your service as a judge!
 """
     msg.attach(MIMEText(body, 'plain'))
 
@@ -3165,7 +3165,7 @@ def admin_test_assignment_email():
 
     sample_videos = ['Team 201 Round 1', 'Team 202 Round 1', 'Team 203 Round 1', 'Team 201 Round 2', 'Team 202 Round 2']
 
-    if send_assignment_email(test_email, 'Test Judge', 5, 'Chief Judge', sample_videos):
+    if send_assignment_email(test_email, 'Test Judge', 'testjudge', 5, 'Chief Judge', sample_videos):
         return jsonify({'success': True, 'message': f'Test email sent to {test_email}'})
     else:
         return jsonify({'error': 'Failed to send test email'}), 500
@@ -3456,8 +3456,9 @@ def assign_videos():
         for judge in judges_info:
             judge_email = judge.get('email')
             judge_name = judge.get('name', judge['username'])
+            judge_username = judge['username']
             if judge_email:
-                if send_assignment_email(judge_email, judge_name, len(video_ids), assigner_name, video_titles):
+                if send_assignment_email(judge_email, judge_name, judge_username, len(video_ids), assigner_name, video_titles):
                     emails_sent += 1
 
     judge_names = [j['name'] for j in judges_info]
