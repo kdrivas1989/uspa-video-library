@@ -645,21 +645,12 @@ def send_assignment_email(email, judge_name, judge_username, video_count, assign
     msg['To'] = email
     msg['Subject'] = f'Video Library - You Have Been Assigned {video_count} Video(s) to Judge'
 
-    # Build video list if provided
-    video_list = ""
-    if video_titles and len(video_titles) > 0:
-        video_list = "\n\nVideos assigned:\n"
-        for i, title in enumerate(video_titles[:20], 1):  # Limit to 20 titles
-            video_list += f"  {i}. {title}\n"
-        if len(video_titles) > 20:
-            video_list += f"  ... and {len(video_titles) - 20} more\n"
-
     body = f"""Hello {judge_name},
 
 You have been assigned {video_count} video(s) to judge by {assigner_name}.
 
 Please complete your judging assignments as soon as possible.
-{video_list}
+
 To view and score your assignments, log in at:
 {APP_URL}/my-assignments
 
