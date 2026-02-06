@@ -327,12 +327,12 @@ def get_s3_presigned_upload_url(s3_key, content_type='video/mp4', expires_in=360
         return None
 
     try:
+        # Don't include ContentType in signature - makes it more flexible
         url = s3_client.generate_presigned_url(
             'put_object',
             Params={
                 'Bucket': AWS_S3_BUCKET,
-                'Key': s3_key,
-                'ContentType': content_type
+                'Key': s3_key
             },
             ExpiresIn=expires_in
         )

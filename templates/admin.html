@@ -923,11 +923,13 @@
                         await new Promise((resolve, reject) => {
                             const xhr = new XMLHttpRequest();
                             xhr.open('PUT', presignedResult.presigned_url, true);
-                            xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+                            xhr.timeout = 0; // No timeout - let it upload as long as needed
 
                             xhr.upload.onprogress = (e) => {
                                 if (e.lengthComputable) {
                                     const percent = Math.round((e.loaded / e.total) * 100);
+                                    const mbLoaded = (e.loaded / 1024 / 1024).toFixed(1);
+                                    const mbTotal = (e.total / 1024 / 1024).toFixed(1);
                                     progressDiv.innerHTML = `
                                         <div class="flex items-center gap-3">
                                             <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
@@ -936,7 +938,7 @@
                                         <div class="mt-2 bg-gray-700 rounded-full h-2 overflow-hidden">
                                             <div class="bg-green-500 h-full transition-all" style="width: ${percent}%"></div>
                                         </div>
-                                        <div class="mt-1 text-sm text-gray-400">${percent}% - Uploading directly to S3...</div>
+                                        <div class="mt-1 text-sm text-gray-400">${percent}% (${mbLoaded}/${mbTotal} MB) - Uploading directly to S3...</div>
                                     `;
                                 }
                             };
