@@ -193,7 +193,8 @@
                         <button onclick="bulkAssignEvent()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm">Assign to Visible</button>
                     </div>
                 </div>
-                <div class="flex items-end">
+                <div class="flex items-end gap-2">
+                    <button onclick="sortByTeamRound()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded text-sm">Sort by Team/Round</button>
                     <span id="videoFilterCount" class="text-gray-500 text-sm"></span>
                 </div>
             </div>
@@ -1491,6 +1492,48 @@
             }
 
             alert(`Done! ${success} updated, ${failed} failed.`);
+        }
+
+        // Sort videos by team number, then round number
+        function sortByTeamRound() {
+            const container = document.getElementById('videoListContainer');
+            const videos = Array.from(container.querySelectorAll('.video-list-item'));
+
+            // Parse team and round from title (e.g., "453 4" = team 453, round 4)
+            function parseTeamRound(title) {
+                // Match patterns like "Team 453 Round 4", "453 4", "453_4", "453-4"
+                const match = title.match(/(\d+)\D*(\d+)/);
+                if (match) {
+                    return { team: parseInt(match[1]), round: parseInt(match[2]) };
+                }
+                // Try to find any numbers
+                const nums = title.match(/\d+/g);
+                if (nums && nums.length >= 2) {
+                    return { team: parseInt(nums[0]), round: parseInt(nums[1]) };
+                } else if (nums && nums.length === 1) {
+                    return { team: parseInt(nums[0]), round: 0 };
+                }
+                return { team: 999999, round: 999999 };
+            }
+
+            videos.sort((a, b) => {
+                const titleA = a.querySelector('input[type="text"]')?.value || '';
+                const titleB = b.querySelector('input[type="text"]')?.value || '';
+
+                const parsedA = parseTeamRound(titleA);
+                const parsedB = parseTeamRound(titleB);
+
+                // Sort by team first, then by round
+                if (parsedA.team !== parsedB.team) {
+                    return parsedA.team - parsedB.team;
+                }
+                return parsedA.round - parsedB.round;
+            });
+
+            // Re-append in sorted order
+            videos.forEach(video => container.appendChild(video));
+
+            document.getElementById('videoFilterCount').textContent = 'Sorted by team/round';
         }
 
         // Edit Video - fetch data and open modal
