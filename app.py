@@ -5109,6 +5109,7 @@ def save_video_draw(video_id):
 @app.route('/search')
 def search():
     """Search videos."""
+    import re as re_module
     query = request.args.get('q', '').strip()
 
     if not query:
@@ -5116,11 +5117,24 @@ def search():
 
     videos = search_videos(query)
 
+    # If query contains a number (team search), sort by team number then round
+    if re_module.search(r'\d', query):
+        def parse_team_round(title):
+            nums = re_module.findall(r'\d+', title or '')
+            if len(nums) >= 2:
+                return (int(nums[0]), int(nums[1]))
+            elif len(nums) == 1:
+                return (int(nums[0]), 0)
+            return (999999, 999999)
+
+        videos.sort(key=lambda v: parse_team_round(v.get('title', '')))
+
     return render_template('search.html',
                          query=query,
                          videos=videos,
                          categories=CATEGORIES,
-                         is_admin=session.get('role') == 'admin')
+                         is_admin=session.get('role') == 'admin',
+                         is_chief_judge=session.get('role') in ['admin', 'chief_judge'])
 
 
 @app.route('/event/<event_name>')
