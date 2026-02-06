@@ -27,7 +27,7 @@
         <!-- Assignment Form -->
         <div class="bg-gray-800 rounded-lg p-6 mb-8">
             <h2 class="text-xl font-bold mb-4">Create New Assignment</h2>
-            <div class="grid md:grid-cols-3 gap-4 mb-4">
+            <div class="grid md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
                 <div>
                     <label class="block text-gray-400 text-sm mb-2">Assign To</label>
                     <select id="assignTo" class="w-full px-4 py-2 rounded bg-gray-700 text-white">
@@ -38,12 +38,24 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-gray-400 text-sm mb-2">Filter by Category</label>
-                    <select id="filterCategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white" onchange="filterVideos()">
+                    <label class="block text-gray-400 text-sm mb-2">Category</label>
+                    <select id="filterCategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white" onchange="updateSubcategoryFilter(); filterVideos()">
                         <option value="">All Categories</option>
                         {% for cat_id, cat in categories.items() %}
-                        <option value="{{ cat_id }}">{{ cat.abbrev }} - {{ cat.name }}</option>
+                        <option value="{{ cat_id }}" data-subcategories="{{ cat.subcategories|tojson|e if cat.subcategories else '{}' }}">{{ cat.abbrev }} - {{ cat.name }}</option>
                         {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Subcategory</label>
+                    <select id="filterSubcategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white" onchange="updateSubSubcategoryFilter(); filterVideos()">
+                        <option value="">All Subcategories</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-2">Sub-subcategory</label>
+                    <select id="filterSubSubcategory" class="w-full px-4 py-2 rounded bg-gray-700 text-white" onchange="filterVideos()">
+                        <option value="">All</option>
                     </select>
                 </div>
                 <div>
@@ -67,7 +79,7 @@
             <!-- Video Selection Grid -->
             <div class="grid md:grid-cols-4 lg:grid-cols-6 gap-3 max-h-[400px] overflow-y-auto" id="videoGrid">
                 {% for video in videos %}
-                <label class="video-item cursor-pointer" data-category="{{ video.category }}">
+                <label class="video-item cursor-pointer" data-category="{{ video.category }}" data-subcategory="{{ video.subcategory|default('', true) }}" data-subsubcategory="{{ video.subsubcategory|default('', true) }}">
                     <input type="checkbox" value="{{ video.id }}" class="video-checkbox hidden">
                     <div class="bg-gray-700 rounded-lg overflow-hidden hover:ring-2 hover:ring-blue-500 transition select-box">
                         <div class="aspect-video bg-gray-600 relative">
@@ -174,14 +186,70 @@
             updateSelectedCount();
         }
 
+        function updateSubcategoryFilter() {
+            const categorySelect = document.getElementById('filterCategory');
+            const subcategorySelect = document.getElementById('filterSubcategory');
+            const subSubcategorySelect = document.getElementById('filterSubSubcategory');
+
+            // Clear subcategory and sub-subcategory
+            subcategorySelect.innerHTML = '<option value="">All Subcategories</option>';
+            subSubcategorySelect.innerHTML = '<option value="">All</option>';
+
+            const selectedOption = categorySelect.options[categorySelect.selectedIndex];
+            if (selectedOption && selectedOption.dataset.subcategories) {
+                try {
+                    const subcategories = JSON.parse(selectedOption.dataset.subcategories);
+                    for (const [key, value] of Object.entries(subcategories)) {
+                        const opt = document.createElement('option');
+                        opt.value = key;
+                        opt.textContent = value.name || key;
+                        opt.dataset.subsubcategories = JSON.stringify(value.subcategories || {});
+                        subcategorySelect.appendChild(opt);
+                    }
+                } catch (e) {}
+            }
+        }
+
+        function updateSubSubcategoryFilter() {
+            const subcategorySelect = document.getElementById('filterSubcategory');
+            const subSubcategorySelect = document.getElementById('filterSubSubcategory');
+
+            // Clear sub-subcategory
+            subSubcategorySelect.innerHTML = '<option value="">All</option>';
+
+            const selectedOption = subcategorySelect.options[subcategorySelect.selectedIndex];
+            if (selectedOption && selectedOption.dataset.subsubcategories) {
+                try {
+                    const subsubcategories = JSON.parse(selectedOption.dataset.subsubcategories);
+                    for (const [key, value] of Object.entries(subsubcategories)) {
+                        const opt = document.createElement('option');
+                        opt.value = key;
+                        opt.textContent = value.name || key;
+                        subSubcategorySelect.appendChild(opt);
+                    }
+                } catch (e) {}
+            }
+        }
+
         function filterVideos() {
             const category = document.getElementById('filterCategory').value;
+            const subcategory = document.getElementById('filterSubcategory').value;
+            const subsubcategory = document.getElementById('filterSubSubcategory').value;
+
             document.querySelectorAll('.video-item').forEach(item => {
-                if (!category || item.dataset.category === category) {
-                    item.style.display = '';
-                } else {
-                    item.style.display = 'none';
+                let show = true;
+
+                if (category && item.dataset.category !== category) {
+                    show = false;
                 }
+                if (show && subcategory && item.dataset.subcategory !== subcategory) {
+                    show = false;
+                }
+                if (show && subsubcategory && item.dataset.subsubcategory !== subsubcategory) {
+                    show = false;
+                }
+
+                item.style.display = show ? '' : 'none';
             });
         }
 
