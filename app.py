@@ -1886,8 +1886,23 @@ def delete_assignment(assignment_id):
     """Delete a video assignment."""
     try:
         if USE_SUPABASE:
+            # First check if assignment exists
+            check = supabase.table('video_assignments').select('id').eq('id', assignment_id).execute()
+            if not check.data:
+                print(f"[DELETE] Assignment {assignment_id} not found (already deleted)")
+                return True
+
+            # Perform the delete
             result = supabase.table('video_assignments').delete().eq('id', assignment_id).execute()
-            print(f"[DELETE] Assignment {assignment_id} deleted from Supabase. Result: {len(result.data) if result.data else 0} rows affected")
+            print(f"[DELETE] Supabase delete for {assignment_id}: returned {len(result.data) if result.data else 0} rows")
+
+            # Verify it was deleted
+            verify = supabase.table('video_assignments').select('id').eq('id', assignment_id).execute()
+            if verify.data:
+                print(f"[DELETE ERROR] Assignment {assignment_id} STILL EXISTS after delete! RLS may be blocking.")
+                return False
+
+            print(f"[DELETE SUCCESS] Assignment {assignment_id} confirmed deleted")
             return True
         else:
             db = get_sqlite_db()
@@ -1896,6 +1911,8 @@ def delete_assignment(assignment_id):
             return True
     except Exception as e:
         print(f"[DELETE ERROR] Failed to delete assignment {assignment_id}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
