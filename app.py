@@ -1884,12 +1884,19 @@ def update_assignment_status(assignment_id, status):
 
 def delete_assignment(assignment_id):
     """Delete a video assignment."""
-    if USE_SUPABASE:
-        supabase.table('video_assignments').delete().eq('id', assignment_id).execute()
-    else:
-        db = get_sqlite_db()
-        db.execute('DELETE FROM video_assignments WHERE id = ?', (assignment_id,))
-        db.commit()
+    try:
+        if USE_SUPABASE:
+            result = supabase.table('video_assignments').delete().eq('id', assignment_id).execute()
+            print(f"[DELETE] Assignment {assignment_id} deleted from Supabase. Result: {len(result.data) if result.data else 0} rows affected")
+            return True
+        else:
+            db = get_sqlite_db()
+            db.execute('DELETE FROM video_assignments WHERE id = ?', (assignment_id,))
+            db.commit()
+            return True
+    except Exception as e:
+        print(f"[DELETE ERROR] Failed to delete assignment {assignment_id}: {e}")
+        return False
 
 
 def get_all_assignments():
@@ -3867,8 +3874,10 @@ def assign_videos():
 @chief_judge_required
 def delete_assignment_route(assignment_id):
     """Delete a video assignment."""
-    delete_assignment(assignment_id)
-    return jsonify({'success': True})
+    if delete_assignment(assignment_id):
+        return jsonify({'success': True})
+    else:
+        return jsonify({'success': False, 'error': 'Failed to delete assignment'}), 500
 
 
 @app.route('/my-assignments')
