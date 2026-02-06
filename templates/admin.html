@@ -894,11 +894,12 @@
                 }
 
                 const ext = file.name.split('.').pop().toLowerCase();
-                const s3Compatible = ['mp4', 'webm', 'mov', 'm4v', 'ogg', 'ogv'].includes(ext);
+                const videoExtensions = ['mp4', 'webm', 'mov', 'm4v', 'ogg', 'ogv', 'mkv', 'mts', 'm2ts', 'avi'];
+                const needsConversion = ['mkv', 'mts', 'm2ts', 'avi'].includes(ext);
 
                 try {
-                    // Use direct S3 upload if S3 is enabled and file is compatible
-                    if (s3Enabled && s3Compatible) {
+                    // Use direct S3 upload if S3 is enabled for any video file
+                    if (s3Enabled && videoExtensions.includes(ext)) {
                         // Step 1: Get presigned URL
                         const presignedResponse = await fetch('/admin/s3-presigned-upload', {
                             method: 'POST',
@@ -964,14 +965,21 @@
                                 title: file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '),
                                 category: categoryToUse || '',
                                 subcategory: manualSubcategory,
-                                event: eventToUse
+                                event: eventToUse,
+                                needs_conversion: needsConversion
                             })
                         });
                         const completeResult = await completeResponse.json();
 
                         if (completeResult.success) {
-                            uploaded++;
-                            results.push({ name: file.name, success: true, s3: true });
+                            if (completeResult.converting) {
+                                backgroundJobs++;
+                                results.push({ name: file.name, success: true, background: true, s3: true });
+                                startConversionPolling();
+                            } else {
+                                uploaded++;
+                                results.push({ name: file.name, success: true, s3: true });
+                            }
                         } else {
                             failed++;
                             results.push({ name: file.name, success: false, error: completeResult.error });

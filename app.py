@@ -3292,6 +3292,140 @@ def background_upload_to_s3(job_id, file_path, video_data):
             os.remove(file_path)
 
 
+def background_convert_s3_video(job_id, video_id, s3_key, original_url, video_data):
+    """Download video from S3, convert to MP4, re-upload, and update database."""
+    import urllib.request
+    import tempfile
+    temp_input = None
+    temp_output = None
+
+    try:
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'downloading'
+            conversion_jobs[job_id]['progress'] = 5
+            save_conversion_job(conversion_jobs[job_id])
+
+        # Download from S3
+        ext = os.path.splitext(s3_key)[1].lower()
+        temp_input = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+        temp_input.close()
+
+        urllib.request.urlretrieve(original_url, temp_input.name)
+
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'converting'
+            conversion_jobs[job_id]['progress'] = 20
+            save_conversion_job(conversion_jobs[job_id])
+
+        # Get input duration for progress
+        total_duration = get_video_duration_seconds(temp_input.name)
+
+        # Convert to MP4
+        temp_output = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+        temp_output.close()
+
+        process = subprocess.Popen([
+            'ffmpeg', '-y', '-i', temp_input.name,
+            '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            '-progress', 'pipe:1',
+            '-nostats',
+            temp_output.name
+        ], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+
+        # Parse progress
+        for line in process.stdout:
+            line = line.strip()
+            if line.startswith('out_time_us='):
+                try:
+                    time_us = int(line.split('=')[1])
+                    current_time = time_us / 1000000.0
+                    if total_duration and total_duration > 0:
+                        # Progress 20-70% for conversion
+                        progress = 20 + min(50, int((current_time / total_duration) * 50))
+                        with conversion_lock:
+                            conversion_jobs[job_id]['progress'] = progress
+                except:
+                    pass
+            elif line.startswith('progress=end'):
+                break
+
+        process.wait()
+
+        if process.returncode != 0:
+            raise Exception('FFmpeg conversion failed')
+
+        # Clean up input file
+        os.remove(temp_input.name)
+        temp_input = None
+
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'uploading'
+            conversion_jobs[job_id]['progress'] = 75
+            save_conversion_job(conversion_jobs[job_id])
+
+        # Upload converted MP4 to S3
+        new_s3_key = f"videos/{video_id}.mp4"
+        new_url = upload_to_s3_from_path(temp_output.name, folder='videos')
+
+        if not new_url:
+            raise Exception('Failed to upload converted video to S3')
+
+        # Clean up output file
+        os.remove(temp_output.name)
+        temp_output = None
+
+        with conversion_lock:
+            conversion_jobs[job_id]['progress'] = 90
+            save_conversion_job(conversion_jobs[job_id])
+
+        # Delete original file from S3
+        try:
+            delete_from_s3(s3_key)
+        except:
+            pass  # Non-critical if this fails
+
+        # Generate thumbnail
+        thumbnail_url = None
+        # We'd need to stream from the new URL for thumbnail - skip for now
+
+        # Get duration from the uploaded URL
+        duration = get_video_duration(new_url)
+
+        # Update video data with new URL
+        video_data['url'] = new_url
+        video_data['duration'] = duration
+        video_data['thumbnail'] = thumbnail_url
+
+        # Save to database
+        save_video(video_data)
+
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'completed'
+            conversion_jobs[job_id]['progress'] = 100
+            conversion_jobs[job_id]['video_id'] = video_id
+            conversion_jobs[job_id]['completed_at'] = datetime.now().isoformat()
+            save_conversion_job(conversion_jobs[job_id])
+
+    except Exception as e:
+        import traceback
+        log_upload_failure('s3_conversion_exception',
+                          filename=video_data.get('title') if video_data else None,
+                          extra={'job_id': job_id, 'error': str(e), 'traceback': traceback.format_exc()})
+        with conversion_lock:
+            if job_id in conversion_jobs:
+                conversion_jobs[job_id]['status'] = 'failed'
+                conversion_jobs[job_id]['error'] = str(e)
+                save_conversion_job(conversion_jobs[job_id])
+
+        # Clean up temp files
+        if temp_input and os.path.exists(temp_input.name):
+            os.remove(temp_input.name)
+        if temp_output and os.path.exists(temp_output.name):
+            os.remove(temp_output.name)
+
+
 @app.route('/conversion/status/<job_id>')
 def conversion_status(job_id):
     """Get status of a background conversion job."""
@@ -5277,6 +5411,7 @@ def s3_upload_complete():
     category = data.get('category', 'uncategorized')
     subcategory = data.get('subcategory', '')
     event = data.get('event', '')
+    needs_conversion = data.get('needs_conversion', False)
 
     if not video_id or not final_url:
         return jsonify({'error': 'Missing required fields'}), 400
@@ -5297,13 +5432,12 @@ def s3_upload_complete():
     if not title:
         title = os.path.splitext(filename)[0].replace('_', ' ').replace('-', ' ')
 
-    # Save to database
     video_data = {
         'id': video_id,
         'title': title,
         'description': '',
         'url': final_url,
-        'thumbnail': None,  # Thumbnail will be generated separately if needed
+        'thumbnail': None,
         'category': category,
         'subcategory': subcategory,
         'tags': '',
@@ -5316,6 +5450,42 @@ def s3_upload_complete():
         'category_auto': category_auto
     }
 
+    # If file needs conversion (MKV, AVI, MTS, etc.)
+    if needs_conversion:
+        # Create conversion job
+        job_id = str(uuid.uuid4())[:8]
+        session_id = session.get('_id', request.remote_addr)
+
+        with conversion_lock:
+            conversion_jobs[job_id] = {
+                'job_id': job_id,
+                'video_id': video_id,
+                'filename': filename,
+                'title': title,
+                'status': 'queued',
+                'progress': 0,
+                'session_id': session_id,
+                'created_at': datetime.now().isoformat(),
+                'error': None
+            }
+
+        # Start background conversion
+        thread = threading.Thread(
+            target=background_convert_s3_video,
+            args=(job_id, video_id, s3_key, final_url, video_data)
+        )
+        thread.daemon = True
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'converting': True,
+            'job_id': job_id,
+            'video_id': video_id,
+            'message': 'Video uploaded - conversion started'
+        })
+
+    # No conversion needed - save directly
     save_video(video_data)
 
     return jsonify({
