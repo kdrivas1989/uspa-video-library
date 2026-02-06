@@ -1419,6 +1419,8 @@
                     // Update data attribute
                     const videoEl = document.querySelector(`[data-video-id="${videoId}"]`);
                     if (videoEl) videoEl.dataset.event = newEvent;
+                    // Re-apply filter to update view
+                    filterVideosByEvent();
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
@@ -1492,6 +1494,8 @@
             }
 
             alert(`Done! ${success} updated, ${failed} failed.`);
+            // Re-apply filter to hide moved videos
+            filterVideosByEvent();
         }
 
         // Sort videos by team number, then round number
