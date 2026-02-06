@@ -1999,13 +1999,29 @@ def delete_duplicate_assignments():
 
             print(f"[DEDUP] Found {len(duplicates)} duplicates to remove")
 
-            # Delete duplicates
+            # Delete duplicates in batches of 20
+            import time
             deleted = 0
-            for dup_id in duplicates:
-                supabase.table('video_assignments').delete().eq('id', dup_id).execute()
-                deleted += 1
-                if deleted % 100 == 0:
-                    print(f"[DEDUP] Deleted {deleted} duplicates so far...")
+            batch_size = 20
+            total_batches = (len(duplicates) + batch_size - 1) // batch_size
+
+            for batch_num in range(total_batches):
+                start_idx = batch_num * batch_size
+                end_idx = min(start_idx + batch_size, len(duplicates))
+                batch = duplicates[start_idx:end_idx]
+
+                for dup_id in batch:
+                    try:
+                        supabase.table('video_assignments').delete().eq('id', dup_id).execute()
+                        deleted += 1
+                    except Exception as e:
+                        print(f"[DEDUP] Failed to delete {dup_id}: {e}")
+
+                print(f"[DEDUP] Batch {batch_num + 1}/{total_batches} complete - {deleted} deleted so far")
+
+                # Small delay between batches to avoid rate limiting
+                if batch_num < total_batches - 1:
+                    time.sleep(0.1)
 
             print(f"[DEDUP] Total duplicates removed: {deleted}")
             return deleted
