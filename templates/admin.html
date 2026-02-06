@@ -854,12 +854,8 @@
                 const categoryToUse = fileCategory || manualCategory;
                 const willAutoDetect = !categoryToUse;
 
-                // Check if file needs conversion - skip and show message
-                if (fileNeedsConversion(file.name)) {
-                    failed++;
-                    results.push({ name: file.name, success: false, error: 'Needs conversion to MP4' });
-                    continue;
-                }
+                // Files that need conversion will be handled by the server
+                const willConvert = fileNeedsConversion(file.name);
 
                 const queueInfo = uploadQueue.length > 0 ? `<span class="text-blue-400 ml-2">(${uploadQueue.length} more queued)</span>` : '';
                 progressDiv.innerHTML = `
