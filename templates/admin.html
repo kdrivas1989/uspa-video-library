@@ -168,11 +168,39 @@
 
         <!-- Video List -->
         <div class="bg-gray-800 rounded-lg p-6">
-            <h2 class="text-xl font-bold mb-6">Manage Videos</h2>
-            <div class="space-y-3 max-h-[800px] overflow-y-auto">
+            <h2 class="text-xl font-bold mb-4">Manage Videos</h2>
+            <!-- Filter by Event -->
+            <div class="flex flex-wrap gap-4 mb-4">
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Filter by Event</label>
+                    <select id="filterEventSelect" onchange="filterVideosByEvent()" class="px-4 py-2 rounded bg-gray-700 text-white">
+                        <option value="">All Events</option>
+                        <option value="__none__">No Event Assigned</option>
+                        {% for event in events %}
+                        <option value="{{ event }}">{{ event }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-gray-400 text-sm mb-1">Bulk Assign Event</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="bulkEventInput" list="bulkEventList" placeholder="Event name..." class="px-3 py-2 rounded bg-gray-700 text-white w-48">
+                        <datalist id="bulkEventList">
+                            {% for event in events %}
+                            <option value="{{ event }}">
+                            {% endfor %}
+                        </datalist>
+                        <button onclick="bulkAssignEvent()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm">Assign to Visible</button>
+                    </div>
+                </div>
+                <div class="flex items-end">
+                    <span id="videoFilterCount" class="text-gray-500 text-sm"></span>
+                </div>
+            </div>
+            <div class="space-y-3 max-h-[800px] overflow-y-auto" id="videoListContainer">
                 {% if videos %}
                 {% for video in videos %}
-                <div class="bg-gray-700 rounded-lg p-4" data-video-id="{{ video.id }}">
+                <div class="bg-gray-700 rounded-lg p-4 video-list-item" data-video-id="{{ video.id }}" data-event="{{ video.event|default('', true) }}">
                     <div class="flex gap-4">
                         <div class="w-32 h-20 bg-gray-600 rounded flex-shrink-0 overflow-hidden">
                             {% if video.thumbnail %}
@@ -206,6 +234,18 @@
                                     {% endif %}
                                 </select>
                                 <span>{{ video.views }} views</span>
+                                <span class="text-gray-500">|</span>
+                                <input type="text" value="{{ video.event|default('', true) }}"
+                                    list="eventList_{{ video.id }}"
+                                    placeholder="No event"
+                                    class="bg-cyan-700 text-white px-2 py-0.5 rounded text-xs w-32 event-input"
+                                    data-video-id="{{ video.id }}"
+                                    onchange="quickChangeEvent('{{ video.id }}', this.value)">
+                                <datalist id="eventList_{{ video.id }}">
+                                    {% for event in events %}
+                                    <option value="{{ event }}">
+                                    {% endfor %}
+                                </datalist>
                             </div>
                             <div class="flex gap-2 mt-3">
                                 <button onclick="editVideo('{{ video.id }}')"
@@ -1361,6 +1401,96 @@
             } catch (error) {
                 alert('Error: ' + error.message);
             }
+        }
+
+        // Quick change event (inline)
+        async function quickChangeEvent(videoId, newEvent) {
+            try {
+                const response = await fetch(`/admin/edit-video/${videoId}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event: newEvent })
+                });
+                const result = await response.json();
+                if (!result.success) {
+                    alert(result.error || 'Failed to change event');
+                } else {
+                    // Update data attribute
+                    const videoEl = document.querySelector(`[data-video-id="${videoId}"]`);
+                    if (videoEl) videoEl.dataset.event = newEvent;
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Filter videos by event
+        function filterVideosByEvent() {
+            const filterValue = document.getElementById('filterEventSelect').value;
+            const videos = document.querySelectorAll('.video-list-item');
+            let visibleCount = 0;
+
+            videos.forEach(video => {
+                const videoEvent = video.dataset.event || '';
+                let show = true;
+
+                if (filterValue === '__none__') {
+                    show = !videoEvent;  // Show only videos with no event
+                } else if (filterValue) {
+                    show = videoEvent === filterValue;
+                }
+
+                video.style.display = show ? '' : 'none';
+                if (show) visibleCount++;
+            });
+
+            document.getElementById('videoFilterCount').textContent = `${visibleCount} video${visibleCount !== 1 ? 's' : ''} shown`;
+        }
+
+        // Bulk assign event to visible videos
+        async function bulkAssignEvent() {
+            const newEvent = document.getElementById('bulkEventInput').value.trim();
+            if (!newEvent) {
+                alert('Please enter an event name');
+                return;
+            }
+
+            const visibleVideos = document.querySelectorAll('.video-list-item:not([style*="display: none"])');
+            if (visibleVideos.length === 0) {
+                alert('No visible videos to assign');
+                return;
+            }
+
+            if (!confirm(`Assign "${newEvent}" to ${visibleVideos.length} video(s)?`)) {
+                return;
+            }
+
+            let success = 0;
+            let failed = 0;
+
+            for (const video of visibleVideos) {
+                const videoId = video.dataset.videoId;
+                try {
+                    const response = await fetch(`/admin/edit-video/${videoId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ event: newEvent })
+                    });
+                    const result = await response.json();
+                    if (result.success) {
+                        success++;
+                        video.dataset.event = newEvent;
+                        const eventInput = video.querySelector('.event-input');
+                        if (eventInput) eventInput.value = newEvent;
+                    } else {
+                        failed++;
+                    }
+                } catch (e) {
+                    failed++;
+                }
+            }
+
+            alert(`Done! ${success} updated, ${failed} failed.`);
         }
 
         // Edit Video - fetch data and open modal
