@@ -141,9 +141,17 @@
         <div class="bg-gray-800 rounded-lg p-6">
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold">Current Assignments ({{ assignments|length }})</h2>
-                <button onclick="deleteSelectedAssignments()" id="deleteSelectedBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm hidden">
-                    Remove Selected (<span id="selectedAssignmentCount">0</span>)
-                </button>
+                <div class="flex items-center gap-3">
+                    <select id="assignmentRoundFilter" class="px-3 py-2 rounded bg-gray-700 text-white text-sm">
+                        <option value="">All Rounds</option>
+                    </select>
+                    <button onclick="selectAssignmentsByRound()" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm">
+                        Select Round
+                    </button>
+                    <button onclick="deleteSelectedAssignments()" id="deleteSelectedBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm hidden">
+                        Remove Selected (<span id="selectedAssignmentCount">0</span>)
+                    </button>
+                </div>
             </div>
             {% if assignments %}
             <div class="overflow-x-auto">
@@ -163,7 +171,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-700">
                         {% for a in assignments %}
-                        <tr class="hover:bg-gray-700/50">
+                        <tr class="hover:bg-gray-700/50 assignment-row" data-video-title="{{ a.video.title|default('', true) }}">
                             <td class="px-4 py-3">
                                 <input type="checkbox" value="{{ a.id }}" class="assignment-checkbox w-4 h-4 accent-blue-500" onchange="updateAssignmentSelection()">
                             </td>
@@ -584,10 +592,68 @@
             });
         }
 
+        // Parse round from assignment row
+        function parseAssignmentRound(row) {
+            const title = row.dataset.videoTitle || '';
+            // Look for "Round X" or "Rd X" or just numbers after common patterns
+            const roundMatch = title.match(/(?:Round|Rd)\s*(\d+)/i) || title.match(/R(\d+)/i);
+            if (roundMatch) return parseInt(roundMatch[1]);
+            // Fallback: get second number in title (Team X Round Y)
+            const nums = title.match(/\d+/g) || [];
+            return nums.length > 1 ? parseInt(nums[1]) : null;
+        }
+
+        // Populate assignment round dropdown
+        function populateAssignmentRoundDropdown() {
+            const rows = document.querySelectorAll('.assignment-row');
+            const rounds = new Set();
+
+            rows.forEach(row => {
+                const round = parseAssignmentRound(row);
+                if (round !== null) rounds.add(round);
+            });
+
+            const select = document.getElementById('assignmentRoundFilter');
+            if (!select) return;
+
+            // Keep the "All Rounds" option
+            select.innerHTML = '<option value="">All Rounds</option>';
+
+            Array.from(rounds).sort((a, b) => a - b).forEach(round => {
+                const opt = document.createElement('option');
+                opt.value = round;
+                opt.textContent = 'Round ' + round;
+                select.appendChild(opt);
+            });
+        }
+
+        // Select assignments by round
+        function selectAssignmentsByRound() {
+            const select = document.getElementById('assignmentRoundFilter');
+            const selectedRound = select.value ? parseInt(select.value) : null;
+
+            if (selectedRound === null) {
+                // If "All Rounds" selected, select all
+                document.querySelectorAll('.assignment-checkbox').forEach(cb => cb.checked = true);
+            } else {
+                // Select only matching rounds
+                document.querySelectorAll('.assignment-row').forEach(row => {
+                    const round = parseAssignmentRound(row);
+                    const checkbox = row.querySelector('.assignment-checkbox');
+                    if (checkbox && round === selectedRound) {
+                        checkbox.checked = true;
+                    }
+                });
+            }
+
+            updateAssignmentSelection();
+        }
+
         // Auto-sort and populate dropdowns on page load
         document.addEventListener('DOMContentLoaded', function() {
             sortByTeamRound();
             populateTeamRoundDropdowns();
+            populateAssignmentRoundDropdown();
         });
     </script>
 </body>
