@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>http://videos.kd-evolution.com/videoupload</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/util.js"></script>
     {% if dropbox_app_key %}
     <script src="https://www.dropbox.com/static/api/2/dropins.js" id="dropboxjs" data-app-key="{{ dropbox_app_key }}"></script>
     {% endif %}
@@ -425,6 +427,69 @@
         let uploadQueue = [];
         let isUploading = false;
 
+        // FFmpeg for browser-based conversion
+        let ffmpeg = null;
+        let ffmpegLoaded = false;
+        const needsConversion = ['.mkv', '.avi', '.mts', '.m2ts', '.wmv', '.flv', '.3gp'];
+
+        async function initFFmpeg() {
+            if (ffmpegLoaded) return true;
+
+            try {
+                const { FFmpeg } = FFmpegWASM;
+                ffmpeg = new FFmpeg();
+
+                ffmpeg.on('progress', ({ progress }) => {
+                    const pct = Math.round(progress * 100);
+                    const statusEl = document.getElementById('conversionStatus');
+                    if (statusEl) statusEl.textContent = `Converting: ${pct}%`;
+                });
+
+                await ffmpeg.load({
+                    coreURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
+                    wasmURL: 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.wasm',
+                });
+
+                ffmpegLoaded = true;
+                console.log('FFmpeg loaded successfully');
+                return true;
+            } catch (err) {
+                console.error('FFmpeg failed to load:', err);
+                return false;
+            }
+        }
+
+        async function convertToMp4(file) {
+            if (!ffmpegLoaded) {
+                const loaded = await initFFmpeg();
+                if (!loaded) return null;
+            }
+
+            const { fetchFile } = FFmpegUtil;
+            const inputName = 'input' + file.name.substring(file.name.lastIndexOf('.'));
+            const outputName = file.name.replace(/\.[^/.]+$/, '') + '.mp4';
+
+            try {
+                await ffmpeg.writeFile(inputName, await fetchFile(file));
+                await ffmpeg.exec(['-i', inputName, '-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'aac', outputName]);
+                const data = await ffmpeg.readFile(outputName);
+
+                // Clean up
+                await ffmpeg.deleteFile(inputName);
+                await ffmpeg.deleteFile(outputName);
+
+                return new File([data.buffer], outputName, { type: 'video/mp4' });
+            } catch (err) {
+                console.error('Conversion failed:', err);
+                return null;
+            }
+        }
+
+        function fileNeedsConversion(filename) {
+            const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+            return needsConversion.includes(ext);
+        }
+
         // Check S3 status on page load
         async function checkS3Status() {
             try {
@@ -755,16 +820,43 @@
 
             let uploaded = 0;
             let failed = 0;
+            let converted = 0;
             let backgroundJobs = 0;
             const results = [];
 
             for (let i = 0; i < filesWithMeta.length; i++) {
-                const { file, event: fileEvent, category: fileCategory } = filesWithMeta[i];
+                let { file, event: fileEvent, category: fileCategory } = filesWithMeta[i];
 
                 // Use folder-detected values, or fall back to manual inputs
                 const eventToUse = fileEvent || manualEvent;
                 const categoryToUse = fileCategory || manualCategory;
                 const willAutoDetect = !categoryToUse;
+
+                // Check if file needs conversion
+                if (fileNeedsConversion(file.name)) {
+                    const queueInfo = uploadQueue.length > 0 ? `<span class="text-blue-400 ml-2">(${uploadQueue.length} more queued)</span>` : '';
+                    progressDiv.innerHTML = `
+                        <div class="flex items-center gap-3">
+                            <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-orange-500"></div>
+                            <span>Converting ${i + 1}/${filesWithMeta.length}: ${file.name}</span>
+                            ${queueInfo}
+                        </div>
+                        <div class="mt-2 text-sm">
+                            <span id="conversionStatus" class="text-orange-400">Loading converter...</span>
+                        </div>
+                        <p class="text-gray-500 text-xs mt-2">Converting to MP4 in your browser before upload</p>
+                    `;
+
+                    const convertedFile = await convertToMp4(file);
+                    if (convertedFile) {
+                        file = convertedFile;
+                        converted++;
+                    } else {
+                        failed++;
+                        results.push({ name: file.name, success: false, error: 'Conversion failed' });
+                        continue;
+                    }
+                }
 
                 const queueInfo = uploadQueue.length > 0 ? `<span class="text-blue-400 ml-2">(${uploadQueue.length} more queued)</span>` : '';
                 progressDiv.innerHTML = `
@@ -774,7 +866,7 @@
                         ${queueInfo}
                     </div>
                     <div class="mt-2 text-sm text-gray-400">
-                        ${uploaded} uploaded, ${failed} failed
+                        ${uploaded} uploaded, ${failed} failed${converted > 0 ? `, ${converted} converted` : ''}
                         ${eventToUse ? `<span class="text-cyan-400 ml-2">Event: ${eventToUse}</span>` : ''}
                         ${categoryToUse ? `<span class="text-green-400 ml-2">Category: ${categoryToUse}</span>` : ''}
                         ${willAutoDetect ? `<span class="text-yellow-400 ml-2">Auto-detecting from filename...</span>` : ''}
