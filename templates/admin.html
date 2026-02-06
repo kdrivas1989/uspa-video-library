@@ -924,6 +924,7 @@
                             const xhr = new XMLHttpRequest();
                             xhr.open('PUT', presignedResult.presigned_url, true);
                             xhr.timeout = 0; // No timeout - let it upload as long as needed
+                            xhr.setRequestHeader('Content-Type', 'application/octet-stream');
 
                             xhr.upload.onprogress = (e) => {
                                 if (e.lengthComputable) {
