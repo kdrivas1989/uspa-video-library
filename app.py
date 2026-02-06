@@ -2613,7 +2613,7 @@ Emma Chen,open,Canopy Piloting,10,CHN
     )
 
 
-@app.route('/admin')
+@app.route('/videoupload')
 @chief_judge_required
 def admin_dashboard():
     """Video upload dashboard (chief judge and admin)."""
