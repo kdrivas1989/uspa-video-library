@@ -421,6 +421,10 @@
         let s3Enabled = false;
         let s3Bucket = null;
 
+        // Upload queue system
+        let uploadQueue = [];
+        let isUploading = false;
+
         // Check S3 status on page load
         async function checkS3Status() {
             try {
@@ -640,7 +644,10 @@
                 dropZone.style.pointerEvents = '';
 
                 if (videoFiles.length > 0) {
-                    uploadFilesWithMetadata(videoFiles);
+                    // Add to queue instead of uploading directly
+                    uploadQueue.push(...videoFiles);
+                    updateQueueStatus();
+                    processUploadQueue();
                 } else if (allFiles.length > 0) {
                     alert('No video files found in the dropped items');
                 }
@@ -649,6 +656,35 @@
                 dropZone.innerHTML = originalContent;
                 dropZone.style.pointerEvents = '';
                 alert('Error scanning files: ' + error.message);
+            }
+        }
+
+        function updateQueueStatus() {
+            const progressDiv = document.getElementById('uploadProgress');
+            if (uploadQueue.length > 0 && !isUploading) {
+                progressDiv.classList.remove('hidden');
+                progressDiv.innerHTML = `
+                    <div class="bg-blue-900/30 border border-blue-600 rounded p-3 mb-2">
+                        <span class="text-blue-400">${uploadQueue.length} files queued for upload</span>
+                    </div>
+                `;
+            }
+        }
+
+        async function processUploadQueue() {
+            if (isUploading || uploadQueue.length === 0) return;
+
+            isUploading = true;
+            const filesToUpload = [...uploadQueue];
+            uploadQueue = [];
+
+            await uploadFilesWithMetadata(filesToUpload);
+
+            isUploading = false;
+
+            // Check if more files were added while uploading
+            if (uploadQueue.length > 0) {
+                processUploadQueue();
             }
         }
 
@@ -693,9 +729,17 @@
         function handleFileSelect(e) {
             const files = Array.from(e.target.files);
             if (files.length > 0) {
-                // Convert to new format with empty metadata
-                const filesWithMeta = files.map(f => ({ file: f, event: '', category: '' }));
-                uploadFilesWithMetadata(filesWithMeta);
+                // Filter for video files
+                const videoFiles = files.filter(f => f.type.startsWith('video/') ||
+                    f.name.toLowerCase().match(/\.(mp4|webm|mov|m4v|ogg|ogv|mts|m2ts|avi|mkv)$/));
+
+                if (videoFiles.length > 0) {
+                    // Convert to new format with empty metadata
+                    const filesWithMeta = videoFiles.map(f => ({ file: f, event: '', category: '' }));
+                    uploadQueue.push(...filesWithMeta);
+                    updateQueueStatus();
+                    processUploadQueue();
+                }
             }
         }
 
@@ -722,10 +766,12 @@
                 const categoryToUse = fileCategory || manualCategory;
                 const willAutoDetect = !categoryToUse;
 
+                const queueInfo = uploadQueue.length > 0 ? `<span class="text-blue-400 ml-2">(${uploadQueue.length} more queued)</span>` : '';
                 progressDiv.innerHTML = `
                     <div class="flex items-center gap-3">
                         <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
                         <span>Uploading ${i + 1}/${filesWithMeta.length}: ${file.name}</span>
+                        ${queueInfo}
                     </div>
                     <div class="mt-2 text-sm text-gray-400">
                         ${uploaded} uploaded, ${failed} failed
@@ -733,6 +779,7 @@
                         ${categoryToUse ? `<span class="text-green-400 ml-2">Category: ${categoryToUse}</span>` : ''}
                         ${willAutoDetect ? `<span class="text-yellow-400 ml-2">Auto-detecting from filename...</span>` : ''}
                     </div>
+                    <p class="text-gray-500 text-xs mt-2">You can drop more folders - they will be queued</p>
                 `;
 
                 const formData = new FormData();
