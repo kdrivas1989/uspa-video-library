@@ -115,9 +115,17 @@
         <div class="bg-gray-800 rounded-lg p-6 mb-8">
             <div class="flex items-center justify-between mb-4">
                 <h2 class="text-xl font-bold">Upload Video Files</h2>
-                <div id="uploadDestination" class="text-sm">
-                    <span class="text-gray-400">Upload to: </span>
-                    <span id="uploadDestinationLabel" class="text-blue-400">Local/Supabase</span>
+                <div class="flex items-center gap-4">
+                    <button onclick="showConverterModal()" class="px-3 py-1 bg-orange-600 hover:bg-orange-700 rounded text-sm font-medium flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Local Converter
+                    </button>
+                    <div id="uploadDestination" class="text-sm">
+                        <span class="text-gray-400">Upload to: </span>
+                        <span id="uploadDestinationLabel" class="text-blue-400">Local/Supabase</span>
+                    </div>
                 </div>
             </div>
             <p class="text-gray-400 text-sm mb-4">
@@ -2114,6 +2122,70 @@
         document.addEventListener('DOMContentLoaded', function() {
             pollConversionStatus();
         });
+
+        // Local Converter Modal
+        function showConverterModal() {
+            document.getElementById('converterModal').classList.remove('hidden');
+        }
+
+        function hideConverterModal() {
+            document.getElementById('converterModal').classList.add('hidden');
+        }
+
+        function copyConverterCommand() {
+            const cmd = document.getElementById('converterCommand').textContent;
+            navigator.clipboard.writeText(cmd).then(() => {
+                const btn = document.getElementById('copyBtn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => btn.textContent = 'Copy Command', 2000);
+            });
+        }
     </script>
+
+    <!-- Local Converter Modal -->
+    <div id="converterModal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50" onclick="if(event.target === this) hideConverterModal()">
+        <div class="bg-gray-800 rounded-lg p-6 max-w-lg w-full mx-4 shadow-2xl">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold flex items-center gap-2">
+                    <svg class="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    Local Video Converter
+                </h3>
+                <button onclick="hideConverterModal()" class="text-gray-400 hover:text-white">&times;</button>
+            </div>
+
+            <p class="text-gray-300 mb-4">Convert MKV, AVI, and MTS files to MP4 locally before uploading. This is faster and avoids upload timeouts.</p>
+
+            <div class="bg-gray-900 rounded p-4 mb-4">
+                <p class="text-gray-400 text-sm mb-2">Run in Terminal:</p>
+                <code id="converterCommand" class="text-green-400 text-sm break-all">cd ~/Desktop/projects/video-library && ./convert-videos.sh /path/to/your/videos</code>
+            </div>
+
+            <div class="flex gap-3 mb-4">
+                <button id="copyBtn" onclick="copyConverterCommand()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded font-medium">
+                    Copy Command
+                </button>
+                <a href="/static/convert-videos.sh" download class="px-4 py-2 bg-gray-600 hover:bg-gray-700 rounded font-medium">
+                    Download Script
+                </a>
+            </div>
+
+            <div class="border-t border-gray-700 pt-4">
+                <p class="text-gray-400 text-sm mb-2"><strong>How to use:</strong></p>
+                <ol class="text-gray-400 text-sm list-decimal list-inside space-y-1">
+                    <li>Open Terminal on your Mac</li>
+                    <li>Copy and paste the command above</li>
+                    <li>Replace <code class="text-cyan-400">/path/to/your/videos</code> with your folder path (or drag folder into Terminal)</li>
+                    <li>Press Enter and wait for conversion</li>
+                    <li>Upload the new .mp4 files</li>
+                </ol>
+            </div>
+
+            <div class="mt-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded text-sm">
+                <strong class="text-yellow-400">Tip:</strong> <span class="text-gray-300">Drag your video folder directly into Terminal after the command to auto-fill the path!</span>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
