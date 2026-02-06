@@ -164,6 +164,20 @@
             </div>
             <div id="uploadProgress" class="mt-4 hidden"></div>
             <div id="uploadResults" class="mt-4 hidden"></div>
+            <!-- Inline Conversion Status (shown during/after uploads) -->
+            <div id="inlineConversionStatus" class="mt-4 hidden">
+                <div class="bg-yellow-900/30 border border-yellow-600 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-yellow-400 font-semibold flex items-center gap-2">
+                            <span class="animate-pulse">⚙️</span> Converting Videos
+                        </h3>
+                        <span id="inlineConversionCount" class="text-gray-400 text-sm"></span>
+                    </div>
+                    <div id="inlineConversionList" class="space-y-2">
+                        <!-- Jobs will be inserted here -->
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Video List -->
@@ -1683,15 +1697,20 @@
 
                 const panel = document.getElementById('conversionStatusPanel');
                 const list = document.getElementById('conversionJobsList');
+                const inlinePanel = document.getElementById('inlineConversionStatus');
+                const inlineList = document.getElementById('inlineConversionList');
+                const inlineCount = document.getElementById('inlineConversionCount');
 
                 const jobIds = Object.keys(jobs);
                 if (jobIds.length === 0) {
                     panel.classList.add('hidden');
+                    inlinePanel.classList.add('hidden');
                     stopConversionPolling();
                     return;
                 }
 
                 panel.classList.remove('hidden');
+                inlinePanel.classList.remove('hidden');
 
                 // Check if all jobs are done
                 const activeJobs = jobIds.filter(id => !['completed', 'failed'].includes(jobs[id].status));
@@ -1748,6 +1767,54 @@
                                 ${job.status === 'completed' ? `
                                     <a href="/video/${job.video_id}" target="_blank" class="text-blue-400 hover:text-blue-300 text-sm ml-3">View</a>
                                 ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                // Also update inline conversion status
+                const completedCount = jobIds.filter(id => jobs[id].status === 'completed').length;
+                const activeCount = jobIds.filter(id => !['completed', 'failed'].includes(jobs[id].status)).length;
+                inlineCount.textContent = `${completedCount}/${jobIds.length} complete`;
+
+                inlineList.innerHTML = jobIds.map(jobId => {
+                    const job = jobs[jobId];
+                    let statusColor = 'bg-gray-500';
+                    let statusText = job.status;
+                    let progressWidth = job.progress || 0;
+
+                    if (job.status === 'completed') {
+                        statusColor = 'bg-green-500';
+                        statusText = 'Done';
+                        progressWidth = 100;
+                    } else if (job.status === 'failed') {
+                        statusColor = 'bg-red-500';
+                        statusText = 'Failed';
+                    } else if (job.status === 'converting') {
+                        statusColor = 'bg-yellow-500';
+                        statusText = `Converting ${progressWidth}%`;
+                    } else if (job.status === 'generating_thumbnail') {
+                        statusColor = 'bg-blue-500';
+                        statusText = 'Thumbnail...';
+                        progressWidth = 85;
+                    } else if (job.status === 'uploading') {
+                        statusColor = 'bg-purple-500';
+                        statusText = 'Uploading to cloud...';
+                        progressWidth = 95;
+                    } else if (job.status === 'queued') {
+                        statusColor = 'bg-gray-500';
+                        statusText = 'Queued';
+                        progressWidth = 0;
+                    }
+
+                    return `
+                        <div class="bg-gray-800 rounded p-2">
+                            <div class="flex justify-between items-center mb-1">
+                                <span class="text-white text-sm truncate flex-1 mr-2">${job.title || job.filename}</span>
+                                <span class="text-xs ${job.status === 'completed' ? 'text-green-400' : job.status === 'failed' ? 'text-red-400' : 'text-yellow-400'}">${statusText}</span>
+                            </div>
+                            <div class="w-full bg-gray-600 rounded-full h-1.5">
+                                <div class="${statusColor} h-1.5 rounded-full transition-all duration-300" style="width: ${progressWidth}%"></div>
                             </div>
                         </div>
                     `;
