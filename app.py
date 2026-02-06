@@ -3166,6 +3166,111 @@ def background_convert_video(job_id, input_path, output_path, video_data, temp_f
             os.remove(temp_file)
 
 
+def background_upload_to_s3(job_id, file_path, video_data):
+    """Upload video to S3 in background thread (for files that don't need conversion)."""
+    try:
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'processing'
+            conversion_jobs[job_id]['progress'] = 10
+            save_conversion_job(conversion_jobs[job_id])
+
+        video_id = video_data['id']
+
+        # Generate thumbnail
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'generating_thumbnail'
+            conversion_jobs[job_id]['progress'] = 30
+            save_conversion_job(conversion_jobs[job_id])
+
+        thumbnail_filename = f"{video_id}_thumb.jpg"
+        thumbnail_path = os.path.join(VIDEOS_FOLDER, thumbnail_filename)
+        if generate_thumbnail(file_path, thumbnail_path):
+            video_data['thumbnail'] = f"/static/videos/{thumbnail_filename}"
+
+        # Get duration
+        with conversion_lock:
+            conversion_jobs[job_id]['progress'] = 50
+
+        duration = get_video_duration(file_path)
+        if duration:
+            video_data['duration'] = duration
+
+        # Upload to S3
+        if USE_S3:
+            with conversion_lock:
+                conversion_jobs[job_id]['status'] = 'uploading'
+                conversion_jobs[job_id]['progress'] = 60
+                save_conversion_job(conversion_jobs[job_id])
+
+            video_url = upload_to_s3_from_path(file_path, folder='videos')
+            if video_url:
+                video_data['url'] = video_url
+                video_data['video_type'] = 'url'
+                video_data['local_file'] = ''
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            else:
+                video_data['local_file'] = os.path.basename(file_path)
+
+            # Upload thumbnail to S3
+            if os.path.exists(thumbnail_path):
+                thumb_url = upload_to_s3_from_path(thumbnail_path, folder='thumbnails')
+                if thumb_url:
+                    video_data['thumbnail'] = thumb_url
+                    os.remove(thumbnail_path)
+
+        elif USE_SUPABASE:
+            with conversion_lock:
+                conversion_jobs[job_id]['status'] = 'uploading'
+                conversion_jobs[job_id]['progress'] = 60
+                save_conversion_job(conversion_jobs[job_id])
+
+            video_filename = os.path.basename(file_path)
+            video_url = upload_to_supabase_storage(file_path, f"videos/{video_filename}")
+            if video_url:
+                video_data['url'] = video_url
+                video_data['video_type'] = 'url'
+                video_data['local_file'] = ''
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+            else:
+                video_data['local_file'] = video_filename
+
+            if os.path.exists(thumbnail_path):
+                thumb_url = upload_to_supabase_storage(thumbnail_path, f"thumbnails/{thumbnail_filename}")
+                if thumb_url:
+                    video_data['thumbnail'] = thumb_url
+                    os.remove(thumbnail_path)
+        else:
+            video_data['local_file'] = os.path.basename(file_path)
+
+        # Save to database
+        with conversion_lock:
+            conversion_jobs[job_id]['progress'] = 90
+
+        save_video(video_data)
+
+        with conversion_lock:
+            conversion_jobs[job_id]['status'] = 'completed'
+            conversion_jobs[job_id]['progress'] = 100
+            conversion_jobs[job_id]['video_id'] = video_id
+            conversion_jobs[job_id]['completed_at'] = datetime.now().isoformat()
+            save_conversion_job(conversion_jobs[job_id])
+
+    except Exception as e:
+        import traceback
+        log_upload_failure('background_upload_exception',
+                          filename=video_data.get('title') if video_data else None,
+                          extra={'job_id': job_id, 'error': str(e), 'traceback': traceback.format_exc()})
+        with conversion_lock:
+            if job_id in conversion_jobs:
+                conversion_jobs[job_id]['status'] = 'failed'
+                conversion_jobs[job_id]['error'] = str(e)
+                save_conversion_job(conversion_jobs[job_id])
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+
 @app.route('/conversion/status/<job_id>')
 def conversion_status(job_id):
     """Get status of a background conversion job."""
@@ -4868,90 +4973,61 @@ def upload_video():
                                   extra={'extension': ext, 'video_id': video_id})
                 return jsonify({'error': 'Failed to convert video. Make sure ffmpeg is installed.'}), 400
         else:
-            # Save directly (no conversion needed)
+            # Save directly and process in background (no conversion needed)
             output_filename = f"{video_id}{ext}"
             output_path = os.path.join(VIDEOS_FOLDER, output_filename)
             file.save(output_path)
-            local_file = output_filename
 
-        # Generate thumbnail
-        thumbnail_filename = f"{video_id}_thumb.jpg"
-        thumbnail_path = os.path.join(VIDEOS_FOLDER, thumbnail_filename)
-        if generate_thumbnail(output_path, thumbnail_path):
-            thumbnail = f"/static/videos/{thumbnail_filename}"
-        else:
-            thumbnail = None
+            # Create job tracking entry
+            job_id = str(uuid.uuid4())[:8]
+            session_id = session.get('_id', request.remote_addr)
 
-        # Get duration
-        duration = get_video_duration(output_path)
+            video_data = {
+                'id': video_id,
+                'title': title,
+                'description': '',
+                'url': '',
+                'thumbnail': None,
+                'category': category,
+                'subcategory': subcategory,
+                'tags': '',
+                'duration': None,
+                'created_at': datetime.now().isoformat(),
+                'views': 0,
+                'video_type': 'local',
+                'local_file': output_filename,
+                'event': event,
+                'category_auto': category_auto
+            }
 
-        # Upload to Supabase Storage if enabled
-        video_url = ''
-        video_type = 'local'
-        final_local_file = local_file
+            with conversion_lock:
+                conversion_jobs[job_id] = {
+                    'job_id': job_id,
+                    'video_id': video_id,
+                    'filename': filename,
+                    'title': title,
+                    'status': 'queued',
+                    'progress': 0,
+                    'session_id': session_id,
+                    'created_at': datetime.now().isoformat(),
+                    'error': None
+                }
 
-        # Upload to cloud storage (prefer S3 over Supabase)
-        if USE_S3:
-            # Upload video file to S3
-            s3_video_url = upload_to_s3_from_path(output_path, folder='videos')
-            if s3_video_url:
-                video_url = s3_video_url
-                video_type = 'url'
-                final_local_file = ''
-                # Clean up local file after upload
-                if os.path.exists(output_path):
-                    os.remove(output_path)
+            # Start background thread for S3 upload
+            thread = threading.Thread(
+                target=background_upload_to_s3,
+                args=(job_id, output_path, video_data)
+            )
+            thread.daemon = True
+            thread.start()
 
-            # Upload thumbnail to S3
-            if thumbnail and os.path.exists(thumbnail_path):
-                thumb_url = upload_to_s3_from_path(thumbnail_path, folder='thumbnails')
-                if thumb_url:
-                    thumbnail = thumb_url
-                    os.remove(thumbnail_path)
-
-        elif USE_SUPABASE:
-            # Fallback to Supabase if S3 not configured
-            supabase_video_url = upload_to_supabase_storage(output_path, f"videos/{local_file}")
-            if supabase_video_url:
-                video_url = supabase_video_url
-                video_type = 'url'
-                final_local_file = ''
-                # Clean up local file after upload
-                if os.path.exists(output_path):
-                    os.remove(output_path)
-
-            # Upload thumbnail
-            if thumbnail and os.path.exists(thumbnail_path):
-                thumb_url = upload_to_supabase_storage(thumbnail_path, f"thumbnails/{thumbnail_filename}")
-                if thumb_url:
-                    thumbnail = thumb_url
-                    os.remove(thumbnail_path)
-
-        # Save to database
-        save_video({
-            'id': video_id,
-            'title': title,
-            'description': '',
-            'url': video_url,
-            'thumbnail': thumbnail,
-            'category': category,
-            'subcategory': subcategory,
-            'tags': '',
-            'duration': duration,
-            'created_at': datetime.now().isoformat(),
-            'views': 0,
-            'video_type': video_type,
-            'local_file': final_local_file,
-            'event': event,
-            'category_auto': category_auto
-        })
-
-        return jsonify({
-            'success': True,
-            'message': 'Video uploaded successfully',
-            'id': video_id,
-            'converted': needs_conversion
-        })
+            return jsonify({
+                'success': True,
+                'background': True,
+                'job_id': job_id,
+                'video_id': video_id,
+                'message': 'Video upload started - processing in background'
+            })
 
     except Exception as e:
         import traceback
