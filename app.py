@@ -1916,15 +1916,55 @@ def delete_assignment(assignment_id):
         return False
 
 
-def get_all_assignments():
+def get_all_assignments(limit=1000):
     """Get all video assignments."""
     if USE_SUPABASE:
-        result = supabase.table('video_assignments').select('*').order('created_at', desc=True).execute()
+        result = supabase.table('video_assignments').select('*').order('created_at', desc=True).limit(limit).execute()
         return result.data
     else:
         db = get_sqlite_db()
-        cursor = db.execute('SELECT * FROM video_assignments ORDER BY created_at DESC')
+        cursor = db.execute('SELECT * FROM video_assignments ORDER BY created_at DESC LIMIT ?', (limit,))
         return [dict(row) for row in cursor.fetchall()]
+
+
+def get_assignment_count():
+    """Get total count of video assignments."""
+    if USE_SUPABASE:
+        result = supabase.table('video_assignments').select('id', count='exact').execute()
+        return result.count or 0
+    else:
+        db = get_sqlite_db()
+        cursor = db.execute('SELECT COUNT(*) FROM video_assignments')
+        return cursor.fetchone()[0]
+
+
+def delete_all_assignments():
+    """Delete ALL video assignments. Use with caution!"""
+    try:
+        if USE_SUPABASE:
+            # Delete in batches to avoid timeout
+            deleted = 0
+            while True:
+                # Get a batch of IDs
+                result = supabase.table('video_assignments').select('id').limit(500).execute()
+                if not result.data:
+                    break
+                for row in result.data:
+                    supabase.table('video_assignments').delete().eq('id', row['id']).execute()
+                    deleted += 1
+                print(f"[DELETE ALL] Deleted {deleted} assignments so far...")
+            print(f"[DELETE ALL] Total deleted: {deleted}")
+            return deleted
+        else:
+            db = get_sqlite_db()
+            cursor = db.execute('SELECT COUNT(*) FROM video_assignments')
+            count = cursor.fetchone()[0]
+            db.execute('DELETE FROM video_assignments')
+            db.commit()
+            return count
+    except Exception as e:
+        print(f"[DELETE ALL ERROR] {e}")
+        return 0
 
 
 # Competition database functions
@@ -3805,6 +3845,7 @@ def assignments_page():
     # Allow any user to be assigned for practice judging
     judges = [u for u in users if u['role'] != 'admin']  # Exclude only admins
     assignments = get_all_assignments()
+    total_assignment_count = get_assignment_count()
 
     # Enrich assignments with video and user info
     videos_dict = {v['id']: v for v in videos}
@@ -3819,6 +3860,7 @@ def assignments_page():
                          videos=videos,
                          judges=judges,
                          assignments=assignments,
+                         total_assignment_count=total_assignment_count,
                          categories=CATEGORIES,
                          is_admin=session.get('role') == 'admin')
 
@@ -3895,6 +3937,14 @@ def delete_assignment_route(assignment_id):
         return jsonify({'success': True})
     else:
         return jsonify({'success': False, 'error': 'Failed to delete assignment'}), 500
+
+
+@app.route('/assignments/delete-all', methods=['POST'])
+@admin_required
+def delete_all_assignments_route():
+    """Delete ALL video assignments. Admin only."""
+    count = delete_all_assignments()
+    return jsonify({'success': True, 'deleted': count, 'message': f'Deleted {count} assignments'})
 
 
 @app.route('/my-assignments')

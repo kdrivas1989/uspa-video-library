@@ -140,8 +140,16 @@
         <!-- Current Assignments -->
         <div class="bg-gray-800 rounded-lg p-6">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold">Current Assignments ({{ assignments|length }})</h2>
+                <div>
+                    <h2 class="text-xl font-bold">Current Assignments</h2>
+                    <p class="text-sm text-gray-400">Showing {{ assignments|length }} of {{ total_assignment_count }} total</p>
+                </div>
                 <div class="flex items-center gap-3">
+                    {% if is_admin %}
+                    <button onclick="deleteAllAssignments()" class="bg-red-800 hover:bg-red-900 px-3 py-2 rounded text-sm">
+                        Delete All ({{ total_assignment_count }})
+                    </button>
+                    {% endif %}
                     <select id="assignmentRoundFilter" class="px-3 py-2 rounded bg-gray-700 text-white text-sm" onchange="filterAssignmentsByRound()">
                         <option value="">All Rounds</option>
                     </select>
@@ -432,6 +440,27 @@
                 }
                 alert(`Removed ${successCount} assignment(s)`);
                 location.reload();
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function deleteAllAssignments() {
+            const totalCount = {{ total_assignment_count }};
+            if (!confirm(`WARNING: This will delete ALL ${totalCount} assignments!\n\nThis action cannot be undone.\n\nAre you sure?`)) return;
+            if (!confirm(`FINAL WARNING: You are about to delete ${totalCount} assignments. Type "DELETE" to confirm.`)) return;
+
+            try {
+                const response = await fetch('/assignments/delete-all', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(`Deleted ${result.deleted} assignments`);
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to delete assignments');
+                }
             } catch (err) {
                 alert('Error: ' + err.message);
             }
