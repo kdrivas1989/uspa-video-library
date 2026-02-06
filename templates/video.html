@@ -3626,31 +3626,43 @@
             const replayStartTime = Math.max(0, workingStart - 2);
 
             // Set flags for replay behavior AFTER calculating replayStartTime
-            replayAutoStartPending = true;
-            replayStopAtFreezeFrame = false; // Don't enable until seek completes
+            replayAutoStartPending = false; // Will enable after seek completes
+            replayStopAtFreezeFrame = false; // Don't enable until playing
             replayStartedTime = replayStartTime; // Track where we're starting from
 
             if (video) {
                 video.pause();
+
+                // Use seeked event to know when seek completes
+                const onSeeked = () => {
+                    video.removeEventListener('seeked', onSeeked);
+                    // Now enable the flags and play
+                    replayAutoStartPending = true;
+                    video.play().then(() => {
+                        // Enable freeze frame check only after play starts
+                        setTimeout(() => {
+                            if (freezeFrameVideoTime !== null) {
+                                replayStopAtFreezeFrame = true;
+                            }
+                        }, 500);
+                    }).catch(err => console.error('Replay play failed:', err));
+                };
+                video.addEventListener('seeked', onSeeked);
                 video.currentTime = replayStartTime;
-                // Wait for seek to complete, then play and enable freeze frame check
-                setTimeout(() => {
-                    // Enable freeze frame check AFTER seek completes
-                    if (freezeFrameVideoTime !== null) {
-                        replayStopAtFreezeFrame = true;
-                    }
-                    video.play().catch(err => console.error('Replay play failed:', err));
-                }, 300);
             }
             if (vimeoPlayer) {
                 vimeoPlayer.pause().then(() => {
                     return vimeoPlayer.setCurrentTime(replayStartTime);
                 }).then(() => {
-                    // Enable freeze frame check AFTER seek completes
-                    if (freezeFrameVideoTime !== null) {
-                        replayStopAtFreezeFrame = true;
-                    }
+                    replayAutoStartPending = true;
                     return vimeoPlayer.play();
+                }).then(() => {
+                    // Enable freeze frame check after play starts
+                    setTimeout(() => {
+                        if (freezeFrameVideoTime !== null) {
+                            replayStopAtFreezeFrame = true;
+                        }
+                    }, 500);
                 }).catch(err => console.error('Vimeo replay play failed:', err));
             }
         }
