@@ -413,6 +413,55 @@ If you did not request this reset, please ignore this email.
         print(f"Failed to send email: {e}")
         return False
 
+def send_welcome_email(email, username, password, name):
+    """Send welcome email with login credentials to new user."""
+    if not SMTP_USERNAME or not SMTP_PASSWORD:
+        print(f"Email not configured. New user: {username}, password: {password}")
+        return False
+
+    if not email:
+        print(f"No email provided for user {username}")
+        return False
+
+    msg = MIMEMultipart()
+    msg['From'] = SMTP_FROM_EMAIL or SMTP_USERNAME
+    msg['To'] = email
+    msg['Subject'] = 'Welcome to Video Library - Your Account Details'
+
+    body = f"""
+Hello {name},
+
+Your Video Library account has been created.
+
+Here are your login credentials:
+
+Username: {username}
+Password: {password}
+
+Login at: {APP_URL}
+
+You will be asked to change your password when you first log in.
+
+If you have any questions, please contact your administrator.
+
+Best regards,
+Video Library Team
+"""
+
+    msg.attach(MIMEText(body, 'plain'))
+
+    try:
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+        server.starttls()
+        server.login(SMTP_USERNAME, SMTP_PASSWORD)
+        server.sendmail(SMTP_FROM_EMAIL or SMTP_USERNAME, email, msg.as_string())
+        server.quit()
+        print(f"Welcome email sent to {email}")
+        return True
+    except Exception as e:
+        print(f"Failed to send welcome email: {e}")
+        return False
+
 # Global error handler to show actual errors
 def _is_api_request_check():
     """Check if the current request is an API/AJAX request expecting JSON."""
@@ -2639,16 +2688,30 @@ def admin_create_user():
         return jsonify({'error': 'Username already exists'}), 400
 
     # All new users get default password and must change on first login
+    default_password = 'password'
     save_user({
         'username': username,
-        'password': 'password',
+        'password': default_password,
         'role': role,
         'name': name,
         'email': email,
         'must_change_password': 1
     })
 
-    return jsonify({'success': True, 'message': 'User created with default password'})
+    # Send welcome email with credentials
+    email_sent = False
+    if email:
+        email_sent = send_welcome_email(email, username, default_password, name)
+
+    message = 'User created with default password'
+    if email_sent:
+        message += ' - welcome email sent'
+    elif email:
+        message += ' - failed to send welcome email'
+    else:
+        message += ' - no email provided'
+
+    return jsonify({'success': True, 'message': message})
 
 
 @app.route('/admin/user/<username>/update', methods=['POST'])
