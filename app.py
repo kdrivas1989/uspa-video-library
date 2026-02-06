@@ -2816,7 +2816,12 @@ def login():
             if user.get('must_change_password'):
                 return redirect(url_for('change_password'))
 
-            return redirect(url_for('admin_dashboard'))
+            # Redirect based on role
+            if user['role'] == 'judge':
+                return redirect(url_for('my_assignments'))
+            else:
+                # Admin, chief_judge, event_judge go to admin dashboard
+                return redirect(url_for('admin_dashboard'))
         else:
             error = 'Invalid username or password'
 
