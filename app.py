@@ -1967,6 +1967,68 @@ def delete_all_assignments():
         return 0
 
 
+def delete_duplicate_assignments():
+    """Delete duplicate assignments (same video assigned to same judge multiple times)."""
+    try:
+        if USE_SUPABASE:
+            # Get all assignments
+            all_assignments = []
+            offset = 0
+            while True:
+                result = supabase.table('video_assignments').select('id, video_id, assigned_to, created_at').order('created_at', desc=False).range(offset, offset + 999).execute()
+                if not result.data:
+                    break
+                all_assignments.extend(result.data)
+                offset += 1000
+                if len(result.data) < 1000:
+                    break
+
+            print(f"[DEDUP] Found {len(all_assignments)} total assignments")
+
+            # Find duplicates - keep the oldest (first) assignment for each video+judge combo
+            seen = {}  # key: (video_id, assigned_to) -> first assignment id
+            duplicates = []
+
+            for a in all_assignments:
+                key = (a['video_id'], a['assigned_to'])
+                if key in seen:
+                    # This is a duplicate - mark for deletion
+                    duplicates.append(a['id'])
+                else:
+                    seen[key] = a['id']
+
+            print(f"[DEDUP] Found {len(duplicates)} duplicates to remove")
+
+            # Delete duplicates
+            deleted = 0
+            for dup_id in duplicates:
+                supabase.table('video_assignments').delete().eq('id', dup_id).execute()
+                deleted += 1
+                if deleted % 100 == 0:
+                    print(f"[DEDUP] Deleted {deleted} duplicates so far...")
+
+            print(f"[DEDUP] Total duplicates removed: {deleted}")
+            return deleted
+        else:
+            db = get_sqlite_db()
+            # SQLite: delete all but the oldest assignment for each video+judge combo
+            cursor = db.execute('''
+                DELETE FROM video_assignments
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM video_assignments
+                    GROUP BY video_id, assigned_to
+                )
+            ''')
+            db.commit()
+            return cursor.rowcount
+    except Exception as e:
+        print(f"[DEDUP ERROR] {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
+
+
 # Competition database functions
 def get_all_competitions():
     """Get all competitions."""
@@ -3945,6 +4007,14 @@ def delete_all_assignments_route():
     """Delete ALL video assignments. Admin only."""
     count = delete_all_assignments()
     return jsonify({'success': True, 'deleted': count, 'message': f'Deleted {count} assignments'})
+
+
+@app.route('/assignments/remove-duplicates', methods=['POST'])
+@chief_judge_required
+def remove_duplicate_assignments_route():
+    """Remove duplicate assignments (same video to same judge)."""
+    count = delete_duplicate_assignments()
+    return jsonify({'success': True, 'removed': count, 'message': f'Removed {count} duplicate assignments'})
 
 
 @app.route('/my-assignments')

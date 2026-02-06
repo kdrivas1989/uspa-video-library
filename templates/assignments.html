@@ -145,6 +145,9 @@
                     <p class="text-sm text-gray-400">Showing {{ assignments|length }} of {{ total_assignment_count }} total</p>
                 </div>
                 <div class="flex items-center gap-3">
+                    <button onclick="removeDuplicateAssignments()" class="bg-yellow-600 hover:bg-yellow-700 px-3 py-2 rounded text-sm">
+                        Remove Duplicates
+                    </button>
                     {% if is_admin %}
                     <button onclick="deleteAllAssignments()" class="bg-red-800 hover:bg-red-900 px-3 py-2 rounded text-sm">
                         Delete All ({{ total_assignment_count }})
@@ -440,6 +443,25 @@
                 }
                 alert(`Removed ${successCount} assignment(s)`);
                 location.reload();
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        async function removeDuplicateAssignments() {
+            if (!confirm('This will remove duplicate assignments where the same video is assigned to the same judge multiple times.\n\nContinue?')) return;
+
+            try {
+                const response = await fetch('/assignments/remove-duplicates', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                if (result.success) {
+                    alert(`Removed ${result.removed} duplicate assignments`);
+                    location.reload();
+                } else {
+                    alert(result.error || 'Failed to remove duplicates');
+                }
             } catch (err) {
                 alert('Error: ' + err.message);
             }
