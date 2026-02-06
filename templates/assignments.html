@@ -139,15 +139,23 @@
 
         <!-- Current Assignments -->
         <div class="bg-gray-800 rounded-lg p-6">
-            <h2 class="text-xl font-bold mb-4">Current Assignments</h2>
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Current Assignments ({{ assignments|length }})</h2>
+                <button onclick="deleteSelectedAssignments()" id="deleteSelectedBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm hidden">
+                    Remove Selected (<span id="selectedAssignmentCount">0</span>)
+                </button>
+            </div>
             {% if assignments %}
             <div class="overflow-x-auto">
                 <table class="w-full">
                     <thead class="bg-gray-700">
                         <tr>
+                            <th class="px-4 py-3 text-left text-sm">
+                                <input type="checkbox" id="selectAllAssignments" onchange="toggleAllAssignments(this)" class="w-4 h-4 accent-blue-500">
+                            </th>
                             <th class="px-4 py-3 text-left text-sm">Video</th>
+                            <th class="px-4 py-3 text-left text-sm">Category</th>
                             <th class="px-4 py-3 text-left text-sm">Assigned To</th>
-                            <th class="px-4 py-3 text-left text-sm">Assigned By</th>
                             <th class="px-4 py-3 text-left text-sm">Status</th>
                             <th class="px-4 py-3 text-left text-sm">Date</th>
                             <th class="px-4 py-3 text-right text-sm">Actions</th>
@@ -157,10 +165,15 @@
                         {% for a in assignments %}
                         <tr class="hover:bg-gray-700/50">
                             <td class="px-4 py-3">
+                                <input type="checkbox" value="{{ a.id }}" class="assignment-checkbox w-4 h-4 accent-blue-500" onchange="updateAssignmentSelection()">
+                            </td>
+                            <td class="px-4 py-3">
                                 <a href="/video/{{ a.video_id }}" class="text-blue-400 hover:underline">{{ a.video.title|default('Unknown', true) }}</a>
                             </td>
+                            <td class="px-4 py-3 text-gray-400 text-sm">
+                                {{ categories.get(a.video.category, {}).get('abbrev', a.video.category)|default('-', true) }}
+                            </td>
                             <td class="px-4 py-3">{{ a.judge.name|default(a.assigned_to, true) }}</td>
-                            <td class="px-4 py-3 text-gray-400">{{ a.assigner.name|default(a.assigned_by, true) }}</td>
                             <td class="px-4 py-3">
                                 {% if a.status == 'completed' %}
                                 <span class="bg-green-600 text-white text-xs px-2 py-1 rounded">Completed</span>
@@ -353,6 +366,61 @@
                 } else {
                     alert(result.error || 'Failed to remove assignment');
                 }
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+
+        function toggleAllAssignments(checkbox) {
+            document.querySelectorAll('.assignment-checkbox').forEach(cb => {
+                cb.checked = checkbox.checked;
+            });
+            updateAssignmentSelection();
+        }
+
+        function updateAssignmentSelection() {
+            const checked = document.querySelectorAll('.assignment-checkbox:checked');
+            const count = checked.length;
+            const btn = document.getElementById('deleteSelectedBtn');
+            const countSpan = document.getElementById('selectedAssignmentCount');
+
+            countSpan.textContent = count;
+            if (count > 0) {
+                btn.classList.remove('hidden');
+            } else {
+                btn.classList.add('hidden');
+            }
+
+            // Update select all checkbox state
+            const allCheckboxes = document.querySelectorAll('.assignment-checkbox');
+            const selectAll = document.getElementById('selectAllAssignments');
+            if (selectAll) {
+                selectAll.checked = allCheckboxes.length > 0 && checked.length === allCheckboxes.length;
+                selectAll.indeterminate = checked.length > 0 && checked.length < allCheckboxes.length;
+            }
+        }
+
+        async function deleteSelectedAssignments() {
+            const selected = Array.from(document.querySelectorAll('.assignment-checkbox:checked')).map(cb => cb.value);
+
+            if (selected.length === 0) {
+                alert('No assignments selected');
+                return;
+            }
+
+            if (!confirm(`Remove ${selected.length} assignment(s)?`)) return;
+
+            try {
+                let successCount = 0;
+                for (const id of selected) {
+                    const response = await fetch('/assignment/' + id + '/delete', {
+                        method: 'POST'
+                    });
+                    const result = await response.json();
+                    if (result.success) successCount++;
+                }
+                alert(`Removed ${successCount} assignment(s)`);
+                location.reload();
             } catch (err) {
                 alert('Error: ' + err.message);
             }
