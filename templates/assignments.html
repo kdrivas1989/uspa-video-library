@@ -142,11 +142,14 @@
             <div class="flex justify-between items-center mb-4">
                 <h2 class="text-xl font-bold">Current Assignments ({{ assignments|length }})</h2>
                 <div class="flex items-center gap-3">
-                    <select id="assignmentRoundFilter" class="px-3 py-2 rounded bg-gray-700 text-white text-sm">
+                    <select id="assignmentRoundFilter" class="px-3 py-2 rounded bg-gray-700 text-white text-sm" onchange="filterAssignmentsByRound()">
                         <option value="">All Rounds</option>
                     </select>
-                    <button onclick="selectAssignmentsByRound()" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm">
-                        Select Round
+                    <button onclick="selectVisibleAssignments()" class="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded text-sm">
+                        Select Visible
+                    </button>
+                    <button onclick="clearAssignmentFilter()" class="bg-gray-600 hover:bg-gray-500 px-3 py-2 rounded text-sm">
+                        Clear Filter
                     </button>
                     <button onclick="deleteSelectedAssignments()" id="deleteSelectedBtn" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded-lg text-sm hidden">
                         Remove Selected (<span id="selectedAssignmentCount">0</span>)
@@ -627,26 +630,43 @@
             });
         }
 
-        // Select assignments by round
-        function selectAssignmentsByRound() {
+        // Filter assignments by round (hide/show rows)
+        function filterAssignmentsByRound() {
             const select = document.getElementById('assignmentRoundFilter');
             const selectedRound = select.value ? parseInt(select.value) : null;
 
-            if (selectedRound === null) {
-                // If "All Rounds" selected, select all
-                document.querySelectorAll('.assignment-checkbox').forEach(cb => cb.checked = true);
-            } else {
-                // Select only matching rounds
-                document.querySelectorAll('.assignment-row').forEach(row => {
+            document.querySelectorAll('.assignment-row').forEach(row => {
+                if (selectedRound === null) {
+                    // Show all
+                    row.style.display = '';
+                } else {
                     const round = parseAssignmentRound(row);
-                    const checkbox = row.querySelector('.assignment-checkbox');
-                    if (checkbox && round === selectedRound) {
-                        checkbox.checked = true;
-                    }
-                });
-            }
+                    row.style.display = (round === selectedRound) ? '' : 'none';
+                }
+            });
+
+            // Uncheck hidden rows
+            document.querySelectorAll('.assignment-row[style*="display: none"] .assignment-checkbox').forEach(cb => {
+                cb.checked = false;
+            });
 
             updateAssignmentSelection();
+        }
+
+        // Select all visible assignments
+        function selectVisibleAssignments() {
+            document.querySelectorAll('.assignment-row:not([style*="display: none"]) .assignment-checkbox').forEach(cb => {
+                cb.checked = true;
+            });
+            updateAssignmentSelection();
+        }
+
+        // Clear assignment filter
+        function clearAssignmentFilter() {
+            document.getElementById('assignmentRoundFilter').value = '';
+            document.querySelectorAll('.assignment-row').forEach(row => {
+                row.style.display = '';
+            });
         }
 
         // Auto-sort and populate dropdowns on page load
