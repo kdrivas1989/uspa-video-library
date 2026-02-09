@@ -69,14 +69,14 @@
         </div>
         {% endif %}
 
-        <!-- Event Filter -->
+        <!-- Category Filter -->
         {% if event_list %}
         <div class="mb-8">
-            <h3 class="text-sm font-medium text-gray-400 mb-3">Filter by Event</h3>
+            <h3 class="text-sm font-medium text-gray-400 mb-3">Filter by Category</h3>
             <div class="flex flex-wrap gap-2">
                 <a href="/category/{{ cat_id }}{% if current_sub %}?sub={{ current_sub }}{% endif %}"
                    class="px-3 py-1.5 rounded-lg text-sm transition {% if not current_event %}bg-green-600 text-white{% else %}bg-gray-700 text-gray-300 hover:bg-gray-600{% endif %}">
-                    All Events
+                    All Categories
                 </a>
                 {% for event_name in event_list %}
                 <a href="/category/{{ cat_id }}?{% if current_sub %}sub={{ current_sub }}&{% endif %}event={{ event_name | urlencode }}"
@@ -116,11 +116,11 @@
                         Move
                     </button>
                 </div>
-                <!-- Change Event (dropdown) -->
+                <!-- Change Category (dropdown) -->
                 <div class="flex items-center gap-2 border-l border-gray-600 pl-4">
-                    <label class="text-gray-400 text-sm">Move to Event:</label>
+                    <label class="text-gray-400 text-sm">Move to Category:</label>
                     <select id="bulkEventSelect" class="bg-gray-700 text-white px-3 py-2 rounded">
-                        <option value="">Select event...</option>
+                        <option value="">Select category...</option>
                         {% for event in events %}
                         <option value="{{ event }}">{{ event }}</option>
                         {% endfor %}
@@ -130,10 +130,10 @@
                     </button>
                 </div>
                 {% if videos_no_event %}
-                <!-- Set New Event Name (only show if there are videos without events) -->
+                <!-- Set New Category Name (only show if there are videos without categories) -->
                 <div class="flex items-center gap-2 border-l border-gray-600 pl-4">
-                    <label class="text-gray-400 text-sm">New Event:</label>
-                    <input type="text" id="bulkEventName" placeholder="e.g., Nationals 2024"
+                    <label class="text-gray-400 text-sm">New Category:</label>
+                    <input type="text" id="bulkEventName" placeholder="e.g., 4-Way"
                         class="bg-gray-700 text-white px-3 py-2 rounded w-40">
                     <button onclick="bulkSetEvent()" class="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded font-medium">
                         Create
@@ -307,7 +307,7 @@
             </div>
             {% endfor %}
 
-            <!-- Videos without event -->
+            <!-- Videos without category -->
             {% if videos_no_event %}
             <div class="event-folder mb-6">
                 <div class="flex items-center gap-3 mb-4 cursor-pointer group" onclick="toggleEventFolder('uncategorized')">
@@ -315,7 +315,7 @@
                         <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"/>
                     </svg>
                     <div class="flex-1">
-                        <h2 class="text-lg font-semibold text-gray-400 group-hover:text-white transition">No Event Assigned</h2>
+                        <h2 class="text-lg font-semibold text-gray-400 group-hover:text-white transition">No Category Assigned</h2>
                         <p class="text-gray-500 text-sm">{{ videos_no_event|length }} videos</p>
                     </div>
                     <svg id="chevron-uncategorized" class="w-5 h-5 text-gray-400 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -836,7 +836,7 @@
             const eventName = document.getElementById('bulkEventName').value.trim();
 
             if (!eventName) {
-                alert('Please enter an event name');
+                alert('Please enter a category name');
                 return;
             }
 
@@ -850,7 +850,7 @@
                 return;
             }
 
-            if (!confirm(`Set event "${eventName}" for ${selectedVideos.length} video(s)?`)) {
+            if (!confirm(`Set category "${eventName}" for ${selectedVideos.length} video(s)?`)) {
                 return;
             }
 
@@ -879,7 +879,7 @@
             const eventName = document.getElementById('bulkEventSelect').value;
 
             if (!eventName) {
-                alert('Please select an event from the dropdown');
+                alert('Please select a category from the dropdown');
                 return;
             }
 
@@ -893,7 +893,7 @@
                 return;
             }
 
-            if (!confirm(`Move ${selectedVideos.length} video(s) to "${eventName}"?`)) {
+            if (!confirm(`Move ${selectedVideos.length} video(s) to category "${eventName}"?`)) {
                 return;
             }
 

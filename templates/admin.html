@@ -129,7 +129,7 @@
                 </div>
             </div>
             <p class="text-gray-400 text-sm mb-4">
-                Drop files or folders. For nested folders: <span class="text-cyan-400">MainFolder</span> = Event, <span class="text-green-400">Subfolder</span> = Category
+                Drop files or folders. For nested folders: <span class="text-cyan-400">MainFolder</span> = Category, <span class="text-green-400">Subfolder</span> = Subcategory
             </p>
 
             <div id="manualCategorySection" class="flex flex-wrap gap-4 items-end mb-4">
@@ -152,10 +152,10 @@
                     </select>
                 </div>
                 <div class="w-64">
-                    <label class="block text-gray-300 mb-2">Event</label>
+                    <label class="block text-gray-300 mb-2">Category</label>
                     <input type="text" id="uploadEvent" list="uploadEventList"
                         class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="e.g., 2024 Nationals">
+                        placeholder="e.g., 4-Way, 8-Way">
                     <datalist id="uploadEventList">
                         {% for event in events %}
                         <option value="{{ event }}">
@@ -187,7 +187,7 @@
                 <p class="text-gray-400">Drag & drop files or folders here</p>
                 <p class="text-green-500 text-sm mt-2">Supported: MP4, WebM, MOV, MKV, AVI, MTS</p>
                 <p class="text-cyan-500 text-xs mt-1">MKV, AVI, MTS files will be converted to MP4 automatically on the server</p>
-                <p class="text-gray-600 text-xs mt-1">Folder structure: EventName/Category/videos.mp4</p>
+                <p class="text-gray-600 text-xs mt-1">Folder structure: CategoryName/Subcategory/videos.mp4</p>
             </div>
             <div id="uploadProgress" class="mt-4 hidden"></div>
             <div id="uploadResults" class="mt-4 hidden"></div>
@@ -210,22 +210,22 @@
         <!-- Video List -->
         <div class="bg-gray-800 rounded-lg p-6">
             <h2 class="text-xl font-bold mb-4">Manage Videos</h2>
-            <!-- Filter by Event -->
+            <!-- Filter by Category -->
             <div class="flex flex-wrap gap-4 mb-4">
                 <div>
-                    <label class="block text-gray-400 text-sm mb-1">Filter by Event</label>
+                    <label class="block text-gray-400 text-sm mb-1">Filter by Category</label>
                     <select id="filterEventSelect" onchange="filterVideosByEvent()" class="px-4 py-2 rounded bg-gray-700 text-white">
-                        <option value="">All Events</option>
-                        <option value="__none__">No Event Assigned</option>
+                        <option value="">All Categories</option>
+                        <option value="__none__">No Category Assigned</option>
                         {% for event in events %}
                         <option value="{{ event }}">{{ event }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 <div>
-                    <label class="block text-gray-400 text-sm mb-1">Bulk Assign Event</label>
+                    <label class="block text-gray-400 text-sm mb-1">Bulk Assign Category</label>
                     <div class="flex gap-2">
-                        <input type="text" id="bulkEventInput" list="bulkEventList" placeholder="Event name..." class="px-3 py-2 rounded bg-gray-700 text-white w-48">
+                        <input type="text" id="bulkEventInput" list="bulkEventList" placeholder="Category name..." class="px-3 py-2 rounded bg-gray-700 text-white w-48">
                         <datalist id="bulkEventList">
                             {% for event in events %}
                             <option value="{{ event }}">
@@ -279,7 +279,7 @@
                                 <span class="text-gray-500">|</span>
                                 <input type="text" value="{{ video.event|default('', true) }}"
                                     list="eventList_{{ video.id }}"
-                                    placeholder="No event"
+                                    placeholder="No category"
                                     class="bg-cyan-700 text-white px-2 py-0.5 rounded text-xs w-32 event-input"
                                     data-video-id="{{ video.id }}"
                                     onchange="quickChangeEvent('{{ video.id }}', this.value)">
@@ -335,10 +335,10 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-gray-300 mb-2">Event</label>
+                    <label class="block text-gray-300 mb-2">Category</label>
                     <input type="text" id="modalEvent" list="modalEventList"
                         class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="e.g., 2024 Nationals">
+                        placeholder="e.g., 4-Way, 8-Way">
                     <datalist id="modalEventList">
                         {% for event in events %}
                         <option value="{{ event }}">
@@ -395,10 +395,10 @@
                     </select>
                 </div>
                 <div>
-                    <label class="block text-gray-300 mb-2">Event</label>
+                    <label class="block text-gray-300 mb-2">Category</label>
                     <input type="text" id="editEvent" list="editEventList"
                         class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        placeholder="e.g., 2024 Nationals">
+                        placeholder="e.g., 4-Way, 8-Way">
                     <datalist id="editEventList">
                         {% for event in events %}
                         <option value="{{ event }}">

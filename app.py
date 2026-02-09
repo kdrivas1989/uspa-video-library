@@ -27,6 +27,14 @@ import sqlite3
 import logging
 from logging.handlers import RotatingFileHandler
 from io import BytesIO
+from flask import Response, stream_with_context
+
+# pCloud Storage Integration
+from pcloud_storage import (
+    USE_PCLOUD, upload_to_pcloud, upload_to_pcloud_from_data,
+    delete_from_pcloud, get_pcloud_file_stream, get_pcloud_file_size,
+    PCLOUD_BASE_FOLDER
+)
 
 # Setup upload failure logging
 upload_logger = logging.getLogger('upload_failures')
@@ -197,17 +205,41 @@ except ImportError as e:
 # Supabase Storage bucket name
 SUPABASE_BUCKET = 'videos'
 
-# AWS S3 Configuration
+# S3-Compatible Storage Configuration (Backblaze B2 or AWS S3)
 try:
     import boto3
     from botocore.exceptions import ClientError, NoCredentialsError
+
+    # Check for Backblaze B2 first (preferred)
+    B2_KEY_ID = os.environ.get('B2_KEY_ID')
+    B2_APPLICATION_KEY = os.environ.get('B2_APPLICATION_KEY')
+    B2_BUCKET = os.environ.get('B2_BUCKET')
+    B2_ENDPOINT = os.environ.get('B2_ENDPOINT')
+    B2_REGION = os.environ.get('B2_REGION', 'us-east-005')
+
+    # Fallback to AWS S3
     AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
     AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
     AWS_S3_BUCKET = os.environ.get('AWS_S3_BUCKET')
     AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
-    AWS_CLOUDFRONT_DOMAIN = os.environ.get('AWS_CLOUDFRONT_DOMAIN', '')  # Optional CDN
+    AWS_CLOUDFRONT_DOMAIN = os.environ.get('AWS_CLOUDFRONT_DOMAIN', '')
 
-    if AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and AWS_S3_BUCKET:
+    if B2_KEY_ID and B2_APPLICATION_KEY and B2_BUCKET:
+        # Use Backblaze B2 (S3-compatible API)
+        s3_client = boto3.client(
+            's3',
+            aws_access_key_id=B2_KEY_ID,
+            aws_secret_access_key=B2_APPLICATION_KEY,
+            endpoint_url=B2_ENDPOINT,
+            region_name=B2_REGION
+        )
+        AWS_S3_BUCKET = B2_BUCKET  # Use same variable for bucket name
+        AWS_REGION = B2_REGION
+        USE_S3 = True
+        STORAGE_PROVIDER = 'b2'
+        print(f"[STARTUP] Backblaze B2 configured: Bucket={B2_BUCKET}, Endpoint={B2_ENDPOINT}")
+    elif AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY and AWS_S3_BUCKET:
+        # Use AWS S3
         s3_client = boto3.client(
             's3',
             aws_access_key_id=AWS_ACCESS_KEY_ID,
@@ -215,14 +247,17 @@ try:
             region_name=AWS_REGION
         )
         USE_S3 = True
+        STORAGE_PROVIDER = 's3'
         print(f"[STARTUP] AWS S3 configured: Bucket={AWS_S3_BUCKET}, Region={AWS_REGION}")
     else:
         s3_client = None
         USE_S3 = False
-        print(f"[STARTUP] AWS S3 not configured (optional)")
+        STORAGE_PROVIDER = None
+        print(f"[STARTUP] S3-compatible storage not configured (optional)")
 except ImportError:
     s3_client = None
     USE_S3 = False
+    STORAGE_PROVIDER = None
     print(f"[STARTUP] boto3 not installed, S3 disabled")
 
 
@@ -243,9 +278,12 @@ def upload_to_s3(file_data, filename, content_type='video/mp4', folder='videos')
             ContentType=content_type
         )
 
-        # Return URL (CloudFront if configured, otherwise direct S3)
+        # Return URL (CloudFront if configured, otherwise direct storage URL)
         if AWS_CLOUDFRONT_DOMAIN:
             url = f"https://{AWS_CLOUDFRONT_DOMAIN}/{s3_key}"
+        elif STORAGE_PROVIDER == 'b2':
+            # Backblaze B2 friendly URL format
+            url = f"https://f005.backblazeb2.com/file/{AWS_S3_BUCKET}/{s3_key}"
         else:
             url = f"https://{AWS_S3_BUCKET}.s3.{AWS_REGION}.amazonaws.com/{s3_key}"
 
@@ -3634,8 +3672,13 @@ def video(video_id):
         return "Video not found", 404
 
     # Determine video source
-    # Check URL first (Supabase Storage, Dropbox, direct video URLs)
-    if video.get('url') and is_direct_video_url(video.get('url', '')):
+    # Check pCloud first
+    if video.get('video_type') == 'pcloud' and video.get('local_file'):
+        video['video_src'] = f'/pcloud/stream/{video["local_file"]}'
+        video['is_local'] = False
+        video['is_direct_url'] = True
+    # Check URL (Supabase Storage, Dropbox, direct video URLs)
+    elif video.get('url') and is_direct_video_url(video.get('url', '')):
         video['video_src'] = video['url']
         video['is_local'] = False
         video['is_direct_url'] = True
@@ -6313,13 +6356,13 @@ def edit_video(video_id):
     if new_category and new_category != old_category:
         video['category_auto'] = False  # Mark as manually categorized
 
-    video['title'] = data.get('title', video['title']).strip()
-    video['description'] = data.get('description', video.get('description', '')).strip()
-    video['category'] = data.get('category', video['category'])
-    video['subcategory'] = data.get('subcategory', video.get('subcategory', ''))
-    video['tags'] = data.get('tags', video.get('tags', '')).strip()
-    video['duration'] = data.get('duration', video.get('duration', '')).strip()
-    video['event'] = data.get('event', video.get('event', '')).strip()
+    video['title'] = (data.get('title') or video.get('title') or '').strip()
+    video['description'] = (data.get('description') or video.get('description') or '').strip()
+    video['category'] = data.get('category') or video.get('category') or 'uncategorized'
+    video['subcategory'] = (data.get('subcategory') or video.get('subcategory') or '').strip()
+    video['tags'] = (data.get('tags') or video.get('tags') or '').strip()
+    video['duration'] = (data.get('duration') or video.get('duration') or '').strip()
+    video['event'] = (data.get('event') or video.get('event') or '').strip()
 
     save_video(video)
 
@@ -6726,6 +6769,70 @@ def rename_event_folder():
         'message': f'Renamed folder to "{new_name}" ({success_count} videos updated)',
         'updated_count': success_count
     })
+
+
+@app.route('/pcloud/stream/<path:pcloud_path>')
+def pcloud_stream(pcloud_path):
+    """Stream a video from pCloud storage."""
+    if not USE_PCLOUD:
+        return "pCloud not configured", 503
+
+    # Get file size for Content-Length header
+    file_size = get_pcloud_file_size(pcloud_path)
+
+    # Determine content type
+    ext = os.path.splitext(pcloud_path)[1].lower()
+    content_types = {
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.m4v': 'video/mp4',
+    }
+    content_type = content_types.get(ext, 'video/mp4')
+
+    # Handle range requests for video seeking
+    range_header = request.headers.get('Range')
+
+    if range_header and file_size:
+        # Parse range header
+        byte_start = 0
+        byte_end = file_size - 1
+
+        match = re.match(r'bytes=(\d+)-(\d*)', range_header)
+        if match:
+            byte_start = int(match.group(1))
+            if match.group(2):
+                byte_end = int(match.group(2))
+
+        content_length = byte_end - byte_start + 1
+
+        # For range requests, we need to use a different approach
+        # Stream the full file but return 206 Partial Content
+        def generate():
+            for chunk in get_pcloud_file_stream(pcloud_path):
+                yield chunk
+
+        headers = {
+            'Content-Type': content_type,
+            'Accept-Ranges': 'bytes',
+            'Content-Range': f'bytes {byte_start}-{byte_end}/{file_size}',
+            'Content-Length': content_length,
+        }
+        return Response(stream_with_context(generate()), status=206, headers=headers)
+
+    # Full file request
+    def generate():
+        for chunk in get_pcloud_file_stream(pcloud_path):
+            yield chunk
+
+    headers = {
+        'Content-Type': content_type,
+        'Accept-Ranges': 'bytes',
+    }
+    if file_size:
+        headers['Content-Length'] = file_size
+
+    return Response(stream_with_context(generate()), headers=headers)
 
 
 @app.route('/api/video/<video_id>/set-start-time', methods=['POST'])
