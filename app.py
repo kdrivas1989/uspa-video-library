@@ -1619,8 +1619,19 @@ def init_db():
 def get_all_videos():
     """Get all videos from database."""
     if USE_SUPABASE:
-        result = supabase.table('videos').select('*').order('created_at', desc=True).execute()
-        return result.data
+        # Supabase has a default limit of 1000, so paginate to get all
+        all_videos = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            result = supabase.table('videos').select('*').order('created_at', desc=True).range(offset, offset + batch_size - 1).execute()
+            if not result.data:
+                break
+            all_videos.extend(result.data)
+            if len(result.data) < batch_size:
+                break
+            offset += batch_size
+        return all_videos
     else:
         db = get_sqlite_db()
         cursor = db.execute('SELECT * FROM videos ORDER BY created_at DESC')
@@ -1630,11 +1641,22 @@ def get_all_videos():
 def get_videos_by_category(category, subcategory=None):
     """Get videos by category and optional subcategory."""
     if USE_SUPABASE:
-        query = supabase.table('videos').select('*').eq('category', category)
-        if subcategory:
-            query = query.eq('subcategory', subcategory)
-        result = query.order('created_at', desc=True).execute()
-        return result.data
+        # Paginate to handle categories with 1000+ videos
+        all_videos = []
+        offset = 0
+        batch_size = 1000
+        while True:
+            query = supabase.table('videos').select('*').eq('category', category)
+            if subcategory:
+                query = query.eq('subcategory', subcategory)
+            result = query.order('created_at', desc=True).range(offset, offset + batch_size - 1).execute()
+            if not result.data:
+                break
+            all_videos.extend(result.data)
+            if len(result.data) < batch_size:
+                break
+            offset += batch_size
+        return all_videos
     else:
         db = get_sqlite_db()
         if subcategory:
@@ -2607,7 +2629,25 @@ def parse_filename_metadata(filename, folder_path=''):
     # Examples:
     #   5thFAIWorldIndoorSkydivingChampionships-FormationSkydiving_FS4-Way-Female_421-SingaporeFemale_1.mkv
     #   JudgeSeminarMeet_FS4-Way-Open_408-Brazil4_1.mkv
+    #   2018 WPC - 2018FAIWorldParachutingChampionships VFS-Open 108-USAVFS 8 (space-separated)
+
+    # Try underscore-separated first, then space-separated
     parts = name.split('_')
+    if len(parts) < 4:
+        # Try space-separated format: "Event Discipline-Class TeamNum-TeamName Round"
+        # Look for pattern like "VFS-Open" or "FS4-Way-Open" to find the discipline marker
+        import re
+        discipline_match = re.search(r'\s+(VFS|FS\d?|AE|CF|CP|WS|2Way|4Way|8Way)[-\s]', name, re.IGNORECASE)
+        if discipline_match:
+            # Split around the discipline marker
+            idx = discipline_match.start()
+            event_part = name[:idx].strip()
+            remainder = name[idx:].strip()
+            # Now parse remainder: "VFS-Open 108-USAVFS 8"
+            space_parts = remainder.split()
+            if len(space_parts) >= 3:
+                parts = [event_part, space_parts[0], space_parts[1], space_parts[-1]]
+
     if len(parts) >= 4:
         # Try to parse structured format
         event_part = parts[0]
@@ -2645,6 +2685,14 @@ def parse_filename_metadata(filename, folder_path=''):
             'cf-4way-sequential': ('cf', '4way_seq', 'open'),
             'cf-4way-rotations': ('cf', '4way_rot', 'open'),
             'cf-2way-sequential': ('cf', '2way_seq', 'open'),
+            # WPC (FAI World Parachuting Championships) formats
+            'cf4-wayrot-open': ('cf', '4way_rot', 'open'),
+            'cf4-wayseq-open': ('cf', '4way_seq', 'open'),
+            'cf2-wayseq-open': ('cf', '2way_seq', 'open'),
+            'cf2-wayrot-open': ('cf', '2way_rot', 'open'),
+            'fs4-way-aae': ('fs', '4way_fs', 'aae'),
+            'fs4-way-female': ('fs', '4way_fs', 'female'),
+            'fs4-way-junior': ('fs', '4way_fs', 'junior'),
             'wingsuit-performance': ('ws', 'performance', 'open'),
             'wingsuit-acrobatic': ('ws', 'acrobatic', 'open'),
             'canopy-piloting-speed': ('cp', 'speed', 'open'),
@@ -2863,6 +2911,34 @@ def detect_category_from_filename(filename):
     detected_category = None
     detected_subcategory = None
     detected_event = None
+
+    # Check custom mappings first (from database)
+    try:
+        custom_mappings = []
+        if USE_SUPABASE:
+            try:
+                result = supabase.table('category_mappings').select('*').execute()
+                custom_mappings = result.data or []
+            except:
+                pass
+        else:
+            db = get_sqlite_db()
+            try:
+                cursor = db.execute('SELECT pattern, category, subcategory FROM category_mappings')
+                custom_mappings = [{'pattern': r[0], 'category': r[1], 'subcategory': r[2]} for r in cursor.fetchall()]
+            except:
+                pass
+
+        for mapping in custom_mappings:
+            pattern = mapping.get('pattern', '').lower()
+            if pattern and pattern in name_lower:
+                detected_category = mapping.get('category')
+                detected_subcategory = mapping.get('subcategory')
+                # Return early if we found a custom mapping
+                if detected_category:
+                    return detected_category, detected_subcategory, detected_event
+    except Exception as e:
+        pass  # Continue with built-in patterns if custom mappings fail
 
     # Check for "indoor" first - it takes priority as main category
     # VFS (Vertical Formation Skydiving) is typically indoor/tunnel
@@ -5253,7 +5329,10 @@ def upload_video():
         if detected_event and not event:
             event = detected_event
     ext = os.path.splitext(filename)[1].lower()
-    allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv', '.mts', '.m2ts', '.avi', '.mkv')
+    # Allow any common video format
+    allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv', '.mts', '.m2ts', '.avi', '.mkv',
+                          '.wmv', '.flv', '.f4v', '.3gp', '.3g2', '.ts', '.mxf', '.vob', '.mpg', '.mpeg',
+                          '.mp2', '.divx', '.asf', '.rm', '.rmvb', '.dat', '.mod', '.tod')
 
     if ext not in allowed_extensions:
         log_upload_failure('invalid_file_type', filename=original_filename, user=user,
@@ -5440,10 +5519,13 @@ def upload_to_s3_endpoint():
     # Check file extension
     filename = secure_filename(file.filename)
     ext = os.path.splitext(filename)[1].lower()
-    allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv')
+    # Allow any common video format
+    allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv', '.mts', '.m2ts', '.avi', '.mkv',
+                          '.wmv', '.flv', '.f4v', '.3gp', '.3g2', '.ts', '.mxf', '.vob', '.mpg', '.mpeg',
+                          '.mp2', '.divx', '.asf', '.rm', '.rmvb', '.dat', '.mod', '.tod')
 
     if ext not in allowed_extensions:
-        return jsonify({'error': f'Invalid file type for S3. Allowed: {", ".join(allowed_extensions)}. Convert MTS/AVI locally first.'}), 400
+        return jsonify({'error': f'Invalid file type. Allowed: {", ".join(allowed_extensions)}'}), 400
 
     video_id = str(uuid.uuid4())[:8]
 
@@ -6103,6 +6185,127 @@ def auto_categorize_videos():
         'skipped_manual': skipped_manual,
         'details': details[:50]  # Limit details to first 50
     })
+
+
+@app.route('/admin/auto-categorize-preview', methods=['GET'])
+@admin_required
+def auto_categorize_preview():
+    """Preview which videos would be skipped by auto-categorize."""
+    videos = get_all_videos()
+    skipped_videos = []
+
+    for video in videos:
+        current_cat = video.get('category', 'uncategorized')
+        is_uncategorized = current_cat in ('uncategorized', '', None)
+
+        if not is_uncategorized:
+            continue
+
+        filename = video.get('local_file') or video.get('title') or ''
+        if not filename:
+            continue
+
+        # Try to detect category
+        detected_cat, detected_sub, detected_event = detect_category_from_filename(filename)
+
+        # Also try the title
+        if not detected_cat and video.get('title'):
+            detected_cat, detected_sub, detected_event = detect_category_from_filename(video.get('title'))
+
+        # If no category detected, add to skipped list
+        if not detected_cat:
+            skipped_videos.append({
+                'id': video.get('id'),
+                'title': video.get('title', ''),
+                'filename': filename,
+                'current_category': current_cat
+            })
+
+    return jsonify({
+        'success': True,
+        'skipped_count': len(skipped_videos),
+        'skipped_videos': skipped_videos[:100],  # Limit to first 100
+        'total_skipped': len(skipped_videos)
+    })
+
+
+@app.route('/admin/add-category-mapping', methods=['POST'])
+@admin_required
+def add_category_mapping():
+    """Add a custom category mapping pattern."""
+    data = request.json or {}
+    pattern = data.get('pattern', '').strip().lower()
+    category = data.get('category', '')
+    subcategory = data.get('subcategory', '')
+
+    if not pattern or not category:
+        return jsonify({'error': 'Pattern and category are required'}), 400
+
+    if category not in CATEGORIES:
+        return jsonify({'error': f'Invalid category: {category}'}), 400
+
+    # Store mapping in database (create table if needed)
+    if USE_SUPABASE:
+        try:
+            supabase.table('category_mappings').insert({
+                'pattern': pattern,
+                'category': category,
+                'subcategory': subcategory or None
+            }).execute()
+        except Exception as e:
+            # Table might not exist, try to provide helpful error
+            return jsonify({'error': f'Could not save mapping: {str(e)}. Table may need to be created.'}), 500
+    else:
+        db = get_sqlite_db()
+        db.execute('''CREATE TABLE IF NOT EXISTS category_mappings
+                      (id INTEGER PRIMARY KEY, pattern TEXT UNIQUE, category TEXT, subcategory TEXT)''')
+        try:
+            db.execute('INSERT INTO category_mappings (pattern, category, subcategory) VALUES (?, ?, ?)',
+                      (pattern, category, subcategory or None))
+            db.commit()
+        except Exception as e:
+            return jsonify({'error': f'Mapping already exists or error: {str(e)}'}), 400
+
+    return jsonify({
+        'success': True,
+        'message': f'Added mapping: "{pattern}" → {category}/{subcategory or "none"}'
+    })
+
+
+@app.route('/admin/get-category-mappings', methods=['GET'])
+@admin_required
+def get_category_mappings():
+    """Get all custom category mappings."""
+    mappings = []
+    if USE_SUPABASE:
+        try:
+            result = supabase.table('category_mappings').select('*').execute()
+            mappings = result.data
+        except:
+            pass  # Table might not exist
+    else:
+        db = get_sqlite_db()
+        try:
+            cursor = db.execute('SELECT * FROM category_mappings')
+            mappings = [dict(row) for row in cursor.fetchall()]
+        except:
+            pass  # Table might not exist
+
+    return jsonify({'success': True, 'mappings': mappings})
+
+
+@app.route('/admin/delete-category-mapping/<pattern>', methods=['POST'])
+@admin_required
+def delete_category_mapping(pattern):
+    """Delete a custom category mapping."""
+    if USE_SUPABASE:
+        supabase.table('category_mappings').delete().eq('pattern', pattern).execute()
+    else:
+        db = get_sqlite_db()
+        db.execute('DELETE FROM category_mappings WHERE pattern = ?', (pattern,))
+        db.commit()
+
+    return jsonify({'success': True, 'message': f'Deleted mapping for "{pattern}"'})
 
 
 @app.route('/admin/delete-video/<video_id>', methods=['POST'])
@@ -10244,7 +10447,10 @@ def videographer_upload_video():
     # Check file extension
     filename = secure_filename(file.filename)
     ext = os.path.splitext(filename)[1].lower()
-    allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv', '.mts', '.m2ts', '.avi', '.mkv')
+    # Allow any common video format
+    allowed_extensions = ('.mp4', '.webm', '.mov', '.m4v', '.ogg', '.ogv', '.mts', '.m2ts', '.avi', '.mkv',
+                          '.wmv', '.flv', '.f4v', '.3gp', '.3g2', '.ts', '.mxf', '.vob', '.mpg', '.mpeg',
+                          '.mp2', '.divx', '.asf', '.rm', '.rmvb', '.dat', '.mod', '.tod')
 
     if ext not in allowed_extensions:
         log_upload_failure('invalid_file_type', filename=original_filename, user=user,

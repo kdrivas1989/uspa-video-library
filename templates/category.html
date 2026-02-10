@@ -180,9 +180,17 @@
                     </div>
                 </a>
                 <div class="p-4">
-                    <a href="/video/{{ video.id }}">
-                        <h3 class="font-semibold text-white line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
-                    </a>
+                    <div class="flex items-start gap-1">
+                        <a href="/video/{{ video.id }}" class="flex-1 min-w-0">
+                            <h3 class="font-semibold text-white line-clamp-2 hover:text-blue-400" title="{{ video.title }}">{{ video.title }}</h3>
+                        </a>
+                        <button onclick="event.preventDefault(); copyFilename('{{ video.title | e }}')"
+                            class="p-1 text-gray-500 hover:text-blue-400 hover:bg-gray-700 rounded transition flex-shrink-0" title="Copy filename">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="flex justify-between items-center mt-2 text-sm text-gray-400">
                         {% if is_chief_judge or is_admin %}
                         <select onchange="moveToCategory('{{ video.id }}', this.value)"
@@ -283,9 +291,17 @@
                                 </div>
                             </a>
                             <div class="p-3">
-                                <a href="/video/{{ video.id }}">
-                                    <h3 class="font-medium text-white text-sm line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
-                                </a>
+                                <div class="flex items-start gap-1">
+                                    <a href="/video/{{ video.id }}" class="flex-1 min-w-0">
+                                        <h3 class="font-medium text-white text-sm line-clamp-2 hover:text-blue-400" title="{{ video.title }}">{{ video.title }}</h3>
+                                    </a>
+                                    <button onclick="event.preventDefault(); copyFilename('{{ video.title | e }}')"
+                                        class="p-1 text-gray-500 hover:text-blue-400 hover:bg-gray-700 rounded transition flex-shrink-0" title="Copy filename">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                        </svg>
+                                    </button>
+                                </div>
                                 <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
                                     {% if is_chief_judge or is_admin %}
                                     <select onchange="moveToCategory('{{ video.id }}', this.value)"
@@ -363,9 +379,17 @@
                                 </div>
                             </a>
                             <div class="p-3">
-                                <a href="/video/{{ video.id }}">
-                                    <h3 class="font-medium text-white text-sm line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
-                                </a>
+                                <div class="flex items-start gap-1">
+                                    <a href="/video/{{ video.id }}" class="flex-1 min-w-0">
+                                        <h3 class="font-medium text-white text-sm line-clamp-2 hover:text-blue-400" title="{{ video.title }}">{{ video.title }}</h3>
+                                    </a>
+                                    <button onclick="event.preventDefault(); copyFilename('{{ video.title | e }}')"
+                                        class="p-1 text-gray-500 hover:text-blue-400 hover:bg-gray-700 rounded transition flex-shrink-0" title="Copy filename">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                        </svg>
+                                    </button>
+                                </div>
                                 <div class="flex justify-between items-center mt-2 text-xs text-gray-400">
                                     {% if is_chief_judge or is_admin %}
                                     <select onchange="moveToCategory('{{ video.id }}', this.value)"
@@ -417,9 +441,17 @@
                     </div>
                 </a>
                 <div class="p-4">
-                    <a href="/video/{{ video.id }}">
-                        <h3 class="font-semibold text-white line-clamp-2 hover:text-blue-400">{{ video.title }}</h3>
-                    </a>
+                    <div class="flex items-start gap-1">
+                        <a href="/video/{{ video.id }}" class="flex-1 min-w-0">
+                            <h3 class="font-semibold text-white line-clamp-2 hover:text-blue-400" title="{{ video.title }}">{{ video.title }}</h3>
+                        </a>
+                        <button onclick="event.preventDefault(); copyFilename('{{ video.title | e }}')"
+                            class="p-1 text-gray-500 hover:text-blue-400 hover:bg-gray-700 rounded transition flex-shrink-0" title="Copy filename">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                            </svg>
+                        </button>
+                    </div>
                     <div class="flex justify-between items-center mt-2 text-sm text-gray-400">
                         {% if is_chief_judge or is_admin %}
                         <select onchange="moveToCategory('{{ video.id }}', this.value)"
@@ -458,6 +490,19 @@
     </footer>
 
     <script>
+        function copyFilename(filename) {
+            navigator.clipboard.writeText(filename).then(() => {
+                // Show brief feedback
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-4 py-2 rounded-lg shadow-lg z-50';
+                toast.textContent = 'Filename copied!';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 2000);
+            }).catch(err => {
+                alert('Failed to copy: ' + err);
+            });
+        }
+
         function toggleEventFolder(folderId) {
             const content = document.getElementById('folder-content-' + folderId);
             const chevron = document.getElementById('chevron-' + folderId);

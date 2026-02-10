@@ -421,7 +421,7 @@
                     <!-- Timer Controls -->
                     <div class="flex items-center justify-between flex-wrap gap-4 mt-4 pt-4 border-t border-gray-700">
                         <div class="flex items-center gap-3">
-                            <span class="text-gray-400 text-sm">Event:</span>
+                            <span class="text-gray-400 text-sm">Discipline:</span>
                             <select id="eventType" onchange="updateEventType()"
                                 class="px-3 py-1 rounded bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <optgroup label="Formation Skydiving">
@@ -1954,7 +1954,8 @@
             { value: 'incomplete_separation', label: 'Incomplete Separation' },
             { value: 'non_stationary_grip', label: 'Non-Stationary Grip' },
             { value: 'incorrect_formation', label: 'Incorrect Formation' },
-            { value: 'broken_inter', label: 'Broken Inter' }
+            { value: 'broken_inter', label: 'Broken Inter' },
+            { value: 'video_angle', label: 'Video Angle' }
         ];
 
         // Formations/Draw tracking (declared early to avoid initialization errors)
