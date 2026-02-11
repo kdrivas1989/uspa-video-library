@@ -1221,8 +1221,8 @@ DATABASE = 'videos.db'
 # Role hierarchy (higher number = more access)
 ROLES = {
     'judge': 1,           # Can view and score videos
-    'event_judge': 2,     # Can manage event-specific content
-    'chief_judge': 3,     # Can manage all competitions
+    'jwg': 2,             # Judges Working Group - can manage training content
+    'chief_judge': 3,     # Can assign videos and manage competitions
     'admin': 4            # Full access
 }
 
@@ -1252,8 +1252,8 @@ def role_required(required_role):
 def judge_required(f):
     return role_required('judge')(f)
 
-def event_judge_required(f):
-    return role_required('event_judge')(f)
+def jwg_required(f):
+    return role_required('jwg')(f)
 
 def chief_judge_required(f):
     return role_required('chief_judge')(f)
@@ -3842,7 +3842,7 @@ def video(video_id):
                          current_assignment=current_assignment,
                          is_admin=session.get('role') == 'admin',
                          is_chief_judge=session.get('role') in ['admin', 'chief_judge'],
-                         is_event_judge=session.get('role') in ['admin', 'chief_judge', 'event_judge'],
+                         is_jwg=session.get('role') in ['admin', 'chief_judge', 'jwg'],
                          users=all_users)
 
 
@@ -3870,7 +3870,7 @@ def login():
             if user['role'] == 'judge':
                 return redirect(url_for('my_assignments'))
             else:
-                # Admin, chief_judge, event_judge go to admin dashboard
+                # Admin, chief_judge, jwg go to admin dashboard
                 return redirect(url_for('admin_dashboard'))
         else:
             error = 'Invalid username or password'
@@ -4288,7 +4288,7 @@ def admin_users_sample_csv():
     """Download a sample CSV file for user import."""
     csv_content = """username,name,email,role,signature_pin
 johndoe,John Doe,john.doe@example.com,judge,
-janesmith,Jane Smith,jane.smith@example.com,event_judge,
+janesmith,Jane Smith,jane.smith@example.com,jwg,
 chiefjudge1,Chief Judge One,chief@example.com,chief_judge,1234
 adminuser,Admin User,admin@example.com,admin,5678
 judge2,Judge Two,,judge,
@@ -4310,7 +4310,7 @@ def admin_import_users_csv():
     if not users_data:
         return jsonify({'error': 'No users provided'}), 400
 
-    valid_roles = ['judge', 'event_judge', 'chief_judge', 'admin']
+    valid_roles = ['judge', 'jwg', 'chief_judge', 'admin']
     created = 0
     skipped = 0
     errors = []
@@ -8161,7 +8161,7 @@ def add_event_to_competition(comp_id):
 
 
 @app.route('/admin/score/<score_id>/training-flag', methods=['POST'])
-@event_judge_required
+@jwg_required
 def toggle_training_flag(score_id):
     """Toggle the training flag for a score/video."""
     data = request.json
@@ -8178,7 +8178,7 @@ def toggle_training_flag(score_id):
 
 
 @app.route('/competition/<comp_id>/training-report')
-@event_judge_required
+@jwg_required
 def training_report(comp_id):
     """Generate CSV report of videos flagged for training."""
     import csv
@@ -8228,7 +8228,7 @@ def training_report(comp_id):
 
 
 @app.route('/competition/<comp_id>/training-download')
-@event_judge_required
+@jwg_required
 def download_training_videos(comp_id):
     """Download all videos flagged for training as a zip file."""
     import zipfile
@@ -8285,7 +8285,7 @@ def download_training_videos(comp_id):
 
 
 @app.route('/competition/<comp_id>/training-videos')
-@event_judge_required
+@jwg_required
 def get_training_videos(comp_id):
     """Get list of videos flagged for training."""
     competition = get_competition(comp_id)
@@ -9955,7 +9955,7 @@ def remove_round_video(team_id, round_num):
 
 
 @app.route('/admin/team/<team_id>/score', methods=['POST'])
-@event_judge_required
+@jwg_required
 def save_team_score(team_id):
     """Save a score for a team (event judge and above)."""
     data = request.json
@@ -10022,7 +10022,7 @@ def save_team_score(team_id):
 
 
 @app.route('/admin/team/<team_id>/rejump', methods=['POST'])
-@event_judge_required
+@jwg_required
 def award_rejump(team_id):
     """Award a rejump for a team's round - clears score and allows new video upload."""
     data = request.json
@@ -10073,7 +10073,7 @@ def award_rejump(team_id):
 
 
 @app.route('/admin/team/<team_id>/clear-rejump', methods=['POST'])
-@event_judge_required
+@jwg_required
 def clear_rejump(team_id):
     """Clear the rejump status for a team's round."""
     data = request.json
@@ -11072,7 +11072,7 @@ def ws_performance_assign_ref_point(competition_id):
 
 
 @app.route('/videographer/team/<team_id>/score', methods=['POST'])
-@event_judge_required
+@jwg_required
 def videographer_link_video(team_id):
     """Link a video to a team's round (videographer - NO score entry allowed)."""
     data = request.json
@@ -11223,8 +11223,8 @@ def debug_status():
 @app.route('/sync-room/create', methods=['POST'])
 @login_required
 def create_sync_room():
-    """Create a sync viewing room (event judge only)."""
-    if session.get('role') not in ['admin', 'chief_judge', 'event_judge']:
+    """Create a sync viewing room (JWG and above)."""
+    if session.get('role') not in ['admin', 'chief_judge', 'jwg']:
         return jsonify({'error': 'Unauthorized'}), 403
 
     data = request.json
@@ -11799,7 +11799,7 @@ def get_artistic_difficulty(team_id, round_num):
 
 
 @app.route('/artistic/free-routine/score', methods=['POST'])
-@event_judge_required
+@jwg_required
 def save_artistic_free_routine_score():
     """Save a free routine score for artistic events."""
     data = request.json
@@ -11853,7 +11853,7 @@ def save_artistic_free_routine_score():
 
 
 @app.route('/artistic/compulsory/score', methods=['POST'])
-@event_judge_required
+@jwg_required
 def save_artistic_compulsory_score():
     """Save a compulsory routine score for artistic events."""
     data = request.json
