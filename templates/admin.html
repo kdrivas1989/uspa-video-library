@@ -15,7 +15,6 @@
             <a href="/videoupload" class="text-2xl font-bold text-white">Video Upload</a>
             <div class="flex items-center gap-4">
                 <a href="/" target="_blank" class="bg-green-600 hover:bg-green-500 px-4 py-2 rounded-lg font-semibold">Videos</a>
-                <a href="/admin/events" target="_blank" class="bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2 rounded-lg font-semibold">Events</a>
                 <a href="/assignments" target="_blank" class="bg-cyan-600 hover:bg-cyan-500 px-4 py-2 rounded-lg font-semibold">Assign Videos</a>
                 {% if is_admin %}
                 <a href="/admin/users" target="_blank" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg">Users</a>
@@ -34,10 +33,10 @@
                 <div class="text-xs space-y-1">
                     {% for cat_id, cat in categories.items() %}
                     {% if category_counts.get(cat_id, 0) > 0 %}
-                    <div class="flex justify-between">
-                        <span class="text-gray-500">{{ cat.abbrev }}</span>
+                    <a href="/category/{{ cat_id }}" class="flex justify-between hover:bg-gray-700 px-1 -mx-1 rounded cursor-pointer">
+                        <span class="text-gray-500 hover:text-white">{{ cat.abbrev }}</span>
                         <span class="text-gray-400">{{ category_counts.get(cat_id, 0) }}</span>
-                    </div>
+                    </a>
                     {% endif %}
                     {% endfor %}
                 </div>
@@ -60,6 +59,9 @@
                     <button onclick="showMappingModal()" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded-lg text-sm">
                         + Add Mapping
                     </button>
+                    <button onclick="togglePatternTemplate()" class="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg text-sm">
+                        + Define Template
+                    </button>
                 </div>
                 <p id="autoCategorizeMessage" class="text-sm mt-2 hidden"></p>
                 <!-- Skipped Videos Preview -->
@@ -67,6 +69,140 @@
                     <p class="text-yellow-400 text-sm mb-2">Videos that will be skipped (no pattern match):</p>
                     <div id="skippedList" class="text-xs space-y-1"></div>
                 </div>
+                <!-- Pattern Template Section (collapsible) -->
+                <div id="patternTemplateSection" class="hidden mt-4 pt-4 border-t border-gray-700">
+                    <p class="text-gray-300 text-sm mb-2">Define Pattern Template</p>
+                    <p class="text-xs text-gray-500 mb-3">Copy parts of the filename into each field. Leave blank to skip.</p>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="text-xs text-gray-400 block mb-1">Example Filename</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="patternExample" placeholder="Paste filename here..."
+                                    class="flex-1 px-3 py-2 bg-gray-700 rounded text-sm text-white font-mono" onselect="storeSelection(this)">
+                                <button onclick="autoDetectFields()" class="bg-purple-600 hover:bg-purple-700 px-3 py-2 rounded text-xs whitespace-nowrap">Auto-Detect</button>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Click Auto-Detect to guess fields, or select text and click a field to fill it manually</p>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Prefix (literal)</label>
+                                <input type="text" id="tplPrefix" placeholder="2018 WPC - " class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">Y (Year)</label>
+                                <input type="text" id="tplYear" placeholder="2018" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">C (Competition)</label>
+                                <input type="text" id="tplCompetition" placeholder="FAIWorldChamps" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Sep 1</label>
+                                <input type="text" id="tplSep1" placeholder=" " class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">D (Discipline)</label>
+                                <input type="text" id="tplDiscipline" placeholder="CF" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">S (Subcategory)</label>
+                                <input type="text" id="tplSubcategory" placeholder="4-WayRot" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Sep 2</label>
+                                <input type="text" id="tplSep2" placeholder="-" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">Class (Division)</label>
+                                <input type="text" id="tplClass" placeholder="Open" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Sep 3</label>
+                                <input type="text" id="tplSep3" placeholder=" " class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">TN (Team #)</label>
+                                <input type="text" id="tplTeamNumber" placeholder="504" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Sep 4</label>
+                                <input type="text" id="tplSep4" placeholder="-" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">TM (Team Name)</label>
+                                <input type="text" id="tplTeamName" placeholder="Australia" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Suffix (literal)</label>
+                                <input type="text" id="tplSuffix" placeholder="CFRot " class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-cyan-400 block mb-1">R (Round)</label>
+                                <input type="text" id="tplRound" placeholder="3" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white font-mono cursor-pointer hover:bg-gray-500" onclick="pasteSelection(this)" readonly>
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-400 block mb-1">Discipline (save as)</label>
+                                <select id="patternCategory" class="w-full px-2 py-1 bg-gray-600 rounded text-xs text-white">
+                                    {% for cat_id, cat in categories.items() %}
+                                    <option value="{{ cat_id }}">{{ cat.abbrev }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="flex items-end gap-1">
+                                <button id="testTemplateBtn" onclick="buildAndTestTemplate()" class="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-xs">Test</button>
+                                <button id="saveTemplateBtn" onclick="buildAndSaveTemplate()" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-xs">Save</button>
+                            </div>
+                        </div>
+                        <div id="builtTemplate" class="text-xs font-mono text-gray-400 bg-gray-800 p-2 rounded hidden"></div>
+                        <div id="patternResult" class="hidden mt-2 p-3 rounded text-sm"></div>
+                        <!-- Hidden field for the actual template -->
+                        <input type="hidden" id="patternTemplate">
+                        <input type="hidden" id="patternEvent">
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6">
+                <p class="text-gray-400 text-sm mb-2">Apply learned patterns to existing videos</p>
+                <p class="text-xs text-gray-500 mb-3">When you manually categorize videos, patterns are learned. Apply them to other uncategorized videos.</p>
+                <div class="flex items-center gap-2">
+                    <button onclick="previewLearnedPatterns()" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded-lg text-sm">
+                        Preview
+                    </button>
+                    <button onclick="applyLearnedPatterns()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg text-sm">
+                        Apply Patterns
+                    </button>
+                </div>
+                <p id="learnedPatternsMessage" class="text-sm mt-2 hidden"></p>
+                <div id="learnedPatternsPreview" class="hidden mt-4 max-h-60 overflow-y-auto">
+                    <div id="learnedPatternsList" class="text-xs space-y-1"></div>
+                </div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-6">
+                <p class="text-gray-400 text-sm mb-2">Event Folders</p>
+                <p class="text-xs text-gray-500 mb-3">Create folders to organize videos by competition/event</p>
+                <div class="flex gap-2 mb-3">
+                    <input type="text" id="newEventFolder" placeholder="e.g., 2024 Nationals"
+                        class="flex-1 px-3 py-2 rounded bg-gray-700 text-white text-sm"
+                        onkeypress="if(event.key==='Enter') createEventFolder()">
+                    <button onclick="createEventFolder()" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm">
+                        Create
+                    </button>
+                </div>
+                <div id="eventFoldersList" class="max-h-40 overflow-y-auto space-y-1">
+                    {% for event in events %}
+                    <div class="flex justify-between items-center bg-gray-700 px-3 py-1.5 rounded text-sm">
+                        <span>{{ event }}</span>
+                        <span class="text-gray-400 text-xs">{{ event_counts.get(event, 0) }} videos</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                <p id="eventFolderMessage" class="text-sm mt-2 hidden"></p>
             </div>
             <div class="bg-gray-800 rounded-lg p-6">
                 <p class="text-gray-400 text-sm mb-3">Remove duplicate videos (same URL or title+duration)</p>
@@ -186,6 +322,7 @@
                 ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)"
                 onclick="document.getElementById('fileInput').click()">
                 <input type="file" id="fileInput" multiple accept="video/*,.mts,.m2ts,.avi,.mkv" class="hidden" onchange="handleFileSelect(event)">
+                <input type="file" id="usbFileInput" multiple accept="video/*,.mts,.m2ts,.avi,.mkv" class="hidden" onchange="handleUsbFileSelect(event)">
                 <svg class="w-12 h-12 mx-auto text-gray-500 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
                 </svg>
@@ -193,6 +330,14 @@
                 <p class="text-green-500 text-sm mt-2">Supported: MP4, WebM, MOV, MKV, AVI, MTS</p>
                 <p class="text-cyan-500 text-xs mt-1">MKV, AVI, MTS files will be converted to MP4 automatically on the server</p>
                 <p class="text-gray-600 text-xs mt-1">Folder structure: CategoryName/Subcategory/videos.mp4</p>
+            </div>
+            <!-- USB Upload Button -->
+            <div class="mt-3 flex items-center justify-center gap-4">
+                <button onclick="event.stopPropagation(); document.getElementById('usbFileInput').click();"
+                    class="bg-yellow-600 hover:bg-yellow-500 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+                    <span>🔌</span> Upload from USB/External Drive
+                </button>
+                <span class="text-gray-500 text-xs">Copies files to memory first - more reliable for external drives</span>
             </div>
             <div id="uploadProgress" class="mt-4 hidden"></div>
             <div id="uploadResults" class="mt-4 hidden"></div>
@@ -215,22 +360,22 @@
         <!-- Video List -->
         <div class="bg-gray-800 rounded-lg p-6">
             <h2 class="text-xl font-bold mb-4">Manage Videos</h2>
-            <!-- Filter by Category -->
+            <!-- Filter by Discipline -->
             <div class="flex flex-wrap gap-4 mb-4">
                 <div>
-                    <label class="block text-gray-400 text-sm mb-1">Filter by Category</label>
+                    <label class="block text-gray-400 text-sm mb-1">Filter by Discipline</label>
                     <select id="filterEventSelect" onchange="filterVideosByEvent()" class="px-4 py-2 rounded bg-gray-700 text-white">
-                        <option value="">All Categories</option>
-                        <option value="__none__">No Category Assigned</option>
+                        <option value="">All Disciplines</option>
+                        <option value="__none__">No Event Assigned</option>
                         {% for event in events %}
                         <option value="{{ event }}">{{ event }}</option>
                         {% endfor %}
                     </select>
                 </div>
                 <div>
-                    <label class="block text-gray-400 text-sm mb-1">Bulk Assign Category</label>
+                    <label class="block text-gray-400 text-sm mb-1">Bulk Assign Discipline</label>
                     <div class="flex gap-2">
-                        <input type="text" id="bulkEventInput" list="bulkEventList" placeholder="Category name..." class="px-3 py-2 rounded bg-gray-700 text-white w-48">
+                        <input type="text" id="bulkEventInput" list="bulkEventList" placeholder="Discipline name..." class="px-3 py-2 rounded bg-gray-700 text-white w-48">
                         <datalist id="bulkEventList">
                             {% for event in events %}
                             <option value="{{ event }}">
@@ -326,7 +471,7 @@
                     <select id="modalCategory" required
                         class="w-full px-4 py-2 rounded-lg bg-gray-700 text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                         onchange="updateModalSubcategories()">
-                        <option value="">Select category</option>
+                        <option value="">Select discipline</option>
                         {% for cat_id, cat in categories.items() %}
                         <option value="{{ cat_id }}">{{ cat.abbrev }} - {{ cat.name }}</option>
                         {% endfor %}
@@ -443,6 +588,10 @@
 
     <script>
         const categories = {{ categories | tojson }};
+        // Expose globally for dynamic video item creation
+        window.CATEGORIES = categories;
+        window.ALL_EVENTS = {{ events | tojson }};
+
         let pendingFiles = []; // Store files selected from Dropbox
         let s3Enabled = false;
         let s3Bucket = null;
@@ -681,10 +830,16 @@
                     queueIndicator.id = 'queueIndicator';
                     progressDiv.parentNode.insertBefore(queueIndicator, progressDiv);
                 }
+                // Calculate total size
+                const totalSize = uploadQueue.reduce((sum, f) => sum + (f.file?.size || 0), 0);
+                const sizeStr = totalSize > 1024*1024*1024
+                    ? (totalSize / (1024*1024*1024)).toFixed(1) + ' GB'
+                    : (totalSize / (1024*1024)).toFixed(0) + ' MB';
+
                 queueIndicator.innerHTML = `
                     <div class="bg-green-900/30 border border-green-600 rounded p-3 mb-2 flex items-center justify-between">
                         <div class="flex items-center gap-2">
-                            <span class="text-green-400 font-semibold">📁 ${uploadQueue.length} files queued</span>
+                            <span class="text-green-400 font-semibold">📁 ${uploadQueue.length} files queued (${sizeStr})</span>
                             ${isUploading ? '<span class="text-gray-400 text-sm">- will process after current upload</span>' : ''}
                         </div>
                         <span class="text-green-500 text-xs">Drop more folders anytime!</span>
@@ -790,6 +945,80 @@
                     processUploadQueue();
                 }
             }
+        }
+
+        // USB/External Drive upload - copies files to memory first for reliability
+        async function handleUsbFileSelect(e) {
+            const files = Array.from(e.target.files);
+            if (files.length === 0) return;
+
+            // Filter for video files
+            const videoFiles = files.filter(f => f.type.startsWith('video/') ||
+                f.name.toLowerCase().match(/\.(mp4|webm|mov|m4v|ogg|ogv|mts|m2ts|avi|mkv)$/));
+
+            if (videoFiles.length === 0) return;
+
+            const progressDiv = document.getElementById('uploadProgress');
+            progressDiv.classList.remove('hidden');
+            progressDiv.innerHTML = `
+                <div class="bg-yellow-900/30 border border-yellow-600 rounded p-4">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-500"></div>
+                        <span class="text-yellow-400 font-medium">Copying files from USB to memory...</span>
+                    </div>
+                    <div id="usbCopyProgress" class="text-sm text-gray-400">0/${videoFiles.length} files</div>
+                    <p class="text-xs text-gray-500 mt-2">Keep USB connected until copying is complete</p>
+                </div>
+            `;
+
+            const copiedFiles = [];
+            let copyFailed = 0;
+
+            for (let i = 0; i < videoFiles.length; i++) {
+                const file = videoFiles[i];
+                document.getElementById('usbCopyProgress').textContent =
+                    `${i + 1}/${videoFiles.length}: ${file.name} (${(file.size / (1024*1024)).toFixed(0)} MB)`;
+
+                try {
+                    // Read the entire file into memory
+                    const arrayBuffer = await file.arrayBuffer();
+
+                    // Create a new File object from the buffer (now in memory, not on USB)
+                    const copiedFile = new File([arrayBuffer], file.name, {
+                        type: file.type || 'video/mp4',
+                        lastModified: file.lastModified
+                    });
+
+                    copiedFiles.push({ file: copiedFile, event: '', category: '' });
+                } catch (error) {
+                    console.error(`Failed to copy ${file.name}:`, error);
+                    copyFailed++;
+                }
+            }
+
+            if (copiedFiles.length > 0) {
+                progressDiv.innerHTML = `
+                    <div class="bg-green-900/30 border border-green-600 rounded p-3 mb-2">
+                        <span class="text-green-400">✓ ${copiedFiles.length} files copied to memory</span>
+                        ${copyFailed > 0 ? `<span class="text-red-400 ml-2">(${copyFailed} failed)</span>` : ''}
+                        <span class="text-gray-400 ml-2">- Starting upload...</span>
+                    </div>
+                `;
+
+                // Add to queue and start upload
+                uploadQueue.push(...copiedFiles);
+                updateQueueStatus();
+                processUploadQueue();
+            } else {
+                progressDiv.innerHTML = `
+                    <div class="bg-red-900/30 border border-red-600 rounded p-3">
+                        <span class="text-red-400">Failed to copy files from USB. Try copying manually to your Desktop first.</span>
+                    </div>
+                `;
+            }
+
+            // Reset the input so the same files can be selected again
+            e.target.value = '';
         }
 
         // Check if filename has recognizable team/round pattern
@@ -972,11 +1201,11 @@
                         if (completeResult.success) {
                             if (completeResult.converting) {
                                 backgroundJobs++;
-                                results.push({ name: file.name, success: true, background: true, s3: true });
+                                results.push({ name: file.name, success: true, background: true, s3: true, videoId: completeResult.video_id });
                                 startConversionPolling();
                             } else {
                                 uploaded++;
-                                results.push({ name: file.name, success: true, s3: true });
+                                results.push({ name: file.name, success: true, s3: true, videoId: completeResult.video_id });
                             }
                         } else {
                             failed++;
@@ -1063,7 +1292,7 @@
 
                             if (completeResult.success) {
                                 backgroundJobs++;
-                                results.push({ name: file.name, success: true, background: true });
+                                results.push({ name: file.name, success: true, background: true, videoId: completeResult.video_id });
                                 startConversionPolling();
                             } else {
                                 failed++;
@@ -1099,9 +1328,112 @@
                 </div>
             `;
 
-            if (uploaded > 0 || backgroundJobs > 0) {
-                setTimeout(() => location.reload(), 2000);
+            // Show uploaded videos in Manage Videos section
+            const uploadedVideoIds = results
+                .filter(r => r.success && r.videoId && !r.background)
+                .map(r => r.videoId);
+
+            if (uploadedVideoIds.length > 0) {
+                await displayUploadedVideos(uploadedVideoIds);
             }
+        }
+
+        // Display uploaded videos in the Manage Videos section
+        async function displayUploadedVideos(videoIds) {
+            const container = document.getElementById('videoListContainer');
+            if (!container) return;
+
+            // Fetch and display each video
+            for (const videoId of videoIds) {
+                try {
+                    const response = await fetch(`/admin/get-video/${videoId}`);
+                    if (!response.ok) continue;
+                    const video = await response.json();
+
+                    // Create video item HTML
+                    const videoItem = createVideoItemElement(video);
+
+                    // Insert at the top of the list
+                    container.insertBefore(videoItem, container.firstChild);
+
+                    // Add highlight animation
+                    videoItem.classList.add('ring-2', 'ring-green-500', 'ring-opacity-75');
+                    setTimeout(() => {
+                        videoItem.classList.remove('ring-2', 'ring-green-500', 'ring-opacity-75');
+                    }, 5000);
+                } catch (error) {
+                    console.error('Failed to fetch video:', videoId, error);
+                }
+            }
+
+            // Scroll to the Manage Videos section
+            const manageVideosSection = container.closest('.bg-gray-800');
+            if (manageVideosSection) {
+                manageVideosSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+
+        // Create a video list item element
+        function createVideoItemElement(video) {
+            const div = document.createElement('div');
+            div.className = 'bg-gray-700 rounded-lg p-4 video-list-item transition-all duration-500';
+            div.dataset.videoId = video.id;
+            div.dataset.event = video.event || '';
+
+            const categoryAbbrev = window.CATEGORIES?.[video.category]?.abbrev || video.category || 'UNC';
+
+            div.innerHTML = `
+                <div class="flex gap-4">
+                    <div class="w-32 h-20 bg-gray-600 rounded flex-shrink-0 overflow-hidden">
+                        ${video.thumbnail ? `<img src="${video.thumbnail}" alt="${video.title}" class="w-full h-full object-cover">` : ''}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex items-center gap-2">
+                            <input type="text" value="${escapeHtml(video.title)}"
+                                class="flex-1 font-semibold text-white bg-transparent border-b border-transparent hover:border-gray-500 focus:border-blue-500 focus:outline-none px-1 py-0.5"
+                                onchange="quickRenameVideo('${video.id}', this.value)"
+                                onkeydown="if(event.key==='Enter'){this.blur();}">
+                        </div>
+                        <div class="flex items-center gap-2 mt-1 text-sm text-gray-400">
+                            <select onchange="quickChangeCategory('${video.id}', this.value, this)"
+                                class="bg-blue-600 text-white px-2 py-0.5 rounded text-xs cursor-pointer hover:bg-blue-500"
+                                data-video-id="${video.id}">
+                                ${Object.entries(window.CATEGORIES || {}).map(([id, cat]) =>
+                                    `<option value="${id}" ${id === video.category ? 'selected' : ''}>${cat.abbrev}</option>`
+                                ).join('')}
+                            </select>
+                            <span>${video.views || 0} views</span>
+                            <span class="text-gray-500">|</span>
+                            <input type="text" value="${escapeHtml(video.event || '')}"
+                                list="eventList_${video.id}"
+                                placeholder="No category"
+                                class="bg-cyan-700 text-white px-2 py-0.5 rounded text-xs w-32 event-input"
+                                data-video-id="${video.id}"
+                                onchange="quickChangeEvent('${video.id}', this.value)">
+                            <datalist id="eventList_${video.id}">
+                                ${(window.ALL_EVENTS || []).map(e => `<option value="${e}">`).join('')}
+                            </datalist>
+                        </div>
+                        <div class="flex gap-2 mt-3">
+                            <button onclick="editVideo('${video.id}')"
+                                class="text-blue-400 hover:text-blue-300 text-sm">Details</button>
+                            <button onclick="deleteVideo('${video.id}')"
+                                class="text-red-400 hover:text-red-300 text-sm">Delete</button>
+                            <a href="/video/${video.id}" target="_blank"
+                                class="text-gray-400 hover:text-gray-300 text-sm">View</a>
+                        </div>
+                    </div>
+                </div>
+            `;
+            return div;
+        }
+
+        // Helper to escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // Legacy function for backwards compatibility
@@ -1152,37 +1484,82 @@
                 const s3Compatible = ['mp4', 'webm', 'mov', 'm4v', 'ogg', 'ogv'].includes(ext);
                 const uploadUrl = (s3Enabled && s3Compatible) ? '/admin/upload-to-s3' : '/admin/upload-video';
 
-                try {
-                    // 2 minute timeout per file
-                    const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 120000);
+                // Retry logic for USB/external drive issues
+                let lastError = null;
+                let success = false;
 
-                    const response = await fetch(uploadUrl, {
-                        method: 'POST',
-                        body: formData,
-                        signal: controller.signal
-                    });
-                    clearTimeout(timeoutId);
-
-                    const result = await response.json();
-
-                    if (result.success) {
-                        if (result.background) {
-                            backgroundJobs++;
-                            results.push({ name: file.name, success: true, background: true, jobId: result.job_id });
-                            startConversionPolling();
-                        } else {
-                            uploaded++;
-                            results.push({ name: file.name, success: true, converted: result.converted, s3: s3Enabled && s3Compatible });
+                for (let attempt = 1; attempt <= 3 && !success; attempt++) {
+                    try {
+                        // First, verify we can read the file (catches USB access issues early)
+                        if (attempt === 1) {
+                            try {
+                                const testSlice = file.slice(0, 1024);
+                                await testSlice.arrayBuffer();
+                            } catch (readError) {
+                                throw new Error('Cannot read file - USB may be disconnected or file is locked');
+                            }
                         }
-                    } else {
-                        failed++;
-                        results.push({ name: file.name, success: false, error: result.error });
+
+                        // Rebuild FormData for each attempt (file reference may have changed)
+                        const retryFormData = new FormData();
+                        retryFormData.append('file', file);
+                        retryFormData.append('category', category);
+                        retryFormData.append('subcategory', subcategory);
+                        retryFormData.append('event', event);
+                        retryFormData.append('title', file.name.replace(/\.[^/.]+$/, '').replace(/[_-]/g, ' '));
+                        retryFormData.append('background', 'true');
+                        if (folderName) {
+                            retryFormData.append('folder_name', folderName);
+                        }
+
+                        // 3 minute timeout per file (longer for USB)
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 180000);
+
+                        if (attempt > 1) {
+                            progressDiv.innerHTML = `
+                                <div class="flex items-center gap-3">
+                                    <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-yellow-500"></div>
+                                    <span>Retry ${attempt}/3: ${file.name}</span>
+                                </div>
+                            `;
+                            // Small delay before retry
+                            await new Promise(r => setTimeout(r, 1000));
+                        }
+
+                        const response = await fetch(uploadUrl, {
+                            method: 'POST',
+                            body: retryFormData,
+                            signal: controller.signal
+                        });
+                        clearTimeout(timeoutId);
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            success = true;
+                            if (result.background) {
+                                backgroundJobs++;
+                                results.push({ name: file.name, success: true, background: true, jobId: result.job_id });
+                                startConversionPolling();
+                            } else {
+                                uploaded++;
+                                results.push({ name: file.name, success: true, converted: result.converted, s3: s3Enabled && s3Compatible });
+                            }
+                        } else {
+                            lastError = result.error;
+                            if (attempt === 3) {
+                                failed++;
+                                results.push({ name: file.name, success: false, error: result.error });
+                            }
+                        }
+                    } catch (error) {
+                        lastError = error.name === 'AbortError' ? 'Upload timeout (3 min)' : error.message;
+                        if (attempt === 3) {
+                            failed++;
+                            results.push({ name: file.name, success: false, error: lastError + ' (after 3 attempts)' });
+                        }
                     }
-                } catch (error) {
-                    failed++;
-                    const errorMsg = error.name === 'AbortError' ? 'Upload timeout (2 min)' : error.message;
-                    results.push({ name: file.name, success: false, error: errorMsg });
                 }
             }
 
@@ -1194,6 +1571,14 @@
             if (backgroundJobs > 0) statusMsg += `${statusMsg ? ', ' : ''}${backgroundJobs} converting in background`;
             if (failed > 0) statusMsg += `${statusMsg ? ', ' : ''}${failed} failed`;
 
+            // Check if failures might be USB-related
+            const hasUsbErrors = results.some(r => !r.success && (
+                r.error?.includes('fetch') ||
+                r.error?.includes('timeout') ||
+                r.error?.includes('USB') ||
+                r.error?.includes('read file')
+            ));
+
             resultsDiv.innerHTML = `
                 <div class="bg-gray-700 rounded-lg p-4">
                     <p class="font-semibold mb-2">${statusMsg}</p>
@@ -1204,6 +1589,17 @@
                             </div>
                         `).join('')}
                     </div>
+                    ${hasUsbErrors && failed > 0 ? `
+                        <div class="mt-3 p-3 bg-yellow-900/30 border border-yellow-600 rounded text-sm">
+                            <p class="text-yellow-400 font-semibold mb-1">USB Upload Tips:</p>
+                            <ul class="text-yellow-200 text-xs list-disc list-inside space-y-1">
+                                <li>Copy files to your local drive first, then upload</li>
+                                <li>Make sure the USB drive stays connected during upload</li>
+                                <li>Try uploading fewer files at a time</li>
+                                <li>Large files (>1GB) may timeout - use Local Converter</li>
+                            </ul>
+                        </div>
+                    ` : ''}
                 </div>
             `;
 
@@ -1211,6 +1607,49 @@
             if (uploaded > 0 && backgroundJobs === 0) {
                 setTimeout(() => location.reload(), 2000);
             }
+        }
+
+        // Create Event Folder
+        async function createEventFolder() {
+            const input = document.getElementById('newEventFolder');
+            const name = input.value.trim();
+            const msgDiv = document.getElementById('eventFolderMessage');
+
+            if (!name) {
+                msgDiv.textContent = 'Please enter a folder name';
+                msgDiv.className = 'text-sm mt-2 text-red-400';
+                msgDiv.classList.remove('hidden');
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/create-event-folder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name })
+                });
+                const result = await response.json();
+
+                if (result.success) {
+                    msgDiv.textContent = `Created folder: ${name}`;
+                    msgDiv.className = 'text-sm mt-2 text-green-400';
+                    input.value = '';
+
+                    // Add to list
+                    const list = document.getElementById('eventFoldersList');
+                    const div = document.createElement('div');
+                    div.className = 'flex justify-between items-center bg-gray-700 px-3 py-1.5 rounded text-sm';
+                    div.innerHTML = `<span>${name}</span><span class="text-gray-400 text-xs">0 videos</span>`;
+                    list.insertBefore(div, list.firstChild);
+                } else {
+                    msgDiv.textContent = result.error || 'Failed to create folder';
+                    msgDiv.className = 'text-sm mt-2 text-red-400';
+                }
+            } catch (error) {
+                msgDiv.textContent = 'Error: ' + error.message;
+                msgDiv.className = 'text-sm mt-2 text-red-400';
+            }
+            msgDiv.classList.remove('hidden');
         }
 
         // Fix Duplicates
@@ -1485,9 +1924,9 @@
                                     class="text-green-400 hover:text-green-300 text-xs px-2 py-1 bg-gray-700 rounded flex-shrink-0">
                                     View
                                 </a>
-                                <button onclick="quickCategorize('${v.id}', '${safeTitle}')"
-                                    class="text-blue-400 hover:text-blue-300 text-xs px-2 py-1 bg-gray-700 rounded flex-shrink-0">
-                                    Categorize
+                                <button onclick="openDefineTemplate('${safeTitle}')"
+                                    class="text-cyan-400 hover:text-cyan-300 text-xs px-2 py-1 bg-gray-700 rounded flex-shrink-0">
+                                    Define Template
                                 </button>
                             </div>`;
                         });
@@ -1501,6 +1940,646 @@
                 }
             } catch (error) {
                 listDiv.innerHTML = `<p class="text-red-400">Error: ${error.message}</p>`;
+            }
+        }
+
+        // Learned patterns functions
+        async function previewLearnedPatterns() {
+            const msgDiv = document.getElementById('learnedPatternsMessage');
+            const previewDiv = document.getElementById('learnedPatternsPreview');
+            const listDiv = document.getElementById('learnedPatternsList');
+
+            msgDiv.textContent = 'Analyzing videos...';
+            msgDiv.className = 'text-sm mt-2 text-yellow-400';
+            msgDiv.classList.remove('hidden');
+            previewDiv.classList.add('hidden');
+
+            try {
+                const response = await fetch('/admin/apply-learned-patterns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dry_run: true })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (result.would_categorize === 0) {
+                        msgDiv.textContent = 'No uncategorized videos match learned patterns.';
+                        msgDiv.className = 'text-sm mt-2 text-gray-400';
+                    } else {
+                        msgDiv.textContent = `Found ${result.would_categorize} video(s) that can be categorized:`;
+                        msgDiv.className = 'text-sm mt-2 text-green-400';
+
+                        previewDiv.classList.remove('hidden');
+                        let html = '';
+                        result.preview.forEach(v => {
+                            html += `<div class="py-2 border-b border-gray-700">
+                                <div class="text-gray-300">${v.title}</div>
+                                <div class="text-xs text-gray-500 mt-1">
+                                    Pattern: "${v.matched_pattern}" →
+                                    <span class="text-blue-400">${v.new_category}</span>
+                                    ${v.new_subcategory ? '/ ' + v.new_subcategory : ''}
+                                </div>
+                            </div>`;
+                        });
+                        if (result.would_categorize > 20) {
+                            html += `<p class="text-gray-400 mt-2">... and ${result.would_categorize - 20} more</p>`;
+                        }
+                        listDiv.innerHTML = html;
+                    }
+                } else {
+                    msgDiv.textContent = 'Error: ' + (result.error || 'Unknown error');
+                    msgDiv.className = 'text-sm mt-2 text-red-400';
+                }
+            } catch (error) {
+                msgDiv.textContent = 'Error: ' + error.message;
+                msgDiv.className = 'text-sm mt-2 text-red-400';
+            }
+        }
+
+        async function applyLearnedPatterns() {
+            const msgDiv = document.getElementById('learnedPatternsMessage');
+            const previewDiv = document.getElementById('learnedPatternsPreview');
+
+            if (!confirm('Apply learned patterns to uncategorized videos?')) {
+                return;
+            }
+
+            msgDiv.textContent = 'Applying patterns...';
+            msgDiv.className = 'text-sm mt-2 text-yellow-400';
+            msgDiv.classList.remove('hidden');
+            previewDiv.classList.add('hidden');
+
+            try {
+                const response = await fetch('/admin/apply-learned-patterns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dry_run: false })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    msgDiv.textContent = result.message;
+                    msgDiv.className = 'text-sm mt-2 text-green-400';
+                    if (result.categorized > 0) {
+                        setTimeout(() => location.reload(), 1500);
+                    }
+                } else {
+                    msgDiv.textContent = 'Error: ' + (result.error || 'Unknown error');
+                    msgDiv.className = 'text-sm mt-2 text-red-400';
+                }
+            } catch (error) {
+                msgDiv.textContent = 'Error: ' + error.message;
+                msgDiv.className = 'text-sm mt-2 text-red-400';
+            }
+        }
+
+        // Toggle pattern template section
+        function togglePatternTemplate() {
+            const section = document.getElementById('patternTemplateSection');
+            if (section) {
+                section.classList.toggle('hidden');
+            }
+        }
+
+        // Store selected text from example field
+        let selectedText = '';
+        function storeSelection(input) {
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            if (start !== end) {
+                selectedText = input.value.substring(start, end);
+            }
+        }
+
+        // Auto-detect fields from filename
+        function autoDetectFields() {
+            const example = document.getElementById('patternExample').value.trim();
+            if (!example) return;
+
+            // Clear all fields first
+            ['tplPrefix', 'tplYear', 'tplCompetition', 'tplSep1', 'tplDiscipline',
+             'tplSubcategory', 'tplSep2', 'tplClass', 'tplSep3', 'tplTeamNumber',
+             'tplSep4', 'tplTeamName', 'tplSuffix', 'tplRound'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+
+            // Strategy: Find the discipline code first, then work backwards and forwards
+            // Disciplines: FS, CF, WS, CP, AE (only the 5 main ones)
+            // Look for discipline followed by digit (subcategory) or dash/space
+            const discRegex = /(?:^|[^A-Za-z])(FS|CF|WS|CP|AE)(?=\d|[-\s]|$)/i;
+            const discMatch = example.match(discRegex);
+
+            if (!discMatch) {
+                // No discipline found - try basic parsing
+                console.log('No discipline code found in filename');
+                return;
+            }
+
+            // Find actual position of discipline (discMatch.index might include the preceding char)
+            const fullMatch = discMatch[0];
+            const discipline = discMatch[1].toUpperCase();
+            const discIndex = example.indexOf(fullMatch) + (fullMatch.length - discipline.length);
+            const beforeDisc = example.substring(0, discIndex);
+            const afterDisc = example.substring(discIndex + discipline.length);
+
+            document.getElementById('tplDiscipline').value = discipline;
+
+            // Parse what's BEFORE the discipline (prefix, year, competition)
+            // Pattern: "2018 WPC - 2018FAIWorldParachutingChampionships " or "2018FAIWorldChamps "
+            const beforeMatch = beforeDisc.match(/^(.*?)((?:19|20)\d{2})(.*)$/);
+            if (beforeMatch) {
+                const prefix = beforeMatch[1];
+                const year = beforeMatch[2];
+                let compPart = beforeMatch[3];
+
+                if (prefix) {
+                    document.getElementById('tplPrefix').value = prefix;
+                }
+                document.getElementById('tplYear').value = year;
+
+                // Competition is everything after year until end (minus trailing separator)
+                // Handle "2018 WPC - 2018FAIWorld..." format (year appears twice)
+                const secondYearMatch = compPart.match(/^(.*?)((?:19|20)\d{2})([A-Za-z]+)/);
+                if (secondYearMatch) {
+                    // Format: " WPC - 2018FAIWorld"
+                    const midPart = secondYearMatch[1]; // " WPC - "
+                    const comp = secondYearMatch[2] + secondYearMatch[3]; // "2018FAIWorld..."
+                    // Extend competition to get full name
+                    const fullCompMatch = compPart.match(/((?:19|20)\d{2}[A-Za-z]+)/);
+                    if (fullCompMatch) {
+                        document.getElementById('tplPrefix').value = prefix + year + midPart;
+                        document.getElementById('tplYear').value = '';  // Year is part of competition
+                        document.getElementById('tplCompetition').value = fullCompMatch[1];
+                    }
+                } else {
+                    // Simple format - competition directly follows year
+                    compPart = compPart.replace(/^[\s-]+/, ''); // trim leading separators
+                    const sep1Char = beforeDisc.charAt(beforeDisc.length - compPart.length - 1);
+                    if (compPart) {
+                        // Check for separator before discipline
+                        const lastChar = compPart.slice(-1);
+                        if (lastChar === ' ' || lastChar === '-') {
+                            document.getElementById('tplSep1').value = lastChar;
+                            compPart = compPart.slice(0, -1);
+                        }
+                        document.getElementById('tplCompetition').value = compPart;
+                    }
+                }
+            }
+
+            // Parse what's AFTER the discipline (subcategory, class, team#, team name, round)
+            let remaining = afterDisc;
+
+            // Subcategory: "4-WayRot" or "8 Way" pattern
+            const subMatch = remaining.match(/^(\d+[-\s]?[Ww]ay[A-Za-z]*)/);
+            if (subMatch) {
+                document.getElementById('tplSubcategory').value = subMatch[1];
+                remaining = remaining.substring(subMatch[0].length);
+            }
+
+            // Class/Division: "-Open" or " Intermediate"
+            const classMatch = remaining.match(/^([-\s]?)(Open|Intermediate|Inter|Advanced|Adv|Novice|Nov|AAA|AA|A)\b/i);
+            if (classMatch) {
+                if (classMatch[1]) {
+                    document.getElementById('tplSep2').value = classMatch[1];
+                }
+                document.getElementById('tplClass').value = classMatch[2];
+                remaining = remaining.substring(classMatch[0].length);
+            }
+
+            // Team number: " 503" or "-503"
+            const tnMatch = remaining.match(/^([-\s]?)(\d{2,})/);
+            if (tnMatch) {
+                if (tnMatch[1]) {
+                    document.getElementById('tplSep3').value = tnMatch[1];
+                }
+                document.getElementById('tplTeamNumber').value = tnMatch[2];
+                remaining = remaining.substring(tnMatch[0].length);
+            }
+
+            // Team name: "-UnitedKingdomCFRot" or " France"
+            const tmMatch = remaining.match(/^([-\s]?)([A-Za-z][A-Za-z0-9]*)/);
+            if (tmMatch) {
+                if (tmMatch[1]) {
+                    document.getElementById('tplSep4').value = tmMatch[1];
+                }
+                document.getElementById('tplTeamName').value = tmMatch[2];
+                remaining = remaining.substring(tmMatch[0].length);
+            }
+
+            // Round: last number, with optional suffix before it
+            const roundMatch = remaining.match(/(.*?)(\d+)\s*$/);
+            if (roundMatch) {
+                if (roundMatch[1]) {
+                    document.getElementById('tplSuffix').value = roundMatch[1];
+                }
+                document.getElementById('tplRound').value = roundMatch[2];
+            }
+
+            // Highlight filled fields
+            ['tplPrefix', 'tplYear', 'tplCompetition', 'tplSep1', 'tplDiscipline',
+             'tplSubcategory', 'tplSep2', 'tplClass', 'tplSep3', 'tplTeamNumber',
+             'tplSep4', 'tplTeamName', 'tplSuffix', 'tplRound'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value) {
+                    el.classList.add('ring-2', 'ring-purple-500');
+                    setTimeout(() => el.classList.remove('ring-2', 'ring-purple-500'), 1000);
+                }
+            });
+
+            // Auto-select category based on detected discipline
+            const detectedDisc = document.getElementById('tplDiscipline').value.toUpperCase();
+            const categorySelect = document.getElementById('patternCategory');
+            if (detectedDisc && categorySelect) {
+                // Map discipline codes to categories (5 main disciplines only)
+                const discToCategory = {
+                    'FS': 'fs',
+                    'CF': 'cf',
+                    'WS': 'ws',
+                    'CP': 'cp',
+                    'AE': 'ae'
+                };
+                const category = discToCategory[detectedDisc] || 'uncategorized';
+                categorySelect.value = category;
+            }
+
+            // Auto-run test
+            setTimeout(() => buildAndTestTemplate(), 100);
+        }
+
+        // Also capture selection on mouseup for better UX
+        document.addEventListener('DOMContentLoaded', function() {
+            const exampleInput = document.getElementById('patternExample');
+            if (exampleInput) {
+                exampleInput.addEventListener('mouseup', function() {
+                    storeSelection(this);
+                });
+                exampleInput.addEventListener('keyup', function() {
+                    storeSelection(this);
+                });
+            }
+        });
+
+        // Paste stored selection into clicked field
+        function pasteSelection(input) {
+            if (selectedText) {
+                input.value = selectedText;
+                input.classList.add('ring-2', 'ring-green-500');
+                setTimeout(() => input.classList.remove('ring-2', 'ring-green-500'), 300);
+            }
+        }
+
+        // Double-click to clear a field
+        document.addEventListener('DOMContentLoaded', function() {
+            const fields = ['tplPrefix', 'tplYear', 'tplCompetition', 'tplSep1', 'tplDiscipline',
+                           'tplSubcategory', 'tplSep2', 'tplClass', 'tplSep3', 'tplTeamNumber',
+                           'tplSep4', 'tplTeamName', 'tplSuffix', 'tplRound'];
+            fields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) {
+                    el.addEventListener('dblclick', function() {
+                        this.value = '';
+                    });
+                }
+            });
+        });
+
+        // Open define template with pre-filled example
+        function openDefineTemplate(title) {
+            const section = document.getElementById('patternTemplateSection');
+            const exampleInput = document.getElementById('patternExample');
+
+            // Show the section
+            if (section) {
+                section.classList.remove('hidden');
+            }
+
+            // Pre-fill the example with the video title
+            if (exampleInput) {
+                exampleInput.value = title;
+            }
+
+            // Clear the field inputs
+            ['tplPrefix', 'tplYear', 'tplCompetition', 'tplSep1', 'tplDiscipline', 'tplSubcategory',
+             'tplSep2', 'tplClass', 'tplSep3', 'tplTeamNumber', 'tplSep4', 'tplTeamName',
+             'tplSuffix', 'tplRound'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+
+            // Scroll to the section
+            if (section) {
+                section.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        // Build template string from individual fields
+        function buildTemplateFromFields() {
+            const prefix = document.getElementById('tplPrefix').value;
+            const year = document.getElementById('tplYear').value;
+            const competition = document.getElementById('tplCompetition').value;
+            const sep1 = document.getElementById('tplSep1').value;
+            const discipline = document.getElementById('tplDiscipline').value;
+            const subcategory = document.getElementById('tplSubcategory').value;
+            const sep2 = document.getElementById('tplSep2').value;
+            const cls = document.getElementById('tplClass').value;
+            const sep3 = document.getElementById('tplSep3').value;
+            const teamNumber = document.getElementById('tplTeamNumber').value;
+            const sep4 = document.getElementById('tplSep4').value;
+            const teamName = document.getElementById('tplTeamName').value;
+            const suffix = document.getElementById('tplSuffix').value;
+            const round = document.getElementById('tplRound').value;
+
+            let template = '';
+            if (prefix) template += prefix;
+            if (year) template += `{Y-${year}}`;
+            if (competition) template += `{C-${competition}}`;
+            if (sep1) template += sep1;
+            if (discipline) template += `{D-${discipline}}`;
+            if (subcategory) template += `{S-${subcategory}}`;
+            if (sep2) template += sep2;
+            if (cls) template += `{Class-${cls}}`;
+            if (sep3) template += sep3;
+            if (teamNumber) template += `{TN-${teamNumber}}`;
+            if (sep4) template += sep4;
+            if (teamName) template += `{TM-${teamName}}`;
+            if (suffix) template += suffix;
+            if (round) template += `{R-${round}}`;
+
+            return template;
+        }
+
+        // Build and test template
+        async function buildAndTestTemplate() {
+            const template = buildTemplateFromFields();
+            const builtDiv = document.getElementById('builtTemplate');
+            const resultDiv = document.getElementById('patternResult');
+
+            if (!template || template.indexOf('{') === -1) {
+                resultDiv.innerHTML = '<span class="text-red-400">Please fill in at least one field (cyan labels)</span>';
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Show built template
+            builtDiv.textContent = 'Template: ' + template;
+            builtDiv.classList.remove('hidden');
+
+            // Store in hidden field
+            document.getElementById('patternTemplate').value = template;
+
+            resultDiv.innerHTML = '<span class="text-yellow-400">Testing...</span>';
+            resultDiv.className = 'mt-2 p-3 rounded text-sm bg-gray-700';
+            resultDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/test-pattern-template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ template, example: null })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const fields = Object.entries(result.extracted)
+                        .map(([k, v]) => `<span class="text-cyan-400">${k}</span>="${v}"`)
+                        .join(', ');
+                    resultDiv.innerHTML = `
+                        <div class="text-green-400 mb-1">✓ Pattern valid! Press Tab then Enter to save.</div>
+                        <div class="text-xs">${fields}</div>
+                    `;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-green-900/30';
+
+                    // Auto-select discipline based on extracted D value
+                    const discipline = result.extracted.DISCIPLINE;
+                    if (discipline) {
+                        const catSelect = document.getElementById('patternCategory');
+                        const disciplineMap = {
+                            'FS': 'fs', 'CF': 'cf', 'WS': 'ws', 'CP': 'cp',
+                            'AE': 'ae', 'VFS': 'vfs', 'MFS': 'mfs', 'WP': 'wp', 'SP': 'sp'
+                        };
+                        const catId = disciplineMap[discipline.toUpperCase()];
+                        if (catId && catSelect) {
+                            catSelect.value = catId;
+                        }
+                    }
+
+                    // Focus the Save button for quick Tab+Enter
+                    document.getElementById('saveTemplateBtn').focus();
+                } else {
+                    resultDiv.innerHTML = `<span class="text-red-400">✗ ${result.error}</span>`;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="text-red-400">Error: ${error.message}</span>`;
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+            }
+        }
+
+        // Build and save template
+        async function buildAndSaveTemplate() {
+            const template = buildTemplateFromFields();
+            const category = document.getElementById('patternCategory').value;
+            const builtDiv = document.getElementById('builtTemplate');
+            const resultDiv = document.getElementById('patternResult');
+
+            if (!template || template.indexOf('{') === -1) {
+                resultDiv.innerHTML = '<span class="text-red-400">Please fill in at least one field (cyan labels)</span>';
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Derive subcategory from S field
+            const subValue = document.getElementById('tplSubcategory').value.toLowerCase().replace(/\s+/g, '');
+            let subcategory = null;
+
+            // Map common subcategory patterns to IDs
+            if (subValue.includes('4way') || subValue.includes('4-way')) {
+                if (subValue.includes('rot')) {
+                    subcategory = '4way_rot';
+                } else if (subValue.includes('seq')) {
+                    subcategory = '4way_seq';
+                } else if (subValue.includes('vfs')) {
+                    subcategory = '4way_vfs';
+                } else {
+                    subcategory = '4way_fs';
+                }
+            } else if (subValue.includes('8way') || subValue.includes('8-way')) {
+                subcategory = '8way';
+            } else if (subValue.includes('2way') || subValue.includes('2-way')) {
+                if (subValue.includes('seq')) {
+                    subcategory = '2way_seq';
+                } else {
+                    subcategory = '2way_mfs';
+                }
+            } else if (subValue.includes('acro') || subValue.includes('perf')) {
+                subcategory = 'acrobatic';
+            } else if (subValue.includes('speed')) {
+                subcategory = 'speed';
+            } else if (subValue.includes('distance')) {
+                subcategory = 'distance';
+            } else if (subValue.includes('freestyle')) {
+                subcategory = 'freestyle';
+            } else if (subValue.includes('accuracy')) {
+                subcategory = 'accuracy';
+            }
+
+            // Show built template
+            builtDiv.textContent = 'Template: ' + template;
+            builtDiv.classList.remove('hidden');
+
+            document.getElementById('patternTemplate').value = template;
+
+            resultDiv.innerHTML = '<span class="text-yellow-400">Saving...</span>';
+            resultDiv.className = 'mt-2 p-3 rounded text-sm bg-gray-700';
+            resultDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/save-pattern-template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ template, example: null, category, subcategory, event: null })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const fields = Object.entries(result.extracted)
+                        .map(([k, v]) => `${k}="${v}"`)
+                        .join(', ');
+                    resultDiv.innerHTML = `
+                        <div class="text-green-400 mb-1">✓ Template saved!</div>
+                        <div class="text-xs text-gray-400">${fields}</div>
+                    `;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-green-900/30';
+                } else {
+                    resultDiv.innerHTML = `<span class="text-red-400">✗ ${result.error}</span>`;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="text-red-400">Error: ${error.message}</span>`;
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+            }
+        }
+
+        // Test pattern template
+        async function testPatternTemplate() {
+            const template = document.getElementById('patternTemplate').value.trim();
+            const example = document.getElementById('patternExample').value.trim();
+            const resultDiv = document.getElementById('patternResult');
+
+            if (!template) {
+                resultDiv.innerHTML = '<span class="text-red-400">Please enter a pattern template</span>';
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Check if using inline format {X-value}
+            const isInlineFormat = /\{[A-Z]+-[^}]+\}/i.test(template);
+            if (!isInlineFormat && !example) {
+                resultDiv.innerHTML = '<span class="text-red-400">Example required for legacy format. Use inline format like {Y-2018}{C-CompName}</span>';
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+
+            resultDiv.innerHTML = '<span class="text-yellow-400">Testing...</span>';
+            resultDiv.className = 'mt-2 p-3 rounded text-sm bg-gray-700';
+            resultDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/test-pattern-template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ template, example: example || null })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const fields = Object.entries(result.extracted)
+                        .map(([k, v]) => `<span class="text-cyan-400">{${k}}</span> = <span class="text-green-400">"${v}"</span>`)
+                        .join('<br>');
+                    resultDiv.innerHTML = `
+                        <div class="text-green-400 mb-2">✓ Pattern matches!</div>
+                        <div class="text-xs">${fields}</div>
+                    `;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-green-900/30';
+                } else {
+                    resultDiv.innerHTML = `<span class="text-red-400">✗ ${result.error}</span>`;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="text-red-400">Error: ${error.message}</span>`;
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+            }
+        }
+
+        // Save pattern template
+        async function savePatternTemplate() {
+            const template = document.getElementById('patternTemplate').value.trim();
+            const example = document.getElementById('patternExample').value.trim();
+            const category = document.getElementById('patternCategory').value;
+            const event = document.getElementById('patternEvent').value.trim();
+            const resultDiv = document.getElementById('patternResult');
+
+            if (!template) {
+                resultDiv.innerHTML = '<span class="text-red-400">Please enter a pattern template</span>';
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+
+            // Check if using inline format {X-value}
+            const isInlineFormat = /\{[A-Z]+-[^}]+\}/i.test(template);
+            if (!isInlineFormat && !example) {
+                resultDiv.innerHTML = '<span class="text-red-400">Example required for legacy format. Use inline format like {Y-2018}{C-CompName}</span>';
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                resultDiv.classList.remove('hidden');
+                return;
+            }
+
+            resultDiv.innerHTML = '<span class="text-yellow-400">Saving...</span>';
+            resultDiv.className = 'mt-2 p-3 rounded text-sm bg-gray-700';
+            resultDiv.classList.remove('hidden');
+
+            try {
+                const response = await fetch('/admin/save-pattern-template', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ template, example: example || null, category, event: event || null })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const fields = Object.entries(result.extracted)
+                        .map(([k, v]) => `<span class="text-cyan-400">{${k}}</span> = "${v}"`)
+                        .join(', ');
+                    resultDiv.innerHTML = `
+                        <div class="text-green-400 mb-1">✓ Template saved!</div>
+                        <div class="text-xs text-gray-400">Extracted: ${fields}</div>
+                    `;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-green-900/30';
+
+                    // Clear inputs
+                    document.getElementById('patternExample').value = '';
+                    document.getElementById('patternTemplate').value = '';
+                } else {
+                    resultDiv.innerHTML = `<span class="text-red-400">✗ ${result.error}</span>`;
+                    resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<span class="text-red-400">Error: ${error.message}</span>`;
+                resultDiv.className = 'mt-2 p-3 rounded text-sm bg-red-900/30';
             }
         }
 

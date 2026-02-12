@@ -66,7 +66,7 @@
                 <span class="text-gray-400 text-sm">Category:</span>
                 <select id="categoryFilter" onchange="filterByCategory(this.value)"
                     class="px-3 py-1.5 rounded-lg bg-gray-700 text-white text-sm border-none focus:ring-2 focus:ring-blue-500">
-                    <option value="">All Categories</option>
+                    <option value="">All Disciplines</option>
                     {% for cat_id, cat in categories.items() %}
                     <option value="{{ cat_id }}">{{ cat.name }}</option>
                     {% endfor %}

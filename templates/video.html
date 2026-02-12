@@ -1324,7 +1324,7 @@
                         <div>
                             <label class="block text-gray-400 text-xs mb-1">Category</label>
                             <select id="videoCategorySelect" onchange="updateSubcategoryOptions()" class="px-3 py-2 rounded bg-gray-700 text-white text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
-                                <option value="">Select category...</option>
+                                <option value="">Select discipline...</option>
                                 {% for cat_id, cat in categories.items() %}
                                 {% if cat_id != 'uncategorized' %}
                                 <option value="{{ cat_id }}">{{ cat.name }} ({{ cat.abbrev }})</option>
@@ -3351,10 +3351,12 @@
         let currentPlaybackSpeed = 1.0; // Track playback speed for timer sync
         let timerVideoStartTime = 0; // Video time when timer started (for sync with playback)
 
-        // Auto-select event type based on video category and subcategory
+        // Auto-select event type based on video category, subcategory, tags, and title
         function autoSelectEventType() {
             const category = '{{ video.category }}';
             const subcategory = '{{ video.subcategory|default("", true) }}';
+            const tags = '{{ video.tags|default("", true) }}'.toLowerCase();
+            const title = '{{ video.title|default("", true) }}'.toLowerCase();
             const select = document.getElementById('eventType');
 
             // Mapping from category/subcategory to event type
@@ -3375,6 +3377,7 @@
                     '4way_seq': '4way-cf-seq',
                     '2way_open': '2way-cf-seq',
                     '2way_proam': '2way-cf-seq',
+                    '2way': '2way-cf-seq',
                     '_default': '4way-cf-seq'
                 },
                 // Artistic Events
@@ -3401,7 +3404,48 @@
 
             if (categoryMapping[category]) {
                 const mapping = categoryMapping[category];
-                const eventType = mapping[subcategory] || mapping['_default'];
+                let eventType = mapping[subcategory];
+
+                // If no match from subcategory, check tags and title
+                if (!eventType) {
+                    const searchText = tags + ' ' + title;
+
+                    if (category === 'cf') {
+                        // CF: Check for 2way vs 4way, and rotation vs sequential
+                        if (searchText.includes('2way') || searchText.includes('2-way')) {
+                            eventType = '2way-cf-seq';
+                        } else if (searchText.includes('rot')) {
+                            eventType = '4way-cf-rot';
+                        } else if (searchText.includes('4way') || searchText.includes('4-way') || searchText.includes('seq')) {
+                            eventType = '4way-cf-seq';
+                        }
+                    } else if (category === 'fs') {
+                        // FS: Check for VFS, MFS, 8way, etc
+                        if (searchText.includes('vfs') || searchText.includes('vertical')) {
+                            eventType = '4way-vfs';
+                        } else if (searchText.includes('mfs') || searchText.includes('2way') || searchText.includes('2-way')) {
+                            eventType = '2way-mfs';
+                        } else if (searchText.includes('8way') || searchText.includes('8-way')) {
+                            eventType = '8way';
+                        } else if (searchText.includes('16way') || searchText.includes('16-way')) {
+                            eventType = '16way';
+                        } else if (searchText.includes('10way') || searchText.includes('10-way') || searchText.includes('speed')) {
+                            eventType = '10way';
+                        }
+                    } else if (category === 'ae') {
+                        if (searchText.includes('freefly') || searchText.includes('ff')) {
+                            eventType = 'freefly';
+                        } else if (searchText.includes('freestyle') || searchText.includes('fs')) {
+                            eventType = 'freestyle';
+                        }
+                    }
+                }
+
+                // Fall back to default if still no match
+                if (!eventType) {
+                    eventType = mapping['_default'];
+                }
+
                 if (eventType) {
                     select.value = eventType;
                 }
@@ -6681,7 +6725,23 @@
                     statusEl.textContent = msg;
                     statusEl.classList.remove('text-yellow-400');
                     statusEl.classList.add('text-green-400');
-                    setTimeout(() => location.reload(), 1500);
+
+                    // Go to next uncategorized video
+                    try {
+                        const nextResp = await fetch('/api/next-uncategorized?current_id={{ video.id }}');
+                        const nextResult = await nextResp.json();
+                        if (nextResult.success && nextResult.next_video) {
+                            statusEl.textContent = msg + ` Going to next... (${nextResult.remaining - 1} remaining)`;
+                            setTimeout(() => {
+                                window.location.href = '/video/' + nextResult.next_video.id;
+                            }, 1000);
+                        } else {
+                            statusEl.textContent = msg + ' No more uncategorized videos!';
+                            setTimeout(() => location.reload(), 1500);
+                        }
+                    } catch (e) {
+                        setTimeout(() => location.reload(), 1500);
+                    }
                 } else {
                     statusEl.textContent = 'Error: ' + (result.error || 'Failed to categorize');
                     statusEl.classList.remove('text-yellow-400');
@@ -6712,10 +6772,26 @@
 
                 const result = await response.json();
                 if (result.success && result.categorized > 0) {
-                    statusEl.textContent = 'Category detected! Reloading...';
+                    statusEl.textContent = 'Category detected!';
                     statusEl.classList.remove('text-yellow-400');
                     statusEl.classList.add('text-green-400');
-                    setTimeout(() => location.reload(), 1000);
+
+                    // Go to next uncategorized video
+                    try {
+                        const nextResp = await fetch('/api/next-uncategorized?current_id={{ video.id }}');
+                        const nextResult = await nextResp.json();
+                        if (nextResult.success && nextResult.next_video) {
+                            statusEl.textContent = `Category detected! Going to next... (${nextResult.remaining - 1} remaining)`;
+                            setTimeout(() => {
+                                window.location.href = '/video/' + nextResult.next_video.id;
+                            }, 1000);
+                        } else {
+                            statusEl.textContent = 'Category detected! No more uncategorized videos!';
+                            setTimeout(() => location.reload(), 1500);
+                        }
+                    } catch (e) {
+                        setTimeout(() => location.reload(), 1000);
+                    }
                 } else {
                     statusEl.textContent = 'Could not auto-detect category from filename';
                     statusEl.classList.remove('text-yellow-400');
@@ -6795,7 +6871,23 @@
                     statusEl.textContent = `Categorized ${moveResult.moved_count} video(s) in folder!`;
                     statusEl.classList.remove('text-yellow-400');
                     statusEl.classList.add('text-green-400');
-                    setTimeout(() => location.reload(), 1500);
+
+                    // Go to next uncategorized video
+                    try {
+                        const nextResp = await fetch('/api/next-uncategorized?current_id={{ video.id }}');
+                        const nextResult = await nextResp.json();
+                        if (nextResult.success && nextResult.next_video) {
+                            statusEl.textContent = `Categorized ${moveResult.moved_count} video(s)! Going to next... (${nextResult.remaining} remaining)`;
+                            setTimeout(() => {
+                                window.location.href = '/video/' + nextResult.next_video.id;
+                            }, 1000);
+                        } else {
+                            statusEl.textContent = `Categorized ${moveResult.moved_count} video(s)! No more uncategorized videos!`;
+                            setTimeout(() => location.reload(), 1500);
+                        }
+                    } catch (e) {
+                        setTimeout(() => location.reload(), 1500);
+                    }
                 } else {
                     statusEl.textContent = 'Error: ' + (moveResult.error || 'Failed to categorize folder');
                     statusEl.classList.remove('text-yellow-400');

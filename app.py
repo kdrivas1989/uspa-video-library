@@ -1668,11 +1668,31 @@ def get_all_videos():
 
 def get_videos_by_category(category, subcategory=None):
     """Get videos by category and optional subcategory."""
+    valid_categories = list(CATEGORIES.keys())
+
     if USE_SUPABASE:
         # Paginate to handle categories with 1000+ videos
         all_videos = []
         offset = 0
         batch_size = 1000
+
+        # Special handling for uncategorized - include videos not in valid categories
+        if category == 'uncategorized':
+            # Get all videos and filter client-side (Supabase doesn't support NOT IN easily)
+            while True:
+                result = supabase.table('videos').select('*').order('created_at', desc=True).range(offset, offset + batch_size - 1).execute()
+                if not result.data:
+                    break
+                # Filter to only include videos NOT in valid categories
+                for v in result.data:
+                    vid_cat = v.get('category', '')
+                    if vid_cat not in valid_categories or vid_cat == 'uncategorized':
+                        all_videos.append(v)
+                if len(result.data) < batch_size:
+                    break
+                offset += batch_size
+            return all_videos
+
         while True:
             query = supabase.table('videos').select('*').eq('category', category)
             if subcategory:
@@ -1687,7 +1707,14 @@ def get_videos_by_category(category, subcategory=None):
         return all_videos
     else:
         db = get_sqlite_db()
-        if subcategory:
+        if category == 'uncategorized':
+            # Get videos not in valid categories
+            placeholders = ','.join('?' * len(valid_categories))
+            cursor = db.execute(
+                f"SELECT * FROM videos WHERE category NOT IN ({placeholders}) OR category IS NULL ORDER BY created_at DESC",
+                valid_categories
+            )
+        elif subcategory:
             cursor = db.execute(
                 'SELECT * FROM videos WHERE category = ? AND subcategory = ? ORDER BY created_at DESC',
                 (category, subcategory)
@@ -3071,7 +3098,19 @@ def detect_category_from_filename(filename):
     detected_subcategory = None
     detected_event = None
 
-    # Check custom mappings first (from database)
+    # Check learned patterns first (uses regex matching with placeholders)
+    try:
+        learned_match = match_learned_patterns(filename)
+        if learned_match and learned_match.get('category'):
+            return (
+                learned_match.get('category'),
+                learned_match.get('subcategory'),
+                learned_match.get('event')
+            )
+    except Exception as e:
+        pass  # Continue with built-in patterns if learned matching fails
+
+    # Check custom mappings (simple substring match for manually added patterns)
     try:
         custom_mappings = []
         if USE_SUPABASE:
@@ -3090,6 +3129,9 @@ def detect_category_from_filename(filename):
 
         for mapping in custom_mappings:
             pattern = mapping.get('pattern', '').lower()
+            # Skip patterns with placeholders (already handled by match_learned_patterns)
+            if '{N}' in pattern or '{YEAR}' in pattern or re.search(r'\{[a-z]+-', pattern):
+                continue
             if pattern and pattern in name_lower:
                 detected_category = mapping.get('category')
                 detected_subcategory = mapping.get('subcategory')
@@ -4259,6 +4301,13 @@ def admin_dashboard():
                 category_counts[cat] += 1
             else:
                 category_counts['uncategorized'] = category_counts.get('uncategorized', 0) + 1
+
+        # Count videos per event folder
+        event_counts = {}
+        for video in videos:
+            evt = video.get('event', '')
+            if evt:
+                event_counts[evt] = event_counts.get(evt, 0) + 1
     except Exception as e:
         print(f"Admin dashboard error: {e}")
         videos = []
@@ -4266,6 +4315,7 @@ def admin_dashboard():
         total_views = 0
         events = []
         category_counts = {}
+        event_counts = {}
 
     is_admin = session.get('role') == 'admin'
 
@@ -4275,6 +4325,7 @@ def admin_dashboard():
                          total_videos=total_videos,
                          total_views=total_views,
                          category_counts=category_counts,
+                         event_counts=event_counts,
                          events=events,
                          dropbox_app_key=DROPBOX_APP_KEY,
                          is_admin=is_admin)
@@ -6412,6 +6463,235 @@ def delete_category_mapping(pattern):
     return jsonify({'success': True, 'message': f'Deleted mapping for "{pattern}"'})
 
 
+@app.route('/api/next-uncategorized', methods=['GET'])
+def get_next_uncategorized():
+    """Get the next uncategorized video."""
+    current_id = request.args.get('current_id', '')
+
+    videos = get_all_videos()
+    uncategorized = [v for v in videos if v.get('category') in ('uncategorized', '', None)]
+
+    # Sort by title for consistent ordering
+    uncategorized.sort(key=lambda v: v.get('title', '').lower())
+
+    if not uncategorized:
+        return jsonify({'success': True, 'next_video': None, 'remaining': 0})
+
+    # If we have a current ID, try to find the next one after it
+    if current_id:
+        current_idx = -1
+        for i, v in enumerate(uncategorized):
+            if v.get('id') == current_id:
+                current_idx = i
+                break
+
+        # Get next video (or first if current was last)
+        if current_idx >= 0 and current_idx < len(uncategorized) - 1:
+            next_video = uncategorized[current_idx + 1]
+        else:
+            # Current video should be removed from uncategorized list now, so just get first
+            next_video = uncategorized[0] if uncategorized[0].get('id') != current_id else (uncategorized[1] if len(uncategorized) > 1 else None)
+    else:
+        next_video = uncategorized[0]
+
+    return jsonify({
+        'success': True,
+        'next_video': {'id': next_video.get('id'), 'title': next_video.get('title')} if next_video else None,
+        'remaining': len(uncategorized)
+    })
+
+
+@app.route('/admin/save-pattern-template', methods=['POST'])
+@admin_required
+def save_pattern_template_route():
+    """Save a pattern template for filename parsing."""
+    data = request.json or {}
+    template = data.get('template', '').strip()
+    example = (data.get('example') or '').strip() or None  # Allow null/empty
+    category = data.get('category', 'uncategorized')
+    subcategory = data.get('subcategory')
+
+    if not template:
+        return jsonify({'success': False, 'error': 'Template is required'}), 400
+
+    success, result = save_pattern_template(template, example, category, subcategory)
+
+    if success:
+        return jsonify({
+            'success': True,
+            'message': 'Pattern template saved',
+            'extracted': result.get('extracted'),
+            'regex': result.get('regex')
+        })
+    else:
+        return jsonify({'success': False, 'error': result}), 400
+
+
+@app.route('/admin/test-pattern-template', methods=['POST'])
+@admin_required
+def test_pattern_template():
+    """Test a pattern template against an example without saving."""
+    data = request.json or {}
+    template = data.get('template', '').strip()
+    example = (data.get('example') or '').strip() or None  # Allow null/empty
+
+    if not template:
+        return jsonify({'success': False, 'error': 'Template is required'}), 400
+
+    success, regex_pattern, field_names, result = parse_pattern_template(template, example)
+
+    if success:
+        return jsonify({
+            'success': True,
+            'extracted': result,
+            'regex': regex_pattern,
+            'fields': field_names
+        })
+    else:
+        return jsonify({'success': False, 'error': result}), 400
+
+
+@app.route('/admin/debug-patterns', methods=['GET', 'POST'])
+@admin_required
+def debug_patterns():
+    """Debug endpoint to view mappings and test pattern matching."""
+    # Get all mappings
+    mappings = []
+    if USE_SUPABASE:
+        try:
+            result = supabase.table('category_mappings').select('*').execute()
+            mappings = result.data or []
+        except Exception as e:
+            mappings = [{'error': str(e)}]
+
+    # If POST, test a filename
+    test_result = None
+    if request.method == 'POST':
+        data = request.json or {}
+        test_filename = data.get('filename', '')
+
+        if test_filename:
+            # Test match_learned_patterns
+            match_result = match_learned_patterns(test_filename)
+
+            # Also show detailed regex matching for each template
+            detailed_matches = []
+            for mapping in mappings:
+                pattern = mapping.get('pattern', '')
+                is_template = bool(re.search(r'\{[A-Za-z]+-', pattern))
+
+                if is_template:
+                    try:
+                        # Extract field definitions
+                        field_pattern = r'\{([A-Za-z]+)-([^}]+)\}'
+                        fields = re.findall(field_pattern, pattern)
+
+                        if fields:
+                            regex_pattern = pattern
+                            field_names = []
+
+                            for abbrev, example_value in fields:
+                                field_names.append(abbrev)
+                                value_regex = generate_regex_from_value(example_value)
+                                regex_pattern = regex_pattern.replace('{' + abbrev + '-' + example_value + '}', f'({value_regex})')
+
+                            regex_pattern = regex_pattern.replace(' ', r'\s*')
+
+                            match = re.match(regex_pattern, test_filename.lower().strip(), re.IGNORECASE)
+
+                            detailed_matches.append({
+                                'pattern': pattern,
+                                'is_template': True,
+                                'generated_regex': regex_pattern,
+                                'fields': fields,
+                                'matched': bool(match),
+                                'groups': match.groups() if match else None
+                            })
+                    except Exception as e:
+                        detailed_matches.append({
+                            'pattern': pattern,
+                            'is_template': True,
+                            'error': str(e)
+                        })
+                else:
+                    # Simple pattern
+                    matched = pattern.lower() in test_filename.lower()
+                    detailed_matches.append({
+                        'pattern': pattern,
+                        'is_template': False,
+                        'matched': matched
+                    })
+
+            test_result = {
+                'filename': test_filename,
+                'match_learned_patterns_result': match_result,
+                'detailed_matches': detailed_matches
+            }
+
+    return jsonify({
+        'mappings': mappings,
+        'test_result': test_result
+    })
+
+
+@app.route('/admin/apply-learned-patterns', methods=['POST'])
+@admin_required
+def apply_learned_patterns():
+    """Apply learned patterns to uncategorized videos."""
+    data = request.json or {}
+    dry_run = data.get('dry_run', False)
+
+    all_videos = get_all_videos()
+    categorized = 0
+    would_categorize = []
+
+    for video in all_videos:
+        current_cat = video.get('category', 'uncategorized')
+
+        # Only process uncategorized or auto-categorized videos
+        if current_cat not in ('uncategorized', '', None):
+            # Skip manually categorized videos
+            if not video.get('category_auto', True):
+                continue
+
+        # Try to match against learned patterns
+        title = video.get('title', '')
+        match = match_learned_patterns(title)
+
+        if match and match.get('category'):
+            if dry_run:
+                would_categorize.append({
+                    'id': video.get('id'),
+                    'title': title[:100],
+                    'matched_pattern': match.get('matched_pattern'),
+                    'new_category': match.get('category'),
+                    'new_subcategory': match.get('subcategory')
+                })
+            else:
+                video['category'] = match.get('category')
+                if match.get('subcategory'):
+                    video['subcategory'] = match.get('subcategory')
+                if match.get('event'):
+                    video['event'] = match.get('event')
+                video['category_auto'] = True  # Mark as auto-categorized
+                save_video(video)
+                categorized += 1
+
+    if dry_run:
+        return jsonify({
+            'success': True,
+            'dry_run': True,
+            'would_categorize': len(would_categorize),
+            'preview': would_categorize[:20]  # Show first 20
+        })
+    else:
+        return jsonify({
+            'success': True,
+            'message': f'Applied learned patterns to {categorized} video(s)',
+            'categorized': categorized
+        })
+
+
 @app.route('/admin/delete-video/<video_id>', methods=['POST'])
 @admin_required
 def delete_video(video_id):
@@ -6535,6 +6815,42 @@ def delete_vimeo_videos():
     return jsonify({'success': True, 'message': f'Deleted {deleted} Vimeo videos', 'deleted': deleted})
 
 
+@app.route('/admin/create-event-folder', methods=['POST'])
+@admin_required
+def create_event_folder():
+    """Create a new event folder (just stores the name for later use)."""
+    data = request.json or {}
+    name = data.get('name', '').strip()
+
+    if not name:
+        return jsonify({'success': False, 'error': 'Folder name is required'}), 400
+
+    # Event folders are stored in the 'event_folders' table or we can just
+    # use them implicitly when assigning videos. Let's store explicitly.
+    if USE_SUPABASE:
+        try:
+            # Check if folder already exists (by checking videos with this event)
+            existing = supabase.table('videos').select('id').eq('event', name).limit(1).execute()
+            if existing.data:
+                return jsonify({'success': False, 'error': 'Event folder already exists'}), 400
+
+            # Store in event_folders table (create if needed)
+            try:
+                supabase.table('event_folders').insert({
+                    'name': name,
+                    'created_at': datetime.now().isoformat()
+                }).execute()
+            except:
+                # Table might not exist - that's ok, folder will be created when videos are added
+                pass
+
+            return jsonify({'success': True, 'name': name})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    return jsonify({'success': True, 'name': name})
+
+
 @app.route('/admin/fix-duplicates', methods=['POST'])
 @admin_required
 def fix_duplicates():
@@ -6634,6 +6950,502 @@ def extract_title_pattern(title):
     return pattern
 
 
+def extract_learnable_patterns(title):
+    """Extract multiple learnable patterns from a video title for future matching.
+
+    Returns a list of patterns that can be used to match similar videos.
+    Patterns are ordered by specificity (most specific first).
+    """
+    patterns = []
+    normalized = title.lower().strip()
+
+    # Pattern 1: Full title with numbers replaced (most specific)
+    full_pattern = re.sub(r'\b(round|rd|r|jump|j|draw|d|#)\s*(\d+)\b', r'\1 {N}', normalized, flags=re.IGNORECASE)
+    full_pattern = re.sub(r'\b(\d+)\s*(round|rd|r|jump|j|draw|d)\b', r'{N} \2', full_pattern, flags=re.IGNORECASE)
+    full_pattern = re.sub(r'\b([1-9]|1[0-9]|20)\b', '{N}', full_pattern)
+    if full_pattern != normalized:
+        patterns.append(('full', full_pattern))
+
+    # Pattern 2: Extract team/group name patterns
+    # Look for patterns like "Team Alpha", "Group 1", team names before/after common separators
+    team_match = re.search(r'(team\s+\w+|group\s+\w+|\w+\s+team)', normalized, re.IGNORECASE)
+    if team_match:
+        team_pattern = team_match.group(0).lower()
+        patterns.append(('team', team_pattern))
+
+    # Pattern 3: Extract event prefix patterns (e.g., "Nationals 2024", "USPA Meet")
+    # Look for event-like prefixes before discipline keywords
+    event_match = re.match(r'^([^-]+?)(?:\s*[-_]\s*|\s+)(?:fs|cf|ae|vfs|mfs|wp|ws|cp|sp|4.?way|8.?way|10.?way|16.?way)', normalized, re.IGNORECASE)
+    if event_match:
+        event_prefix = event_match.group(1).strip()
+        # Remove year numbers for more general matching
+        event_prefix = re.sub(r'\b20\d{2}\b', '{YEAR}', event_prefix)
+        if len(event_prefix) > 3:
+            patterns.append(('event', event_prefix))
+
+    # Pattern 4: Discipline + class patterns (e.g., "fs open", "4way intermediate")
+    discipline_match = re.search(r'\b(fs|cf|ae|vfs|mfs|wp|ws|cp|sp|4.?way|8.?way|10.?way|16.?way)\s*(open|intermediate|inter|int|advanced|adv|novice|nov|aa|aaa|a)\b', normalized, re.IGNORECASE)
+    if discipline_match:
+        patterns.append(('discipline', discipline_match.group(0).lower()))
+
+    return patterns
+
+
+def learn_category_pattern(title, category, subcategory=None, event=None):
+    """Learn a categorization pattern from a manual categorization.
+
+    Extracts patterns from the title and stores them for future auto-categorization.
+    """
+    if not title or not category or category == 'uncategorized':
+        return 0
+
+    patterns = extract_learnable_patterns(title)
+    learned_count = 0
+
+    for pattern_type, pattern in patterns:
+        # Skip very short patterns
+        if len(pattern) < 5:
+            continue
+
+        # Check if pattern already exists
+        existing = None
+        if USE_SUPABASE:
+            try:
+                result = supabase.table('category_mappings').select('*').eq('pattern', pattern).execute()
+                existing = result.data[0] if result.data else None
+            except:
+                pass
+
+        if not existing:
+            # Save new pattern
+            mapping_data = {
+                'pattern': pattern,
+                'pattern_type': pattern_type,
+                'category': category,
+                'subcategory': subcategory or None,
+                'event': event or None,
+                'learned_from': title[:200],  # Store source for debugging
+                'created_at': datetime.now().isoformat()
+            }
+
+            if USE_SUPABASE:
+                try:
+                    supabase.table('category_mappings').insert(mapping_data).execute()
+                    learned_count += 1
+                except Exception as e:
+                    print(f"Failed to save learned pattern: {e}")
+
+    return learned_count
+
+
+def match_learned_patterns(title):
+    """Match a video title against learned patterns.
+
+    Returns the best matching category info or None.
+    """
+    if not title:
+        return None
+
+    normalized = title.lower().strip()
+
+    # Get all learned patterns
+    mappings = []
+    if USE_SUPABASE:
+        try:
+            result = supabase.table('category_mappings').select('*').execute()
+            mappings = result.data or []
+        except:
+            pass
+
+    if not mappings:
+        return None
+
+    # Try to match patterns (prioritize by type: template > full > team > event > discipline)
+    pattern_priority = {'template': 5, 'full': 4, 'team': 3, 'event': 2, 'discipline': 1}
+
+    best_match = None
+    best_score = 0
+    extracted_fields = {}
+
+    for mapping in mappings:
+        pattern = mapping.get('pattern', '')
+        pattern_type = mapping.get('pattern_type', 'full')
+
+        if not pattern:
+            continue
+
+        # Detect template patterns by their format (contains {X-...} placeholders)
+        is_template = bool(re.search(r'\{[A-Za-z]+-', pattern))
+
+        # Handle template patterns differently
+        if is_template or pattern_type == 'template':
+            # Generate regex from template pattern on-the-fly
+            try:
+                # Extract field definitions from template with their positions
+                field_pattern = r'\{([A-Za-z]+)-([^}]+)\}'
+                fields = re.findall(field_pattern, pattern)
+
+                if fields:
+                    # Build regex by replacing each field with a capturing group
+                    regex_pattern = pattern
+                    field_names = []
+
+                    # Find all field matches with positions
+                    field_matches = list(re.finditer(field_pattern, pattern))
+
+                    for i, m in enumerate(field_matches):
+                        abbrev = m.group(1)
+                        example_value = m.group(2)
+                        field_names.append(abbrev)
+
+                        # Look at what comes after this field
+                        end_pos = m.end()
+                        next_char = pattern[end_pos] if end_pos < len(pattern) else ''
+
+                        # Generate appropriate regex based on value type and context
+                        if re.match(r'^\d+$', example_value):
+                            value_regex = r'\d+'
+                        elif re.match(r'^[A-Z]+$', example_value):
+                            # Uppercase letters - use lookahead if followed by digit
+                            if next_char.isdigit() or (i + 1 < len(field_matches) and re.match(r'^\d', field_matches[i+1].group(2))):
+                                value_regex = r'[A-Z]+(?=\d)'
+                            else:
+                                value_regex = r'[A-Z]+'
+                        elif re.match(r'^[a-z]+$', example_value):
+                            value_regex = r'[a-z]+'
+                        elif re.match(r'^[A-Za-z]+$', example_value):
+                            value_regex = r'[A-Za-z]+'
+                        elif re.match(r'^[A-Za-z0-9]+$', example_value):
+                            value_regex = r'[A-Za-z0-9]+'
+                        elif re.match(r'^[A-Za-z0-9-]+$', example_value):
+                            value_regex = r'[A-Za-z0-9-]+'
+                        else:
+                            value_regex = r'.+?'
+
+                        # Replace the placeholder with a capturing group
+                        placeholder = '{' + abbrev + '-' + example_value + '}'
+                        regex_pattern = regex_pattern.replace(placeholder, f'({value_regex})', 1)
+
+                    # Make spaces flexible
+                    regex_pattern = regex_pattern.replace(' ', r'\s+')
+
+                    match = re.match(regex_pattern, normalized, re.IGNORECASE)
+                    if match:
+                        score = 500 + len(pattern)  # High priority for templates
+                        if score > best_score:
+                            best_score = score
+                            best_match = mapping
+                            # Extract field values
+                            extracted_fields = {}
+                            for i, field_name in enumerate(field_names):
+                                try:
+                                    extracted_fields[field_name] = match.group(i + 1)
+                                except:
+                                    pass
+            except Exception as e:
+                continue
+        else:
+            # Convert pattern back to regex
+            regex_pattern = re.escape(pattern)
+            regex_pattern = regex_pattern.replace(r'\{N\}', r'\d+')
+            regex_pattern = regex_pattern.replace(r'\{YEAR\}', r'20\d{2}')
+
+            try:
+                if re.search(regex_pattern, normalized, re.IGNORECASE):
+                    score = pattern_priority.get(pattern_type, 0) * 10 + len(pattern)
+                    if score > best_score:
+                        best_score = score
+                        best_match = mapping
+                        extracted_fields = {}
+            except re.error:
+                continue
+
+    if best_match:
+        result = {
+            'category': best_match.get('category'),
+            'subcategory': best_match.get('subcategory'),
+            'event': best_match.get('event'),
+            'matched_pattern': best_match.get('pattern'),
+            'pattern_type': best_match.get('pattern_type')
+        }
+        if extracted_fields:
+            result['extracted_fields'] = extracted_fields
+            # Use extracted COMPETITION field for event name
+            if 'COMPETITION' in extracted_fields and not result.get('event'):
+                result['event'] = extracted_fields['COMPETITION']
+            # Use extracted SUBCATEGORY field
+            if 'SUBCATEGORY' in extracted_fields and not result.get('subcategory'):
+                result['subcategory'] = extracted_fields['SUBCATEGORY'].lower()
+        return result
+
+    return None
+
+
+def generate_regex_from_value(value):
+    """Generate a regex pattern that matches strings similar to the example value.
+
+    Analyzes the value's structure (digits, letters, hyphens, etc.) and creates
+    a flexible regex that will match similar patterns.
+    """
+    if not value:
+        return r'([A-Za-z0-9]+)'
+
+    # Check simple cases first
+    if value.isdigit():
+        return r'(\d+)'
+    if value.isalpha():
+        return r'([A-Za-z]+)'
+
+    # Build pattern based on character types in the value
+    # Group consecutive character types
+    pattern_parts = []
+    i = 0
+    while i < len(value):
+        char = value[i]
+        if char.isdigit():
+            # Consume all digits
+            j = i
+            while j < len(value) and value[j].isdigit():
+                j += 1
+            pattern_parts.append(r'\d+')
+            i = j
+        elif char.isalpha():
+            # Consume all letters
+            j = i
+            while j < len(value) and value[j].isalpha():
+                j += 1
+            pattern_parts.append(r'[A-Za-z]+')
+            i = j
+        elif char in '-_':
+            # Hyphens/underscores - match flexibly
+            pattern_parts.append(r'[-_]?')
+            i += 1
+        elif char == ' ':
+            pattern_parts.append(r'\s*')
+            i += 1
+        else:
+            # Other characters - escape and make optional
+            pattern_parts.append(re.escape(char) + '?')
+            i += 1
+
+    return '(' + ''.join(pattern_parts) + ')'
+
+
+def parse_pattern_template(template, example=None):
+    """Parse a pattern template and validate against an example.
+
+    Two formats supported:
+    1. Inline format: {Y-2018}{C-FAIWorldChamps} {D-FS}{S-8 Way} {Class-Open} {TN-801} {TM-Brazil8} {R-6}
+       - Letter/abbrev before dash, example value after dash
+       - No separate example needed
+
+    2. Legacy format: {YEAR}{COMPETITION}... with separate example string
+
+    Field abbreviations:
+    - Y, YEAR: Competition year (e.g., 2018)
+    - C, COMP, COMPETITION: Competition/event name (e.g., FAIWorldChampionships)
+    - D, DISC, DISCIPLINE: Discipline code (FS, CF, WS, CP, AE, VFS, etc.)
+    - S, SUB, SUBCATEGORY: Size/format (8 Way, 4 Way, etc.)
+    - CLASS, CL, DIV: Division/class (Open, Intermediate, AA, etc.)
+    - TN, TEAMNUMBER: Team number in draw order
+    - TM, TEAM, TEAMNAME: Team name
+    - R, RND, ROUND: Round number
+
+    Returns: (success, regex_pattern, field_names, result_or_error)
+    """
+    if not template:
+        return False, None, [], "Template is required"
+
+    # Field abbreviation mapping
+    field_abbrevs = {
+        'Y': 'YEAR', 'YEAR': 'YEAR',
+        'C': 'COMPETITION', 'COMP': 'COMPETITION', 'COMPETITION': 'COMPETITION',
+        'D': 'DISCIPLINE', 'DISC': 'DISCIPLINE', 'DISCIPLINE': 'DISCIPLINE',
+        'S': 'SUBCATEGORY', 'SUB': 'SUBCATEGORY', 'SUBCATEGORY': 'SUBCATEGORY',
+        'CLASS': 'CLASS', 'CL': 'CLASS', 'DIV': 'CLASS', 'DIVISION': 'CLASS',
+        'TN': 'TEAMNUMBER', 'TEAMNUMBER': 'TEAMNUMBER',
+        'TM': 'TEAMNAME', 'TEAM': 'TEAMNAME', 'TEAMNAME': 'TEAMNAME',
+        'R': 'ROUND', 'RND': 'ROUND', 'ROUND': 'ROUND',
+        'N': 'NUMBER', 'NUMBER': 'NUMBER',
+    }
+
+    # Check if using inline format {ABBREV-value}
+    inline_pattern = r'\{([A-Z]+)-([^}]+)\}'
+    inline_matches = list(re.finditer(inline_pattern, template, re.IGNORECASE))
+
+    if inline_matches:
+        # Inline format - extract field names and build example from template
+        field_names = []
+        example_parts = []
+        regex_parts = []
+        last_end = 0
+
+        for match in inline_matches:
+            # Add literal text before this field
+            literal = template[last_end:match.start()]
+            if literal:
+                literal_escaped = re.escape(literal)
+                literal_escaped = literal_escaped.replace(r'\ ', r'\s*')
+                regex_parts.append(literal_escaped)
+                example_parts.append(literal)
+
+            abbrev = match.group(1).upper()
+            value = match.group(2)
+
+            # Map abbreviation to full field name
+            field_name = field_abbrevs.get(abbrev, abbrev)
+            field_names.append(field_name)
+            example_parts.append(value)
+
+            # Build regex based on field type and example value
+            # Derive pattern from the actual example value for flexibility
+            if field_name == 'YEAR':
+                regex_parts.append(r'((?:19|20)\d{2})')
+            elif field_name in ('ROUND', 'TEAMNUMBER', 'NUMBER') and value.isdigit():
+                regex_parts.append(r'(\d+)')
+            elif field_name == 'DISCIPLINE' and value.upper() in ('FS', 'CF', 'WS', 'CP', 'AE'):
+                # Just the discipline code (5 main disciplines)
+                regex_parts.append(r'(FS|CF|WS|CP|AE)')
+            else:
+                # Generate regex from the example value's character pattern
+                regex_parts.append(generate_regex_from_value(value))
+
+            last_end = match.end()
+
+        # Add trailing literal
+        if last_end < len(template):
+            literal = template[last_end:]
+            literal_escaped = re.escape(literal)
+            literal_escaped = literal_escaped.replace(r'\ ', r'\s*')
+            regex_parts.append(literal_escaped)
+            example_parts.append(literal)
+
+        regex_pattern = ''.join(regex_parts)
+        constructed_example = ''.join(example_parts)
+
+        # Test the pattern
+        try:
+            test_match = re.match(regex_pattern, constructed_example, re.IGNORECASE)
+            if not test_match:
+                return False, None, [], f"Pattern doesn't match constructed example: {constructed_example}"
+
+            extracted = {}
+            for i, field_name in enumerate(field_names):
+                try:
+                    extracted[field_name] = test_match.group(i + 1)
+                except:
+                    pass
+
+            return True, regex_pattern, field_names, extracted
+        except re.error as e:
+            return False, None, [], f"Invalid regex: {e}"
+
+    # Legacy format - requires separate example
+    if not example:
+        return False, None, [], "Example is required for legacy format. Use inline format like {Y-2018}{C-CompName} instead."
+
+    # Extract field names from template
+    field_pattern = r'\{([A-Z_]+)\}'
+    field_names_raw = re.findall(field_pattern, template)
+
+    if not field_names_raw:
+        return False, None, [], "No fields found. Use {ABBREV-value} format like {Y-2018}{C-FAIWorlds}"
+
+    # Map to canonical field names
+    field_names = [field_abbrevs.get(f.upper(), f.upper()) for f in field_names_raw]
+
+    # Build regex pattern from template
+    regex_parts = []
+    last_end = 0
+
+    for match in re.finditer(field_pattern, template):
+        # Add literal text before this field
+        literal = template[last_end:match.start()]
+        if literal:
+            literal = re.escape(literal)
+            literal = literal.replace(r'\ ', r'\s+')
+        regex_parts.append(literal)
+
+        # Add capturing group for the field
+        field_name = field_abbrevs.get(match.group(1).upper(), match.group(1).upper())
+        if field_name == 'YEAR':
+            regex_parts.append(r'((?:19|20)\d{2})')
+        elif field_name in ('ROUND', 'TEAMNUMBER', 'NUMBER'):
+            regex_parts.append(r'(\d+)')
+        elif field_name == 'DISCIPLINE':
+            # Just the discipline code (FS, CF, WS, CP, etc.)
+            regex_parts.append(r'(FS|CF|WS|CP|AE)')
+        elif field_name == 'SUBCATEGORY':
+            # Size/format like "8 Way", "4 Way", "8way"
+            regex_parts.append(r'(\d+\s*[Ww]ay)')
+        elif field_name == 'CLASS':
+            # Division: Open, Intermediate, AA, etc.
+            regex_parts.append(r'([A-Za-z]+)')
+        else:
+            regex_parts.append(r'([A-Za-z0-9]+)')
+
+        last_end = match.end()
+
+    # Add any trailing literal text
+    if last_end < len(template):
+        literal = template[last_end:]
+        literal = re.escape(literal)
+        literal = literal.replace(r'\ ', r'\s+')
+        regex_parts.append(literal)
+
+    regex_pattern = ''.join(regex_parts)
+
+    # Test against example
+    try:
+        match = re.match(regex_pattern, example, re.IGNORECASE)
+        if not match:
+            return False, None, [], f"Template doesn't match example. Regex: {regex_pattern}"
+
+        # Verify we captured all fields
+        extracted = {}
+        for i, field_name in enumerate(field_names):
+            try:
+                extracted[field_name] = match.group(i + 1)
+            except:
+                return False, None, [], f"Failed to extract field: {field_name}"
+
+        return True, regex_pattern, field_names, extracted
+    except re.error as e:
+        return False, None, [], f"Invalid regex pattern: {e}"
+
+
+def save_pattern_template(template, example, category, subcategory=None):
+    """Save a pattern template for future matching."""
+    success, regex_pattern, field_names, result = parse_pattern_template(template, example)
+
+    if not success:
+        return False, result  # result contains error message
+
+    extracted = result  # result contains extracted fields on success
+
+    mapping_data = {
+        'pattern': template,
+        'category': category,
+        'subcategory': subcategory,
+        'created_at': datetime.now().isoformat()
+    }
+
+    if USE_SUPABASE:
+        try:
+            # Check if similar template exists
+            existing = supabase.table('category_mappings').select('*').eq('pattern', template).execute()
+            if existing.data:
+                # Update existing
+                supabase.table('category_mappings').update(mapping_data).eq('pattern', template).execute()
+            else:
+                supabase.table('category_mappings').insert(mapping_data).execute()
+            return True, {'extracted': extracted, 'regex': regex_pattern}
+        except Exception as e:
+            return False, f"Database error: {e}"
+
+    return False, "Database not available"
+
+
 def find_similar_uncategorized_videos(title, exclude_id=None):
     """Find uncategorized videos with similar title patterns."""
     pattern = extract_title_pattern(title)
@@ -6693,7 +7505,17 @@ def edit_video(video_id):
 
     # Auto-move similar videos if moving from uncategorized to a category
     auto_moved = 0
+    learned_patterns = 0
     if old_category == 'uncategorized' and new_category and new_category != 'uncategorized':
+        # Learn patterns from this categorization for future videos
+        learned_patterns = learn_category_pattern(
+            video['title'],
+            new_category,
+            new_subcategory,
+            video.get('event')
+        )
+
+        # Move similar uncategorized videos
         similar_videos = find_similar_uncategorized_videos(video['title'], exclude_id=video_id)
         for similar in similar_videos:
             similar['category'] = new_category
@@ -6705,14 +7527,18 @@ def edit_video(video_id):
             save_video(similar)
             auto_moved += 1
 
+    messages = ['Video updated']
     if auto_moved > 0:
-        return jsonify({
-            'success': True,
-            'message': f'Video updated. Also moved {auto_moved} similar video(s) to the same category.',
-            'auto_moved': auto_moved
-        })
+        messages.append(f'moved {auto_moved} similar video(s)')
+    if learned_patterns > 0:
+        messages.append(f'learned {learned_patterns} pattern(s) for future videos')
 
-    return jsonify({'success': True, 'message': 'Video updated'})
+    return jsonify({
+        'success': True,
+        'message': '. '.join(messages) + '.',
+        'auto_moved': auto_moved,
+        'learned_patterns': learned_patterns
+    })
 
 
 @app.route('/admin/quick-categorize', methods=['POST'])
